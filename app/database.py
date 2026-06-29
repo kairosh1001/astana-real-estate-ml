@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -22,7 +23,8 @@ def connect(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA journal_mode=WAL")
+    journal_mode = os.getenv("SQLITE_JOURNAL_MODE", "DELETE").upper()
+    connection.execute(f"PRAGMA journal_mode={journal_mode}")
     connection.execute("PRAGMA foreign_keys=ON")
     return connection
 
