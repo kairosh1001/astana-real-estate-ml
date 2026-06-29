@@ -76,6 +76,11 @@ def assert_contains(text: str, needle: str) -> None:
         raise SystemExit(f"Expected page to contain: {needle}")
 
 
+def assert_not_contains(text: str, needle: str) -> None:
+    if needle in text:
+        raise SystemExit(f"Expected page not to contain: {needle}")
+
+
 def main() -> None:
     db_path = ROOT / "data" / "ui_check.sqlite3"
     db_path.parent.mkdir(exist_ok=True)
@@ -103,9 +108,9 @@ def main() -> None:
     if home.status_code != 200:
         raise SystemExit(f"Home page returned {home.status_code}")
     assert_contains(home.text, "Квартиры ниже рынка")
-    assert_contains(home.text, "Статус сервиса")
-    assert_contains(home.text, "История обновлений")
-    assert_contains(home.text, "Админ: обновить данные")
+    assert_not_contains(home.text, "Статус сервиса")
+    assert_not_contains(home.text, "История обновлений")
+    assert_not_contains(home.text, "Админ: обновить данные")
 
     invalid_url = client.post("/predict", data={"url": "https://example.com/a/show/123"})
     if invalid_url.status_code != 400:
