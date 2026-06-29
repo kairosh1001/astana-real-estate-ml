@@ -160,3 +160,25 @@ SQLite data is stored in:
 ```
 
 Back this file up before rebuilding or moving servers. The Compose file mounts `./data` into the app container, so normal container rebuilds should not delete it.
+
+Manual backup:
+
+```bash
+python scripts/backup_db.py
+```
+
+Docker backup:
+
+```bash
+docker compose run --rm app python scripts/backup_db.py
+```
+
+On Windows local development, use the host Python command instead. Dockerized backups are intended for the Linux VPS deployment.
+
+Backups are written to:
+
+```text
+./backups/
+```
+
+The script keeps the newest 14 backups by default. Use `--keep 0` to keep all.

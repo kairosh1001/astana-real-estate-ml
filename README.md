@@ -107,6 +107,14 @@ Manual refresh through Compose:
 docker compose --profile tools run --rm refresh
 ```
 
+Back up the local SQLite database:
+
+```powershell
+.venv\Scripts\python.exe scripts\backup_db.py
+```
+
+On Windows, prefer the host Python backup command above. Dockerized backups are intended for the Linux VPS deployment.
+
 See `deploy/README.md` for VPS, cron, and HTTPS notes.
 
 ## Notes

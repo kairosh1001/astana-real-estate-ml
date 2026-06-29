@@ -9,6 +9,7 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
     volumes:
       - ./data:/app/data
+      - ./backups:/app/backups
     restart: unless-stopped
 
   refresh:
@@ -20,6 +21,7 @@ services:
       DB_PATH: ${DB_PATH:-/app/data/krisha.sqlite3}
     volumes:
       - ./data:/app/data
+      - ./backups:/app/backups
     command:
       [
         "python",
