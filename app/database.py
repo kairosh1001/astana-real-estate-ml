@@ -242,6 +242,35 @@ def fetch_undervalued(
     return [dict(row) for row in rows]
 
 
+def fetch_refresh_runs(
+    connection: sqlite3.Connection,
+    *,
+    limit: int = 20,
+) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT
+            id,
+            started_at,
+            finished_at,
+            kind,
+            start_page,
+            end_page,
+            pages_seen,
+            urls_seen,
+            listings_processed,
+            listings_failed,
+            status,
+            error
+        FROM refresh_runs
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def iter_unique_urls(urls: Iterable[str]) -> list[str]:
     seen = set()
     result = []

@@ -38,6 +38,13 @@ Open:
 http://127.0.0.1:8000
 ```
 
+Useful pages:
+
+```text
+http://127.0.0.1:8000/undervalued-page
+http://127.0.0.1:8000/refresh-runs-page
+```
+
 ## Refresh Listings
 
 Small smoke test:

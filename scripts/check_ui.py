@@ -16,6 +16,27 @@ def seed_listing(db_path: Path) -> None:
         init_db(connection)
         connection.execute(
             """
+            INSERT INTO refresh_runs (
+                started_at, finished_at, kind, start_page, end_page,
+                pages_seen, urls_seen, listings_processed, listings_failed, status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "2026-06-29T00:00:00+00:00",
+                "2026-06-29T00:05:00+00:00",
+                "daily",
+                1,
+                50,
+                50,
+                1050,
+                1000,
+                5,
+                "completed",
+            ),
+        )
+        connection.execute(
+            """
             INSERT INTO listings (
                 url, title, raw_json, first_seen_at, last_seen_at, last_checked_at,
                 missed_refreshes, status, listed_price, area_m2,
@@ -75,6 +96,7 @@ def main() -> None:
     if home.status_code != 200:
         raise SystemExit(f"Home page returned {home.status_code}")
     assert_contains(home.text, "Квартиры ниже рынка")
+    assert_contains(home.text, "История обновлений")
 
     invalid_url = client.post("/predict", data={"url": "https://example.com/a/show/123"})
     if invalid_url.status_code != 400:
@@ -96,6 +118,18 @@ def main() -> None:
         "/predict?url=",
     ]:
         assert_contains(undervalued.text, needle)
+
+    refresh_runs = client.get("/refresh-runs-page")
+    if refresh_runs.status_code != 200:
+        raise SystemExit(f"Refresh runs page returned {refresh_runs.status_code}")
+    for needle in [
+        "История обновлений",
+        "ежедневное",
+        "завершено",
+        "Найдено URL",
+        "Обработано",
+    ]:
+        assert_contains(refresh_runs.text, needle)
 
     print("[OK] UI checks passed.")
 

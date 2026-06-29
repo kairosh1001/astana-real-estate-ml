@@ -259,6 +259,7 @@ Initial pages:
 - Home page with one listing URL input.
 - Prediction result page.
 - Undervalued listings page.
+- Refresh history page.
 
 The undervalued page should include:
 
@@ -271,6 +272,17 @@ The undervalued page should include:
 - Undervaluation metrics.
 - Last seen timestamp.
 - Stale status if shown.
+
+The refresh history page should include:
+
+- Refresh type.
+- Refresh status.
+- Page range.
+- URLs found.
+- Listings processed.
+- Listing failures.
+- Start and finish timestamps.
+- Error message when present.
 
 ## Docker Plan
 

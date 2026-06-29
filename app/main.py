@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from app.database import connect, fetch_undervalued, init_db
+from app.database import connect, fetch_refresh_runs, fetch_undervalued, init_db
 from app.prediction_service import PredictionService
 from app.refresh_service import run_refresh
 
@@ -136,6 +136,26 @@ def undervalued_page(
         request,
         "undervalued.html",
         {"request": request, "items": items},
+    )
+
+
+@app.get("/refresh-runs")
+def refresh_runs(limit: int = 20) -> dict:
+    with connect(DB_PATH) as db_connection:
+        runs = fetch_refresh_runs(db_connection, limit=limit)
+    return {
+        "items": runs,
+    }
+
+
+@app.get("/refresh-runs-page", response_class=HTMLResponse)
+def refresh_runs_page(request: Request, limit: int = 20) -> HTMLResponse:
+    with connect(DB_PATH) as db_connection:
+        runs = fetch_refresh_runs(db_connection, limit=limit)
+    return templates.TemplateResponse(
+        request,
+        "refresh_runs.html",
+        {"request": request, "items": runs},
     )
 
 

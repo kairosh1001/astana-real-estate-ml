@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>История обновлений</h1>
+{% if not items %}
+<section class="panel">
+  <p>Обновлений пока не было.</p>
+</section>
+{% else %}
+<section class="panel">
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Тип</th>
+        <th>Статус</th>
+        <th>Страницы</th>
+        <th>Найдено URL</th>
+        <th>Обработано</th>
+        <th>Ошибок</th>
+        <th>Начато</th>
+        <th>Завершено</th>
+        <th>Ошибка</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.id }}</td>
+        <td>
+          {% if item.kind == "daily" %}ежедневное
+          {% elif item.kind == "weekly" %}еженедельное
+          {% elif item.kind == "manual" %}ручное
+          {% else %}{{ item.kind }}{% endif %}
+        </td>
+        <td>
+          {% if item.status == "completed" %}завершено
+          {% elif item.status == "running" %}выполняется
+          {% elif item.status == "failed" %}ошибка
+          {% else %}{{ item.status }}{% endif %}
+        </td>
+        <td>{{ item.start_page }}-{{ item.end_page }} / {{ item.pages_seen }}</td>
+        <td>{{ item.urls_seen }}</td>
+        <td>{{ item.listings_processed }}</td>
+        <td>{{ item.listings_failed }}</td>
+        <td>{{ item.started_at }}</td>
+        <td>{{ item.finished_at or "-" }}</td>
+        <td>{{ item.error or "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endif %}
+<p><a class="button" href="/">Назад</a></p>
+{% endblock %}
