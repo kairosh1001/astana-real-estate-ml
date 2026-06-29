@@ -260,6 +260,7 @@ Initial pages:
 - Prediction result page.
 - Undervalued listings page.
 - Refresh history page.
+- Admin refresh page protected by `ADMIN_TOKEN`.
 
 The undervalued page should include:
 
@@ -283,6 +284,13 @@ The refresh history page should include:
 - Listing failures.
 - Start and finish timestamps.
 - Error message when present.
+
+The admin refresh page should:
+
+- Require `ADMIN_TOKEN`.
+- Allow a small manual refresh from the browser.
+- Let the admin choose refresh type, page range, request delay, and listing cap.
+- Link back to refresh history.
 
 ## Docker Plan
 

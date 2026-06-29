@@ -159,33 +159,103 @@ def refresh_runs_page(request: Request, limit: int = 20) -> HTMLResponse:
     )
 
 
+@app.get("/admin-refresh-page", response_class=HTMLResponse)
+def admin_refresh_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "admin_refresh.html",
+        {
+            "request": request,
+            "error": None,
+            "message": None,
+            "form": _default_refresh_form(),
+        },
+    )
+
+
+@app.post("/admin-refresh", response_class=HTMLResponse)
+def admin_refresh_form(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    admin_token_value: str = Form(...),
+    kind: str = Form("manual"),
+    start_page: int = Form(1),
+    pages: int = Form(1),
+    min_delay: float = Form(1.0),
+    max_delay: float = Form(2.0),
+    max_listings: int = Form(0),
+) -> HTMLResponse:
+    form = {
+        "admin_token_value": admin_token_value,
+        "kind": kind,
+        "start_page": start_page,
+        "pages": pages,
+        "min_delay": min_delay,
+        "max_delay": max_delay,
+        "max_listings": max_listings,
+    }
+    try:
+        _require_admin_token(admin_token_value)
+        _validate_refresh_options(
+            kind=kind,
+            start_page=start_page,
+            pages=pages,
+            min_delay=min_delay,
+            max_delay=max_delay,
+            max_listings=max_listings,
+        )
+    except ValueError as exc:
+        return templates.TemplateResponse(
+            request,
+            "admin_refresh.html",
+            {"request": request, "error": str(exc), "message": None, "form": form},
+            status_code=400,
+        )
+
+    background_tasks.add_task(
+        run_refresh,
+        root=ROOT,
+        db_path=DB_PATH,
+        kind=kind,
+        start_page=start_page,
+        pages=pages,
+        min_delay=min_delay,
+        max_delay=max_delay,
+        max_listings=max_listings,
+    )
+    return templates.TemplateResponse(
+        request,
+        "admin_refresh.html",
+        {
+            "request": request,
+            "error": None,
+            "message": "Обновление запущено. Проверьте историю обновлений через несколько минут.",
+            "form": form,
+        },
+    )
+
+
 @app.post("/refresh-listings")
 def refresh_listings(
     payload: RefreshRequest,
     background_tasks: BackgroundTasks,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> dict:
-    admin_token = os.getenv("ADMIN_TOKEN")
-    if not admin_token:
-        raise HTTPException(
-            status_code=503,
-            detail="ADMIN_TOKEN не настроен.",
+    try:
+        _require_admin_token(x_admin_token)
+        _validate_refresh_options(
+            kind=payload.kind,
+            start_page=payload.start_page,
+            pages=payload.pages,
+            min_delay=payload.min_delay,
+            max_delay=payload.max_delay,
+            max_listings=payload.max_listings,
         )
-    if x_admin_token != admin_token:
-        raise HTTPException(status_code=403, detail="Неверный админ-токен.")
-
-    if payload.kind not in {"manual", "daily", "weekly"}:
-        raise HTTPException(status_code=400, detail="Неверный тип обновления.")
-    if payload.pages < 1 or payload.start_page < 1:
-        raise HTTPException(
-            status_code=400,
-            detail="Количество страниц и стартовая страница должны быть положительными.",
-        )
-    if payload.max_listings < 0:
-        raise HTTPException(
-            status_code=400,
-            detail="max_listings не может быть отрицательным.",
-        )
+    except ValueError as exc:
+        status_code = 503 if "ADMIN_TOKEN" in str(exc) else 400
+        if "админ-токен" in str(exc):
+            status_code = 403
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
     background_tasks.add_task(
         run_refresh,
@@ -206,3 +276,46 @@ def refresh_listings(
         "pages": payload.pages,
         "max_listings": payload.max_listings,
     }
+
+
+def _default_refresh_form() -> dict:
+    return {
+        "admin_token_value": "",
+        "kind": "manual",
+        "start_page": 1,
+        "pages": 1,
+        "min_delay": 1.0,
+        "max_delay": 2.0,
+        "max_listings": 0,
+    }
+
+
+def _require_admin_token(value: str | None) -> None:
+    admin_token = os.getenv("ADMIN_TOKEN")
+    if not admin_token:
+        raise ValueError("ADMIN_TOKEN не настроен.")
+    if value != admin_token:
+        raise ValueError("Неверный админ-токен.")
+
+
+def _validate_refresh_options(
+    *,
+    kind: str,
+    start_page: int,
+    pages: int,
+    min_delay: float,
+    max_delay: float,
+    max_listings: int,
+) -> None:
+    if kind not in {"manual", "daily", "weekly"}:
+        raise ValueError("Неверный тип обновления.")
+    if pages < 1 or start_page < 1:
+        raise ValueError(
+            "Количество страниц и стартовая страница должны быть положительными."
+        )
+    if max_listings < 0:
+        raise ValueError("max_listings не может быть отрицательным.")
+    if min_delay < 0 or max_delay < 0:
+        raise ValueError("Паузы между запросами не могут быть отрицательными.")
+    if max_delay < min_delay:
+        raise ValueError("Максимальная пауза не может быть меньше минимальной.")

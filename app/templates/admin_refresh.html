@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Админ: обновить данные</h1>
+<section class="panel">
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+  {% if message %}
+  <p class="success">{{ message }}</p>
+  {% endif %}
+  <form class="stack-form" method="post" action="/admin-refresh">
+    <label class="wide">
+      Админ-токен
+      <input
+        name="admin_token_value"
+        type="password"
+        value="{{ form.admin_token_value }}"
+        autocomplete="off"
+        required
+      >
+    </label>
+    <label>
+      Тип обновления
+      <select name="kind">
+        <option value="manual" {% if form.kind == "manual" %}selected{% endif %}>ручное</option>
+        <option value="daily" {% if form.kind == "daily" %}selected{% endif %}>ежедневное</option>
+        <option value="weekly" {% if form.kind == "weekly" %}selected{% endif %}>еженедельное</option>
+      </select>
+    </label>
+    <label>
+      Стартовая страница
+      <input name="start_page" type="number" min="1" value="{{ form.start_page }}" required>
+    </label>
+    <label>
+      Количество страниц
+      <input name="pages" type="number" min="1" value="{{ form.pages }}" required>
+    </label>
+    <label>
+      Лимит объявлений
+      <input name="max_listings" type="number" min="0" value="{{ form.max_listings }}" required>
+    </label>
+    <label>
+      Мин. пауза, сек.
+      <input name="min_delay" type="number" min="0" step="0.1" value="{{ form.min_delay }}" required>
+    </label>
+    <label>
+      Макс. пауза, сек.
+      <input name="max_delay" type="number" min="0" step="0.1" value="{{ form.max_delay }}" required>
+    </label>
+    <button class="wide" type="submit">Запустить обновление</button>
+  </form>
+</section>
+<p><a class="button" href="/refresh-runs-page">История обновлений</a></p>
+<p><a class="button" href="/">Назад</a></p>
+{% endblock %}

@@ -32,13 +32,14 @@
         gap: 10px;
         margin: 18px 0;
       }
-      input {
+      input, select {
         flex: 1;
         min-width: 0;
         padding: 11px 12px;
         border: 1px solid #b8c0cc;
         border-radius: 6px;
         font-size: 15px;
+        background: white;
       }
       button, .button {
         border: 0;
@@ -62,6 +63,27 @@
         border: 1px solid #f1b8b8;
         padding: 12px;
         border-radius: 6px;
+      }
+      .success {
+        color: #176132;
+        background: #effaf3;
+        border: 1px solid #a8ddb8;
+        padding: 12px;
+        border-radius: 6px;
+      }
+      .stack-form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .stack-form label {
+        display: grid;
+        gap: 6px;
+        color: #52606d;
+        font-size: 14px;
+      }
+      .stack-form .wide {
+        grid-column: 1 / -1;
       }
       dl {
         display: grid;
@@ -99,8 +121,11 @@
         text-decoration: none;
       }
       @media (max-width: 640px) {
-        form, dl {
+        form, dl, .stack-form {
           display: block;
+        }
+        .stack-form label {
+          margin-bottom: 12px;
         }
         button, .button {
           width: 100%;

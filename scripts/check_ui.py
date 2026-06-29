@@ -85,18 +85,26 @@ def main() -> None:
             path.unlink()
 
     os.environ["DB_PATH"] = str(db_path)
+    os.environ["ADMIN_TOKEN"] = "test-token"
     seed_listing(db_path)
 
     from fastapi.testclient import TestClient
-    from app.main import app
+    import app.main as main
 
-    client = TestClient(app)
+    refresh_calls = []
+
+    def fake_run_refresh(**kwargs) -> None:
+        refresh_calls.append(kwargs)
+
+    main.run_refresh = fake_run_refresh
+    client = TestClient(main.app)
 
     home = client.get("/")
     if home.status_code != 200:
         raise SystemExit(f"Home page returned {home.status_code}")
     assert_contains(home.text, "Квартиры ниже рынка")
     assert_contains(home.text, "История обновлений")
+    assert_contains(home.text, "Админ: обновить данные")
 
     invalid_url = client.post("/predict", data={"url": "https://example.com/a/show/123"})
     if invalid_url.status_code != 400:
@@ -130,6 +138,46 @@ def main() -> None:
         "Обработано",
     ]:
         assert_contains(refresh_runs.text, needle)
+
+    admin_page = client.get("/admin-refresh-page")
+    if admin_page.status_code != 200:
+        raise SystemExit(f"Admin refresh page returned {admin_page.status_code}")
+    assert_contains(admin_page.text, "Админ: обновить данные")
+    assert_contains(admin_page.text, "Запустить обновление")
+
+    bad_admin = client.post(
+        "/admin-refresh",
+        data={
+            "admin_token_value": "wrong",
+            "kind": "manual",
+            "start_page": 1,
+            "pages": 1,
+            "min_delay": 0,
+            "max_delay": 0,
+            "max_listings": 0,
+        },
+    )
+    if bad_admin.status_code != 400:
+        raise SystemExit(f"Bad admin refresh returned {bad_admin.status_code}")
+    assert_contains(bad_admin.text, "Неверный админ-токен")
+
+    good_admin = client.post(
+        "/admin-refresh",
+        data={
+            "admin_token_value": "test-token",
+            "kind": "manual",
+            "start_page": 1,
+            "pages": 1,
+            "min_delay": 0,
+            "max_delay": 0,
+            "max_listings": 1,
+        },
+    )
+    if good_admin.status_code != 200:
+        raise SystemExit(f"Good admin refresh returned {good_admin.status_code}")
+    assert_contains(good_admin.text, "Обновление запущено")
+    if len(refresh_calls) != 1:
+        raise SystemExit(f"Expected 1 fake refresh call, got {len(refresh_calls)}")
 
     print("[OK] UI checks passed.")
 

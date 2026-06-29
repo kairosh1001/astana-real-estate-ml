@@ -43,6 +43,7 @@ Useful pages:
 ```text
 http://127.0.0.1:8000/undervalued-page
 http://127.0.0.1:8000/refresh-runs-page
+http://127.0.0.1:8000/admin-refresh-page
 ```
 
 ## Refresh Listings
@@ -79,6 +80,12 @@ curl.exe -X POST http://127.0.0.1:8000/refresh-listings `
   -H "Content-Type: application/json" `
   -H "X-Admin-Token: change-me" `
   -d "{\"kind\":\"manual\",\"pages\":1,\"max_listings\":3,\"min_delay\":0,\"max_delay\":0}"
+```
+
+The same admin refresh can also be started from:
+
+```text
+http://127.0.0.1:8000/admin-refresh-page
 ```
 
 ## Docker
