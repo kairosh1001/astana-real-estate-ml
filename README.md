@@ -44,6 +44,11 @@ Useful pages:
 
 ```text
 http://127.0.0.1:8000/undervalued-page
+```
+
+Internal pages require browser login: username `admin`, password from `ADMIN_TOKEN`.
+
+```text
 http://127.0.0.1:8000/status-page
 http://127.0.0.1:8000/refresh-runs-page
 http://127.0.0.1:8000/admin-refresh-page
@@ -90,6 +95,8 @@ The same admin refresh can also be started from:
 ```text
 http://127.0.0.1:8000/admin-refresh-page
 ```
+
+The browser will ask for username `admin` and password `ADMIN_TOKEN`.
 
 ## Docker
 

@@ -1,12 +1,23 @@
 from __future__ import annotations
 
+import secrets
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, Form, Header, HTTPException, Request
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    Form,
+    Header,
+    HTTPException,
+    Request,
+    status,
+)
 from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
@@ -25,6 +36,7 @@ ROOT = Path(os.getenv("APP_ROOT", Path(__file__).resolve().parents[1]))
 ASTANA_TZ = timezone(timedelta(hours=5), name="Asia/Astana")
 templates = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 templates.env.filters["astana_time"] = lambda value: format_astana_time(value)
+security = HTTPBasic()
 
 app = FastAPI(title="Оценка объявлений Krisha")
 prediction_service = PredictionService(ROOT)
@@ -44,6 +56,28 @@ class RefreshRequest(BaseModel):
     min_delay: float = 1.0
     max_delay: float = 2.0
     max_listings: int = 0
+
+
+def require_basic_auth(
+    credentials: HTTPBasicCredentials = Depends(security),
+) -> HTTPBasicCredentials:
+    admin_token = os.getenv("ADMIN_TOKEN")
+    if not admin_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="ADMIN_TOKEN не настроен.",
+        )
+
+    valid_user = secrets.compare_digest(credentials.username, "admin")
+    valid_password = secrets.compare_digest(credentials.password, admin_token)
+    if not (valid_user and valid_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Нужна авторизация.",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    return credentials
 
 
 @app.get("/health")
@@ -149,7 +183,10 @@ def undervalued_page(
 
 
 @app.get("/refresh-runs")
-def refresh_runs(limit: int = 20) -> dict:
+def refresh_runs(
+    limit: int = 20,
+    _: HTTPBasicCredentials = Depends(require_basic_auth),
+) -> dict:
     with connect(DB_PATH) as db_connection:
         runs = fetch_refresh_runs(db_connection, limit=limit)
     return {
@@ -158,14 +195,17 @@ def refresh_runs(limit: int = 20) -> dict:
 
 
 @app.get("/status-summary")
-def status_summary() -> dict:
+def status_summary(_: HTTPBasicCredentials = Depends(require_basic_auth)) -> dict:
     with connect(DB_PATH) as db_connection:
         summary = fetch_status_summary(db_connection)
     return summary
 
 
 @app.get("/status-page", response_class=HTMLResponse)
-def status_page(request: Request) -> HTMLResponse:
+def status_page(
+    request: Request,
+    _: HTTPBasicCredentials = Depends(require_basic_auth),
+) -> HTMLResponse:
     with connect(DB_PATH) as db_connection:
         summary = fetch_status_summary(db_connection)
     return templates.TemplateResponse(
@@ -176,7 +216,11 @@ def status_page(request: Request) -> HTMLResponse:
 
 
 @app.get("/refresh-runs-page", response_class=HTMLResponse)
-def refresh_runs_page(request: Request, limit: int = 20) -> HTMLResponse:
+def refresh_runs_page(
+    request: Request,
+    limit: int = 20,
+    _: HTTPBasicCredentials = Depends(require_basic_auth),
+) -> HTMLResponse:
     with connect(DB_PATH) as db_connection:
         runs = fetch_refresh_runs(db_connection, limit=limit)
     return templates.TemplateResponse(
@@ -187,7 +231,10 @@ def refresh_runs_page(request: Request, limit: int = 20) -> HTMLResponse:
 
 
 @app.get("/admin-refresh-page", response_class=HTMLResponse)
-def admin_refresh_page(request: Request) -> HTMLResponse:
+def admin_refresh_page(
+    request: Request,
+    _: HTTPBasicCredentials = Depends(require_basic_auth),
+) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "admin_refresh.html",
@@ -204,7 +251,7 @@ def admin_refresh_page(request: Request) -> HTMLResponse:
 def admin_refresh_form(
     request: Request,
     background_tasks: BackgroundTasks,
-    admin_token_value: str = Form(...),
+    _: HTTPBasicCredentials = Depends(require_basic_auth),
     kind: str = Form("manual"),
     start_page: int = Form(1),
     pages: int = Form(1),
@@ -213,7 +260,6 @@ def admin_refresh_form(
     max_listings: int = Form(0),
 ) -> HTMLResponse:
     form = {
-        "admin_token_value": admin_token_value,
         "kind": kind,
         "start_page": start_page,
         "pages": pages,
@@ -222,7 +268,6 @@ def admin_refresh_form(
         "max_listings": max_listings,
     }
     try:
-        _require_admin_token(admin_token_value)
         _validate_refresh_options(
             kind=kind,
             start_page=start_page,
@@ -307,7 +352,6 @@ def refresh_listings(
 
 def _default_refresh_form() -> dict:
     return {
-        "admin_token_value": "",
         "kind": "manual",
         "start_page": 1,
         "pages": 1,

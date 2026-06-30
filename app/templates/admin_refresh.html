@@ -9,16 +9,6 @@
   <p class="success">{{ message }}</p>
   {% endif %}
   <form class="stack-form" method="post" action="/admin-refresh">
-    <label class="wide">
-      Админ-токен
-      <input
-        name="admin_token_value"
-        type="password"
-        value="{{ form.admin_token_value }}"
-        autocomplete="off"
-        required
-      >
-    </label>
     <label>
       Тип обновления
       <select name="kind">

@@ -104,7 +104,8 @@ Components:
 - SQLite database for raw listings, cached predictions, listing status, and undervalued rankings.
 - Scheduled scraping jobs.
 - Docker Compose for local and VPS deployment.
-- Simple admin token for admin-only refresh operations.
+- Simple admin token for API/cron refresh operations.
+- HTTP Basic auth for internal browser pages, using username `admin` and `ADMIN_TOKEN` as the password.
 
 ## Deployment Direction
 
@@ -261,7 +262,7 @@ Initial pages:
 - Undervalued listings page.
 - Service status page.
 - Refresh history page.
-- Admin refresh page protected by `ADMIN_TOKEN`.
+- Internal service status, refresh history, and admin refresh pages protected by HTTP Basic auth.
 
 The undervalued page should include:
 
@@ -288,7 +289,7 @@ The refresh history page should include:
 
 The admin refresh page should:
 
-- Require `ADMIN_TOKEN`.
+- Require HTTP Basic auth with username `admin` and password `ADMIN_TOKEN`.
 - Allow a small manual refresh from the browser.
 - Let the admin choose refresh type, page range, request delay, and listing cap.
 - Link back to refresh history.
