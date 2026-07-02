@@ -49,8 +49,8 @@ def seed_listing(db_path: Path) -> None:
             """,
             (
                 "https://krisha.kz/a/show/123",
-                "Тестовая квартира",
-                "{}",
+                "3-комнатная квартира, 80 м², 7/12 этаж, рядом с парком",
+                '{"Город": "Астана, Есиль р-н"}',
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
@@ -108,6 +108,10 @@ def main() -> None:
     if home.status_code != 200:
         raise SystemExit(f"Home page returned {home.status_code}")
     assert_contains(home.text, "Квартиры ниже рынка")
+    assert_contains(home.text, "Модель CatBoost")
+    assert_contains(home.text, "Топ-10 квартир ниже рынка")
+    assert_contains(home.text, "3-комнатная квартира · 40 м²")
+    assert_contains(home.text, "Есиль")
     assert_not_contains(home.text, "Статус сервиса")
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")
@@ -116,6 +120,43 @@ def main() -> None:
     if invalid_url.status_code != 400:
         raise SystemExit(f"Invalid URL check returned {invalid_url.status_code}")
     assert_contains(invalid_url.text, "Ссылка должна вести на krisha.kz")
+
+    from app.prediction_service import ListingPrediction
+
+    def fake_predict_by_url(url: str) -> ListingPrediction:
+        return ListingPrediction(
+            url=url,
+            title="3-комнатная квартира, 80 м², 7/12 этаж",
+            listed_price=40000000,
+            area_m2=80,
+            listed_price_per_m2=500000,
+            pred_price_per_m2_q10=550000,
+            pred_price_per_m2_q50=620000,
+            pred_price_per_m2_q90=700000,
+            pred_total_q50=49600000,
+            discount_vs_asking_pct_conservative=0.10,
+            discount_vs_asking_pct_median=0.24,
+            interval_width_pct=0.24,
+        )
+
+    main.prediction_service.predict_by_url = fake_predict_by_url
+    result_page = client.post(
+        "/predict",
+        data={"url": "https://krisha.kz/a/show/123"},
+    )
+    if result_page.status_code != 200:
+        raise SystemExit(f"Result page returned {result_page.status_code}")
+    for needle in [
+        "Результат оценки",
+        "Объявление",
+        "Оценка модели",
+        "Нижняя оценка q10",
+        "Медиана",
+        "Выгода к цене по q10",
+        "Ширина интервала",
+        "CatBoost",
+    ]:
+        assert_contains(result_page.text, needle)
 
     for path in ["/refresh-runs", "/status-summary"]:
         response = client.get(path)
@@ -158,17 +199,32 @@ def main() -> None:
 
     for needle in [
         "Квартиры ниже рынка",
-        "Сортировка",
-        "q10/м2",
-        "q50/м2",
-        "q90/м2",
+        "Фильтр по району",
+        "№",
+        "Krisha",
+        "Нижняя оценка",
+        "Медиана",
         "Выгода q10",
-        "Выгода q50",
+        "Выгода медиана",
+        "Есиль",
+        "3-комнатная квартира · 40 м²",
         "Подробнее",
         "/predict?url=",
         "2026-06-29 05:00",
     ]:
         assert_contains(undervalued.text, needle)
+    assert_not_contains(undervalued.text, "активно")
+
+    yesil_page = client.get("/undervalued-page?district=yesil")
+    if yesil_page.status_code != 200:
+        raise SystemExit(f"Yesil filter returned {yesil_page.status_code}")
+    assert_contains(yesil_page.text, "3-комнатная квартира · 40 м²")
+    assert_contains(yesil_page.text, "Показано 1 из 1")
+
+    nura_page = client.get("/undervalued-page?district=nura")
+    if nura_page.status_code != 200:
+        raise SystemExit(f"Nura filter returned {nura_page.status_code}")
+    assert_contains(nura_page.text, "Показано 0 из 0")
 
     refresh_runs_api = client.get("/refresh-runs")
     if refresh_runs_api.status_code != 200:

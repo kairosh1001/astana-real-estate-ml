@@ -1,31 +1,103 @@
 {% extends "base.html" %}
+{% block title %}Результат оценки{% endblock %}
 {% block content %}
-<h1>Результат оценки</h1>
-<section class="panel">
-  <h2>{{ prediction.title }}</h2>
-  <p><a href="{{ prediction.url }}" target="_blank" rel="noreferrer">Открыть объявление на Krisha</a></p>
-  <dl>
-    <dt>Цена в объявлении</dt>
-    <dd>{{ "{:,.0f}".format(prediction.listed_price) }} тг</dd>
-    <dt>Площадь</dt>
-    <dd>{{ "{:,.2f}".format(prediction.area_m2) }} м2</dd>
-    <dt>Цена за м2 в объявлении</dt>
-    <dd>{{ "{:,.0f}".format(prediction.listed_price_per_m2) }} тг</dd>
-    <dt>Модель q10 за м2</dt>
-    <dd>{{ "{:,.0f}".format(prediction.pred_price_per_m2_q10) }} тг</dd>
-    <dt>Модель q50 за м2</dt>
-    <dd>{{ "{:,.0f}".format(prediction.pred_price_per_m2_q50) }} тг</dd>
-    <dt>Модель q90 за м2</dt>
-    <dd>{{ "{:,.0f}".format(prediction.pred_price_per_m2_q90) }} тг</dd>
-    <dt>Модель q50 всего</dt>
-    <dd>{{ "{:,.0f}".format(prediction.pred_total_q50) }} тг</dd>
-    <dt>Выгода q10 к цене</dt>
-    <dd>{{ "{:.2%}".format(prediction.discount_vs_asking_pct_conservative) }}</dd>
-    <dt>Выгода q50 к цене</dt>
-    <dd>{{ "{:.2%}".format(prediction.discount_vs_asking_pct_median) }}</dd>
-    <dt>Ширина интервала</dt>
-    <dd>{{ "{:.2%}".format(prediction.interval_width_pct) }}</dd>
-  </dl>
+<div class="page-head">
+  <div>
+    <h1>Результат оценки</h1>
+    <p>
+      Модель оценивает вероятную рыночную цену за м² и сравнивает её с ценой в
+      объявлении. Для осторожного вывода смотрите q10; для базового ориентира -
+      медиану.
+    </p>
+  </div>
+  <a class="button secondary" href="/">Проверить другую ссылку</a>
+</div>
+
+<section class="result-grid">
+  <div class="panel">
+    <h2>Объявление</h2>
+    <h3>{{ prediction.title }}</h3>
+    <p><a href="{{ prediction.url }}" target="_blank" rel="noreferrer">Открыть на Krisha</a></p>
+    <dl class="detail-list">
+      <div class="detail-row">
+        <dt>Цена</dt>
+        <dd>{{ "{:,.0f}".format(prediction.listed_price) }} тг</dd>
+      </div>
+      <div class="detail-row">
+        <dt>Площадь</dt>
+        <dd>{{ "{:,.2f}".format(prediction.area_m2) }} м²</dd>
+      </div>
+      <div class="detail-row">
+        <dt>Цена объявления за м²</dt>
+        <dd>{{ "{:,.0f}".format(prediction.listed_price_per_m2) }} тг</dd>
+      </div>
+    </dl>
+  </div>
+
+  <div class="panel">
+    <h2>Оценка модели</h2>
+    <div class="metric-grid">
+      <div class="metric">
+        <span>
+          Нижняя оценка q10
+          <span class="hint" title="Осторожная нижняя оценка модели. Если цена объявления ниже q10, вариант выглядит сильнее даже по консервативному сценарию.">?</span>
+        </span>
+        <strong>{{ "{:,.0f}".format(prediction.pred_price_per_m2_q10) }} тг/м²</strong>
+      </div>
+      <div class="metric">
+        <span>
+          Медиана
+          <span class="hint" title="q50: центральная оценка модели. Половина похожих оценок ниже этой точки, половина выше.">?</span>
+        </span>
+        <strong>{{ "{:,.0f}".format(prediction.pred_price_per_m2_q50) }} тг/м²</strong>
+      </div>
+      <div class="metric">
+        <span>
+          Верхняя оценка q90
+          <span class="hint" title="Верхняя оценка диапазона модели. Помогает понять разброс и неопределённость прогноза.">?</span>
+        </span>
+        <strong>{{ "{:,.0f}".format(prediction.pred_price_per_m2_q90) }} тг/м²</strong>
+      </div>
+    </div>
+
+    <dl class="detail-list section">
+      <div class="detail-row">
+        <dt>Медианная оценка всей квартиры</dt>
+        <dd>{{ "{:,.0f}".format(prediction.pred_total_q50) }} тг</dd>
+      </div>
+      <div class="detail-row">
+        <dt>
+          Выгода к цене по q10
+          <span class="hint" title="(q10 - цена объявления за м²) / цена объявления за м². Положительное значение означает, что модельная нижняя оценка выше цены объявления.">?</span>
+        </dt>
+        <dd class="{% if prediction.discount_vs_asking_pct_conservative > 0 %}positive{% endif %}">
+          {{ "{:.2%}".format(prediction.discount_vs_asking_pct_conservative) }}
+        </dd>
+      </div>
+      <div class="detail-row">
+        <dt>
+          Выгода к цене по медиане
+          <span class="hint" title="(медиана - цена объявления за м²) / цена объявления за м². Это базовая, менее осторожная оценка потенциальной выгоды.">?</span>
+        </dt>
+        <dd class="{% if prediction.discount_vs_asking_pct_median > 0 %}positive{% endif %}">
+          {{ "{:.2%}".format(prediction.discount_vs_asking_pct_median) }}
+        </dd>
+      </div>
+      <div class="detail-row">
+        <dt>
+          Ширина интервала
+          <span class="hint" title="(q90 - q10) / медиана. Чем шире интервал, тем менее уверенной является модельная оценка.">?</span>
+        </dt>
+        <dd>{{ "{:.2%}".format(prediction.interval_width_pct) }}</dd>
+      </div>
+    </dl>
+  </div>
 </section>
-<p><a class="button" href="/">Проверить другое объявление</a></p>
+
+<section class="section callout">
+  CatBoost - это модель градиентного бустинга. В этом сервисе она обучена на
+  объявлениях Krisha по Астане и оценивает цену за м² по характеристикам
+  квартиры и локации. Итог стоит воспринимать как аналитический ориентир, а не
+  как юридическую или оценочную экспертизу.
+</section>
 {% endblock %}

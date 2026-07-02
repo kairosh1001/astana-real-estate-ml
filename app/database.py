@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -12,6 +13,23 @@ from app.prediction_service import ListingPrediction
 
 
 DEFAULT_DB_PATH = Path("data") / "krisha.sqlite3"
+DISTRICT_OPTIONS = [
+    {"slug": "yesil", "label": "Есиль"},
+    {"slug": "nura", "label": "Нура"},
+    {"slug": "saryarka", "label": "Сарыарка"},
+    {"slug": "almaty", "label": "Алматы"},
+    {"slug": "baikonyr", "label": "Байконур"},
+    {"slug": "saraishyk", "label": "Сарайшык"},
+]
+
+_DISTRICT_ALIASES = {
+    "yesil": {"есиль", "есильский"},
+    "nura": {"нура"},
+    "saryarka": {"сарыарка"},
+    "almaty": {"алматы"},
+    "baikonyr": {"байконур"},
+    "saraishyk": {"сарайшык"},
+}
 
 
 def utc_now() -> str:
@@ -213,6 +231,8 @@ def fetch_undervalued(
     connection: sqlite3.Connection,
     *,
     limit: int = 50,
+    offset: int = 0,
+    district: str | None = None,
     include_stale: bool = False,
 ) -> list[dict]:
     status_clause = "" if include_stale else "AND status = 'active'"
@@ -221,6 +241,7 @@ def fetch_undervalued(
         SELECT
             url,
             title,
+            raw_json,
             status,
             last_seen_at,
             listed_price,
@@ -237,11 +258,99 @@ def fetch_undervalued(
         WHERE discount_vs_asking_pct_conservative > 0
           {status_clause}
         ORDER BY discount_vs_asking_pct_conservative DESC
-        LIMIT ?
         """,
-        (limit,),
     ).fetchall()
-    return [dict(row) for row in rows]
+    items = [_prepare_undervalued_item(dict(row)) for row in rows]
+    if district:
+        items = [item for item in items if item.get("district_slug") == district]
+    return items[offset : offset + limit]
+
+
+def count_undervalued(
+    connection: sqlite3.Connection,
+    *,
+    district: str | None = None,
+    include_stale: bool = False,
+) -> int:
+    return len(
+        fetch_undervalued(
+            connection,
+            limit=100000,
+            offset=0,
+            district=district,
+            include_stale=include_stale,
+        )
+    )
+
+
+def _prepare_undervalued_item(row: dict) -> dict:
+    raw_listing = _load_raw_listing(row.get("raw_json"))
+    district_slug = normalize_district(raw_listing.get("Город"))
+    district_label = district_label_for_slug(district_slug)
+    row["district_slug"] = district_slug
+    row["district_label"] = district_label
+    row["short_title"] = _short_listing_title(row.get("title"), row.get("area_m2"))
+    row.pop("raw_json", None)
+    return row
+
+
+def _load_raw_listing(raw_json: object) -> dict:
+    if not raw_json:
+        return {}
+    try:
+        loaded = json.loads(str(raw_json))
+    except json.JSONDecodeError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def normalize_district(value: object) -> str | None:
+    cleaned = str(value or "").lower()
+    cleaned = cleaned.replace("астана", "")
+    cleaned = cleaned.replace("р-н", "")
+    cleaned = cleaned.replace("район", "")
+    cleaned = re.sub(r"[^а-яёa-z]+", " ", cleaned).strip()
+    for slug, aliases in _DISTRICT_ALIASES.items():
+        if cleaned in aliases:
+            return slug
+        if any(alias in cleaned.split() for alias in aliases):
+            return slug
+    return None
+
+
+def district_label_for_slug(slug: str | None) -> str:
+    for option in DISTRICT_OPTIONS:
+        if option["slug"] == slug:
+            return option["label"]
+    return "Район не указан"
+
+
+def valid_district_slug(value: str | None) -> str | None:
+    if not value:
+        return None
+    slugs = {option["slug"] for option in DISTRICT_OPTIONS}
+    return value if value in slugs else None
+
+
+def _short_listing_title(title: object, area_m2: object) -> str:
+    title_text = str(title or "")
+    rooms_match = re.search(r"(\d+)\s*-\s*комнат", title_text, flags=re.IGNORECASE)
+    rooms = rooms_match.group(1) if rooms_match else None
+
+    try:
+        area_value = float(area_m2)
+    except (TypeError, ValueError):
+        area_value = 0
+
+    if area_value and area_value.is_integer():
+        area = f"{area_value:.0f}"
+    elif area_value:
+        area = f"{area_value:.1f}"
+    else:
+        area = ""
+
+    title_part = f"{rooms}-комнатная квартира" if rooms else "Квартира"
+    return f"{title_part} · {area} м²" if area else title_part
 
 
 def fetch_refresh_runs(

@@ -25,11 +25,14 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from app.database import (
+    DISTRICT_OPTIONS,
     connect,
+    count_undervalued,
     fetch_refresh_runs,
     fetch_status_summary,
     fetch_undervalued,
     init_db,
+    valid_district_slug,
 )
 from app.prediction_service import PredictionService
 from app.refresh_service import run_refresh
@@ -41,6 +44,8 @@ templates = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 templates.env.filters["astana_time"] = lambda value: format_astana_time(value)
 ADMIN_SESSION_COOKIE = "krisha_admin_session"
 ADMIN_SESSION_TTL_SECONDS = 60 * 60 * 12
+HOME_UNDERVALUED_LIMIT = 10
+UNDERVALUED_PAGE_SIZE = 10
 
 app = FastAPI(title="Оценка объявлений Krisha")
 prediction_service = PredictionService(ROOT)
@@ -75,10 +80,28 @@ def health() -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
+    with connect(DB_PATH) as db_connection:
+        preview_items = fetch_undervalued(
+            db_connection,
+            limit=HOME_UNDERVALUED_LIMIT,
+            include_stale=False,
+        )
+        total_undervalued = count_undervalued(db_connection, include_stale=False)
+
     return templates.TemplateResponse(
         request,
         "index.html",
-        {"request": request, "error": None, "url": ""},
+        {
+            "request": request,
+            "error": None,
+            "url": "",
+            "items": preview_items,
+            "total_undervalued": total_undervalued,
+            "district_options": DISTRICT_OPTIONS,
+            "selected_district": None,
+            "start_rank": 1,
+            "is_preview": True,
+        },
     )
 
 
@@ -90,7 +113,17 @@ def predict_page(request: Request, url: str) -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             "index.html",
-            {"request": request, "error": str(exc), "url": url},
+            {
+                "request": request,
+                "error": str(exc),
+                "url": url,
+                "items": [],
+                "total_undervalued": 0,
+                "district_options": DISTRICT_OPTIONS,
+                "selected_district": None,
+                "start_rank": 1,
+                "is_preview": True,
+            },
             status_code=400,
         )
 
@@ -109,7 +142,17 @@ def predict_form(request: Request, url: str = Form(...)) -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             "index.html",
-            {"request": request, "error": str(exc), "url": url},
+            {
+                "request": request,
+                "error": str(exc),
+                "url": url,
+                "items": [],
+                "total_undervalued": 0,
+                "district_options": DISTRICT_OPTIONS,
+                "selected_district": None,
+                "start_rank": 1,
+                "is_preview": True,
+            },
             status_code=400,
         )
 
@@ -133,34 +176,77 @@ def predict_by_link(payload: PredictByLinkRequest) -> dict:
 
 
 @app.get("/undervalued")
-def undervalued(limit: int = 50, include_stale: bool = False) -> dict:
+def undervalued(
+    limit: int = 50,
+    page: int = 1,
+    district: str | None = None,
+    include_stale: bool = False,
+) -> dict:
+    selected_district = valid_district_slug(district)
+    safe_limit = min(max(limit, 1), 100)
+    safe_page = max(page, 1)
+    offset = (safe_page - 1) * safe_limit
     with connect(DB_PATH) as db_connection:
         items = fetch_undervalued(
             db_connection,
-            limit=limit,
+            limit=safe_limit,
+            offset=offset,
+            district=selected_district,
+            include_stale=include_stale,
+        )
+        total = count_undervalued(
+            db_connection,
+            district=selected_district,
             include_stale=include_stale,
         )
     return {
         "items": items,
+        "total": total,
+        "page": safe_page,
+        "limit": safe_limit,
+        "district": selected_district,
     }
 
 
 @app.get("/undervalued-page", response_class=HTMLResponse)
 def undervalued_page(
     request: Request,
-    limit: int = 50,
+    page: int = 1,
+    district: str | None = None,
     include_stale: bool = False,
 ) -> HTMLResponse:
+    selected_district = valid_district_slug(district)
+    safe_page = max(page, 1)
+    offset = (safe_page - 1) * UNDERVALUED_PAGE_SIZE
     with connect(DB_PATH) as db_connection:
         items = fetch_undervalued(
             db_connection,
-            limit=limit,
+            limit=UNDERVALUED_PAGE_SIZE,
+            offset=offset,
+            district=selected_district,
+            include_stale=include_stale,
+        )
+        total = count_undervalued(
+            db_connection,
+            district=selected_district,
             include_stale=include_stale,
         )
     return templates.TemplateResponse(
         request,
         "undervalued.html",
-        {"request": request, "items": items},
+        {
+            "request": request,
+            "items": items,
+            "district_options": DISTRICT_OPTIONS,
+            "selected_district": selected_district,
+            "page": safe_page,
+            "page_size": UNDERVALUED_PAGE_SIZE,
+            "total": total,
+            "has_previous": safe_page > 1,
+            "has_next": offset + UNDERVALUED_PAGE_SIZE < total,
+            "start_rank": offset + 1,
+            "is_preview": False,
+        },
     )
 
 

@@ -1,20 +1,83 @@
 {% extends "base.html" %}
+{% block title %}Квартиры ниже рынка в Астане{% endblock %}
 {% block content %}
-<h1>Оценка квартиры на Krisha</h1>
-<section class="panel">
-  <form method="post" action="/predict">
-    <input
-      name="url"
-      type="url"
-      value="{{ url }}"
-      placeholder="Ссылка на объявление Krisha.kz"
-      required
-    >
-    <button type="submit">Оценить</button>
-  </form>
-  {% if error %}
-  <p class="error">{{ error }}</p>
-  {% endif %}
+<section class="grid-2">
+  <div>
+    <div class="page-head">
+      <div>
+        <h1>Квартиры ниже рынка в Астане</h1>
+        <p>
+          Сервис сравнивает цену объявления на Krisha с модельной оценкой рынка и
+          выделяет варианты, где цена выглядит ниже ожидаемой.
+        </p>
+      </div>
+    </div>
+    <section class="panel">
+      <h2>Оценить конкретное объявление</h2>
+      <p class="muted">
+        Модель CatBoost использует параметры квартиры, район, жилой комплекс,
+        этажность, площадь и географические признаки. Результат не является
+        гарантией цены сделки, но помогает быстро отсеять переоценённые и
+        потенциально интересные варианты.
+      </p>
+      <form class="search-form" method="post" action="/predict">
+        <input
+          name="url"
+          type="url"
+          value="{{ url }}"
+          placeholder="Ссылка на объявление Krisha.kz"
+          required
+        >
+        <button type="submit">Оценить</button>
+      </form>
+      {% if error %}
+      <p class="error">{{ error }}</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Что означает прогноз</h2>
+    <div class="metric-grid">
+      <div class="metric">
+        <span>Нижняя оценка</span>
+        <strong>q10</strong>
+      </div>
+      <div class="metric">
+        <span>Центр прогноза</span>
+        <strong>Медиана</strong>
+      </div>
+      <div class="metric">
+        <span>Верхняя оценка</span>
+        <strong>q90</strong>
+      </div>
+    </div>
+    <p class="muted">
+      Для поиска выгодных объявлений рейтинг строится по осторожной выгоде q10:
+      если даже нижняя оценка выше цены объявления, вариант заслуживает внимания.
+    </p>
+  </section>
 </section>
-<p><a href="/undervalued-page">Квартиры ниже рынка</a></p>
+
+<section class="section panel">
+  <div class="toolbar">
+    <div>
+      <h2>Топ-10 квартир ниже рынка</h2>
+      <p class="muted">
+        Сейчас в базе: {{ total_undervalued }} активных вариантов ниже рынка.
+        Сортировка идёт от самой высокой осторожной выгоды к более низкой.
+      </p>
+    </div>
+    <a class="button" href="/undervalued-page">Открыть весь рейтинг</a>
+  </div>
+  <div class="districts" aria-label="Фильтр по району">
+    <a class="chip active" href="/undervalued-page">Все районы</a>
+    {% for option in district_options %}
+    <a class="chip" href="/undervalued-page?district={{ option.slug }}">{{ option.label }}</a>
+    {% endfor %}
+  </div>
+  <div class="section">
+    {% include "_undervalued_table.html" %}
+  </div>
+</section>
 {% endblock %}

@@ -1,0 +1,57 @@
+{% if not items %}
+<div class="empty-state">
+  Квартиры ниже рынка пока не найдены. Проверьте позже после очередного обновления данных.
+</div>
+{% else %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>№</th>
+        <th>Объявление</th>
+        <th>Район</th>
+        <th>Krisha</th>
+        <th>Цена/м²</th>
+        <th>
+          Нижняя оценка
+          <span class="hint" title="q10: осторожная нижняя оценка модели. В 10% похожих случаев рыночная цена может быть ниже этой отметки.">?</span>
+        </th>
+        <th>
+          Медиана
+          <span class="hint" title="q50: центральная оценка модели, то есть наиболее удобная базовая оценка рыночной цены за м².">?</span>
+        </th>
+        <th>
+          Выгода q10
+          <span class="hint" title="Насколько нижняя оценка модели выше цены объявления. Положительное значение означает запас даже по осторожной оценке.">?</span>
+        </th>
+        <th>
+          Выгода медиана
+          <span class="hint" title="Насколько медианная оценка модели выше цены объявления. Это менее консервативная оценка потенциальной выгоды.">?</span>
+        </th>
+        <th>Найдено</th>
+        <th>Детали</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td class="rank">{{ start_rank + loop.index0 }}</td>
+        <td class="listing-cell">
+          <strong>{{ item.short_title }}</strong>
+          <span>{{ "{:,.0f}".format(item.listed_price or 0) }} тг</span>
+        </td>
+        <td>{{ item.district_label }}</td>
+        <td><a href="{{ item.url }}" target="_blank" rel="noreferrer">Открыть</a></td>
+        <td>{{ "{:,.0f}".format(item.listed_price_per_m2 or 0) }}</td>
+        <td>{{ "{:,.0f}".format(item.pred_price_per_m2_q10 or 0) }}</td>
+        <td>{{ "{:,.0f}".format(item.pred_price_per_m2_q50 or 0) }}</td>
+        <td class="positive">{{ "{:.1%}".format(item.discount_vs_asking_pct_conservative or 0) }}</td>
+        <td class="positive">{{ "{:.1%}".format(item.discount_vs_asking_pct_median or 0) }}</td>
+        <td>{{ item.last_seen_at | astana_time }}</td>
+        <td><a href="/predict?url={{ item.url | urlencode }}">Подробнее</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}

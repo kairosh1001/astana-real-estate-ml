@@ -1,48 +1,60 @@
 {% extends "base.html" %}
+{% block title %}Квартиры ниже рынка{% endblock %}
 {% block content %}
-<h1>Квартиры ниже рынка</h1>
-{% if not items %}
+<div class="page-head">
+  <div>
+    <h1>Квартиры ниже рынка</h1>
+    <p>
+      Рейтинг активных объявлений, где осторожная оценка модели выше цены
+      объявления. Чем выше позиция, тем больше запас к цене по q10.
+    </p>
+  </div>
+  <a class="button secondary" href="/">Оценить ссылку</a>
+</div>
+
 <section class="panel">
-  <p>Квартиры ниже рынка пока не найдены. Запустите обновление данных.</p>
-</section>
-{% else %}
-<section class="panel">
-  <p>Сортировка: от самой высокой консервативной выгоды q10 к самой низкой.</p>
-  <div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>Объявление</th>
-        <th>Статус</th>
-        <th>Цена/м2, тг</th>
-        <th>q10/м2, тг</th>
-        <th>q50/м2, тг</th>
-        <th>q90/м2, тг</th>
-        <th>Выгода q10</th>
-        <th>Выгода q50</th>
-        <th>Последний раз найдено (Астана)</th>
-        <th>Детали</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in items %}
-      <tr>
-        <td><a href="{{ item.url }}" target="_blank" rel="noreferrer">{{ item.title }}</a></td>
-        <td>{% if item.status == "active" %}активно{% elif item.status == "stale" %}устарело{% else %}{{ item.status }}{% endif %}</td>
-        <td>{{ "{:,.0f}".format(item.listed_price_per_m2) }}</td>
-        <td>{{ "{:,.0f}".format(item.pred_price_per_m2_q10) }}</td>
-        <td>{{ "{:,.0f}".format(item.pred_price_per_m2_q50) }}</td>
-        <td>{{ "{:,.0f}".format(item.pred_price_per_m2_q90) }}</td>
-        <td>{{ "{:.2%}".format(item.discount_vs_asking_pct_conservative) }}</td>
-        <td>{{ "{:.2%}".format(item.discount_vs_asking_pct_median) }}</td>
-        <td>{{ item.last_seen_at | astana_time }}</td>
-        <td><a class="link-button" href="/predict?url={{ item.url | urlencode }}">Подробнее</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="toolbar">
+    <div>
+      <h2>Фильтр по району</h2>
+      <p class="muted">
+        Показано {{ items|length }} из {{ total }} вариантов.
+        Страница {{ page }}.
+      </p>
+    </div>
+  </div>
+  <div class="districts" aria-label="Фильтр по району">
+    <a class="chip {% if not selected_district %}active{% endif %}" href="/undervalued-page">Все районы</a>
+    {% for option in district_options %}
+    <a
+      class="chip {% if selected_district == option.slug %}active{% endif %}"
+      href="/undervalued-page?district={{ option.slug }}"
+    >
+      {{ option.label }}
+    </a>
+    {% endfor %}
   </div>
 </section>
-{% endif %}
-<p><a class="button" href="/">Назад</a></p>
+
+<section class="section panel">
+  {% include "_undervalued_table.html" %}
+
+  <div class="pagination">
+    {% if has_previous %}
+      <a
+        class="button secondary"
+        href="/undervalued-page?page={{ page - 1 }}{% if selected_district %}&district={{ selected_district }}{% endif %}"
+      >
+        Назад
+      </a>
+    {% endif %}
+    {% if has_next %}
+      <a
+        class="button"
+        href="/undervalued-page?page={{ page + 1 }}{% if selected_district %}&district={{ selected_district }}{% endif %}"
+      >
+        Следующие 10
+      </a>
+    {% endif %}
+  </div>
+</section>
 {% endblock %}
