@@ -117,7 +117,15 @@ def predict_entry_page(request: Request) -> HTMLResponse:
 
 
 @app.get("/predict", response_class=HTMLResponse)
-def predict_page(request: Request, url: str) -> HTMLResponse:
+@app.get("/listing-details", response_class=HTMLResponse)
+def predict_page(request: Request, url: str = "") -> HTMLResponse:
+    if not url:
+        return templates.TemplateResponse(
+            request,
+            "predict_form.html",
+            {"request": request, "error": None, "url": ""},
+        )
+
     try:
         prediction = prediction_service.predict_by_url(url)
     except Exception as exc:
@@ -172,12 +180,12 @@ def undervalued(
     page: int = 1,
     district: str | None = None,
     rooms: int | None = None,
-    max_price: float | None = None,
+    max_price: str | None = None,
     include_stale: bool = False,
 ) -> dict:
     selected_district = valid_district_slug(district)
     selected_rooms = rooms if rooms in {1, 2, 3, 4, 5} else None
-    selected_max_price = max_price if max_price and max_price > 0 else None
+    selected_max_price = _parse_optional_positive_float(max_price)
     safe_limit = min(max(limit, 1), 100)
     safe_page = max(page, 1)
     offset = (safe_page - 1) * safe_limit
@@ -215,12 +223,12 @@ def undervalued_page(
     page: int = 1,
     district: str | None = None,
     rooms: int | None = None,
-    max_price: float | None = None,
+    max_price: str | None = None,
     include_stale: bool = False,
 ) -> HTMLResponse:
     selected_district = valid_district_slug(district)
     selected_rooms = rooms if rooms in {1, 2, 3, 4, 5} else None
-    selected_max_price = max_price if max_price and max_price > 0 else None
+    selected_max_price = _parse_optional_positive_float(max_price)
     safe_page = max(page, 1)
     offset = (safe_page - 1) * UNDERVALUED_PAGE_SIZE
     with connect(DB_PATH) as db_connection:
@@ -510,6 +518,16 @@ def _default_refresh_form() -> dict:
         "max_delay": 2.0,
         "max_listings": 0,
     }
+
+
+def _parse_optional_positive_float(value: str | None) -> float | None:
+    if value is None or value.strip() == "":
+        return None
+    try:
+        parsed = float(value)
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
 
 
 def _admin_page_redirect_if_needed(request: Request) -> RedirectResponse | None:

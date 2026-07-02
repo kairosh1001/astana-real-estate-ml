@@ -169,6 +169,11 @@ def main() -> None:
     ]:
         assert_contains(result_page.text, needle)
 
+    details_page = client.get("/listing-details?url=https://krisha.kz/a/show/123")
+    if details_page.status_code != 200:
+        raise SystemExit(f"Listing details page returned {details_page.status_code}")
+    assert_contains(details_page.text, "Результат оценки")
+
     for path in ["/refresh-runs", "/status-summary"]:
         response = client.get(path)
         if response.status_code != 401:
@@ -222,7 +227,7 @@ def main() -> None:
         "Есиль",
         "3-комнатная квартира · 40 м²",
         "Подробнее",
-        "/predict?url=",
+        "/listing-details?url=",
         "2026-06-29 05:00",
     ]:
         assert_contains(undervalued.text, needle)
@@ -239,6 +244,15 @@ def main() -> None:
         raise SystemExit(f"Room/price filter returned {room_price_page.status_code}")
     assert_contains(room_price_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(room_price_page.text, "Показано 1 из 1")
+
+    blank_price_page = client.get("/undervalued-page?rooms=3&max_price=")
+    if blank_price_page.status_code != 200:
+        raise SystemExit(f"Blank max price filter returned {blank_price_page.status_code}")
+    assert_contains(blank_price_page.text, "3-комнатная квартира · 40 м²")
+
+    api_blank_price = client.get("/undervalued?rooms=3&max_price=")
+    if api_blank_price.status_code != 200:
+        raise SystemExit(f"Blank max price API returned {api_blank_price.status_code}")
 
     nura_page = client.get("/undervalued-page?district=nura")
     if nura_page.status_code != 200:

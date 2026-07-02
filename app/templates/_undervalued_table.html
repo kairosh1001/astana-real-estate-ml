@@ -48,7 +48,7 @@
         <td class="positive">{{ "{:.1%}".format(item.discount_vs_asking_pct_conservative or 0) }}</td>
         <td class="positive">{{ "{:.1%}".format(item.discount_vs_asking_pct_median or 0) }}</td>
         <td>{{ item.last_seen_at | astana_time }}</td>
-        <td><a href="/predict?url={{ item.url | urlencode }}">Подробнее</a></td>
+        <td><a href="/listing-details?url={{ item.url | urlencode }}">Подробнее</a></td>
       </tr>
       {% endfor %}
     </tbody>
