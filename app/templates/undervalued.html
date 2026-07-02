@@ -5,11 +5,11 @@
   <div>
     <h1>Квартиры ниже рынка</h1>
     <p>
-      Рейтинг активных объявлений, где осторожная оценка модели выше цены
+      Рейтинг активных объявлений, где низкая оценка q10 выше цены
       объявления. Чем выше позиция, тем больше запас к цене по q10.
     </p>
   </div>
-  <a class="button secondary" href="/">Оценить ссылку</a>
+  <a class="button secondary" href="/predict-page">Оценить ссылку</a>
 </div>
 
 <section class="panel">
@@ -23,16 +23,49 @@
     </div>
   </div>
   <div class="districts" aria-label="Фильтр по району">
-    <a class="chip {% if not selected_district %}active{% endif %}" href="/undervalued-page">Все районы</a>
+    <a
+      class="chip {% if not selected_district %}active{% endif %}"
+      href="/undervalued-page{% if selected_rooms or selected_max_price %}?{% if selected_rooms %}rooms={{ selected_rooms }}{% endif %}{% if selected_rooms and selected_max_price %}&{% endif %}{% if selected_max_price %}max_price={{ selected_max_price|int }}{% endif %}{% endif %}"
+    >
+      Все районы
+    </a>
     {% for option in district_options %}
     <a
       class="chip {% if selected_district == option.slug %}active{% endif %}"
-      href="/undervalued-page?district={{ option.slug }}"
+      href="/undervalued-page?district={{ option.slug }}{% if selected_rooms %}&rooms={{ selected_rooms }}{% endif %}{% if selected_max_price %}&max_price={{ selected_max_price|int }}{% endif %}"
     >
       {{ option.label }}
     </a>
     {% endfor %}
   </div>
+
+  <form class="filter-form" method="get" action="/undervalued-page">
+    {% if selected_district %}
+    <input type="hidden" name="district" value="{{ selected_district }}">
+    {% endif %}
+    <label>
+      Количество комнат
+      <select name="rooms">
+        <option value="">Любое</option>
+        {% for value in [1, 2, 3, 4, 5] %}
+        <option value="{{ value }}" {% if selected_rooms == value %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Максимальная цена, тг
+      <input
+        name="max_price"
+        type="number"
+        min="0"
+        step="1000000"
+        value="{% if selected_max_price %}{{ selected_max_price|int }}{% endif %}"
+        placeholder="Например, 45000000"
+      >
+    </label>
+    <button type="submit">Применить</button>
+    <a class="button secondary" href="/undervalued-page">Сбросить</a>
+  </form>
 </section>
 
 <section class="section panel">
@@ -42,7 +75,7 @@
     {% if has_previous %}
       <a
         class="button secondary"
-        href="/undervalued-page?page={{ page - 1 }}{% if selected_district %}&district={{ selected_district }}{% endif %}"
+        href="/undervalued-page?page={{ page - 1 }}{% if selected_district %}&district={{ selected_district }}{% endif %}{% if selected_rooms %}&rooms={{ selected_rooms }}{% endif %}{% if selected_max_price %}&max_price={{ selected_max_price|int }}{% endif %}"
       >
         Назад
       </a>
@@ -50,7 +83,7 @@
     {% if has_next %}
       <a
         class="button"
-        href="/undervalued-page?page={{ page + 1 }}{% if selected_district %}&district={{ selected_district }}{% endif %}"
+        href="/undervalued-page?page={{ page + 1 }}{% if selected_district %}&district={{ selected_district }}{% endif %}{% if selected_rooms %}&rooms={{ selected_rooms }}{% endif %}{% if selected_max_price %}&max_price={{ selected_max_price|int }}{% endif %}"
       >
         Следующие 10
       </a>

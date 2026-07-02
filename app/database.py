@@ -233,6 +233,8 @@ def fetch_undervalued(
     limit: int = 50,
     offset: int = 0,
     district: str | None = None,
+    rooms: int | None = None,
+    max_price: float | None = None,
     include_stale: bool = False,
 ) -> list[dict]:
     status_clause = "" if include_stale else "AND status = 'active'"
@@ -263,6 +265,14 @@ def fetch_undervalued(
     items = [_prepare_undervalued_item(dict(row)) for row in rows]
     if district:
         items = [item for item in items if item.get("district_slug") == district]
+    if rooms:
+        items = [item for item in items if item.get("rooms") == rooms]
+    if max_price:
+        items = [
+            item
+            for item in items
+            if item.get("listed_price") is not None and item["listed_price"] <= max_price
+        ]
     return items[offset : offset + limit]
 
 
@@ -270,6 +280,8 @@ def count_undervalued(
     connection: sqlite3.Connection,
     *,
     district: str | None = None,
+    rooms: int | None = None,
+    max_price: float | None = None,
     include_stale: bool = False,
 ) -> int:
     return len(
@@ -278,6 +290,8 @@ def count_undervalued(
             limit=100000,
             offset=0,
             district=district,
+            rooms=rooms,
+            max_price=max_price,
             include_stale=include_stale,
         )
     )
@@ -289,6 +303,7 @@ def _prepare_undervalued_item(row: dict) -> dict:
     district_label = district_label_for_slug(district_slug)
     row["district_slug"] = district_slug
     row["district_label"] = district_label
+    row["rooms"] = _extract_rooms(row.get("title"))
     row["short_title"] = _short_listing_title(row.get("title"), row.get("area_m2"))
     row.pop("raw_json", None)
     return row
@@ -334,8 +349,7 @@ def valid_district_slug(value: str | None) -> str | None:
 
 def _short_listing_title(title: object, area_m2: object) -> str:
     title_text = str(title or "")
-    rooms_match = re.search(r"(\d+)\s*-\s*комнат", title_text, flags=re.IGNORECASE)
-    rooms = rooms_match.group(1) if rooms_match else None
+    rooms = _extract_rooms(title_text)
 
     try:
         area_value = float(area_m2)
@@ -351,6 +365,11 @@ def _short_listing_title(title: object, area_m2: object) -> str:
 
     title_part = f"{rooms}-комнатная квартира" if rooms else "Квартира"
     return f"{title_part} · {area} м²" if area else title_part
+
+
+def _extract_rooms(title: object) -> int | None:
+    rooms_match = re.search(r"(\d+)\s*-\s*комнат", str(title or ""), flags=re.IGNORECASE)
+    return int(rooms_match.group(1)) if rooms_match else None
 
 
 def fetch_refresh_runs(

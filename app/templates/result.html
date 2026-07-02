@@ -6,8 +6,8 @@
     <h1>Результат оценки</h1>
     <p>
       Модель оценивает вероятную рыночную цену за м² и сравнивает её с ценой в
-      объявлении. Для осторожного вывода смотрите q10; для базового ориентира -
-      медиану.
+      объявлении. Для низкой оценки смотрите q10; для базового ориентира -
+      медианную оценку q50.
     </p>
   </div>
   <a class="button secondary" href="/">Проверить другую ссылку</a>
@@ -40,13 +40,13 @@
       <div class="metric">
         <span>
           Нижняя оценка q10
-          <span class="hint" title="Осторожная нижняя оценка модели. Если цена объявления ниже q10, вариант выглядит сильнее даже по консервативному сценарию.">?</span>
+          <span class="hint" title="Низкая оценка модели. Если цена объявления ниже q10, вариант выглядит интересным даже по нижней границе прогноза.">?</span>
         </span>
         <strong>{{ "{:,.0f}".format(prediction.pred_price_per_m2_q10) }} тг/м²</strong>
       </div>
       <div class="metric">
         <span>
-          Медиана
+          Медианная оценка q50
           <span class="hint" title="q50: центральная оценка модели. Половина похожих оценок ниже этой точки, половина выше.">?</span>
         </span>
         <strong>{{ "{:,.0f}".format(prediction.pred_price_per_m2_q50) }} тг/м²</strong>
@@ -61,9 +61,29 @@
     </div>
 
     <dl class="detail-list section">
+      {% set gain_q10 = prediction.pred_price_per_m2_q10 - prediction.listed_price_per_m2 %}
+      {% set gain_median = prediction.pred_price_per_m2_q50 - prediction.listed_price_per_m2 %}
       <div class="detail-row">
         <dt>Медианная оценка всей квартиры</dt>
         <dd>{{ "{:,.0f}".format(prediction.pred_total_q50) }} тг</dd>
+      </div>
+      <div class="detail-row">
+        <dt>
+          Абсолютная выгода по q10
+          <span class="hint" title="Разница между q10 и ценой объявления за м² в тенге.">?</span>
+        </dt>
+        <dd class="{% if gain_q10 > 0 %}money{% endif %}">
+          {{ "{:+,.0f}".format(gain_q10) }} тг/м²
+        </dd>
+      </div>
+      <div class="detail-row">
+        <dt>
+          Абсолютная выгода по медиане
+          <span class="hint" title="Разница между медианной оценкой q50 и ценой объявления за м² в тенге.">?</span>
+        </dt>
+        <dd class="{% if gain_median > 0 %}money{% endif %}">
+          {{ "{:+,.0f}".format(gain_median) }} тг/м²
+        </dd>
       </div>
       <div class="detail-row">
         <dt>
@@ -77,7 +97,7 @@
       <div class="detail-row">
         <dt>
           Выгода к цене по медиане
-          <span class="hint" title="(медиана - цена объявления за м²) / цена объявления за м². Это базовая, менее осторожная оценка потенциальной выгоды.">?</span>
+          <span class="hint" title="(медианная оценка q50 - цена объявления за м²) / цена объявления за м². Это базовая оценка потенциальной выгоды.">?</span>
         </dt>
         <dd class="{% if prediction.discount_vs_asking_pct_median > 0 %}positive{% endif %}">
           {{ "{:.2%}".format(prediction.discount_vs_asking_pct_median) }}

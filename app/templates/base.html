@@ -13,11 +13,14 @@
         --bg: #f5f6f3;
         --surface: #ffffff;
         --line: #d9ded6;
-        --muted: #667085;
+        --muted: #647067;
+        --soft: #eef7f3;
         --text: #17202a;
         --strong: #101828;
         --teal: #0f766e;
         --teal-dark: #115e59;
+        --blue: #245b8f;
+        --blue-soft: #eaf2f8;
         --amber: #b7791f;
         --red: #b42318;
         --green-bg: #ecfdf3;
@@ -57,7 +60,7 @@
         gap: 2px;
       }
       .brand strong {
-        color: var(--strong);
+        color: var(--teal-dark);
         font-size: 18px;
       }
       .brand span {
@@ -81,6 +84,11 @@
         border-color: var(--line);
         background: #fff;
         text-decoration: none;
+      }
+      nav a.primary-nav {
+        background: var(--soft);
+        color: var(--teal-dark);
+        border-color: #bfe2d6;
       }
       main {
         max-width: 1180px;
@@ -129,6 +137,37 @@
         box-shadow: var(--shadow);
         padding: 22px;
       }
+      .hero {
+        min-height: 360px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background:
+          linear-gradient(90deg, rgba(11, 45, 50, 0.88), rgba(11, 45, 50, 0.52), rgba(11, 45, 50, 0.06)),
+          url("/static/astana-hero.png") center / cover;
+        box-shadow: var(--shadow);
+        color: #fff;
+        display: flex;
+        align-items: flex-end;
+        padding: 32px;
+      }
+      .hero h1 {
+        color: #fff;
+        max-width: 620px;
+      }
+      .hero p {
+        color: #e4f4ef;
+        max-width: 680px;
+        margin: 12px 0 0;
+      }
+      .hero-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 22px;
+      }
+      .hero-actions .button.secondary {
+        background: rgba(255, 255, 255, 0.94);
+      }
       .section {
         margin-top: 24px;
       }
@@ -147,7 +186,7 @@
         border: 1px solid var(--line);
         border-radius: 8px;
         padding: 14px;
-        background: #fbfcfa;
+        background: linear-gradient(180deg, #fbfcfa, #f4faf7);
       }
       .metric span {
         display: block;
@@ -157,8 +196,15 @@
       }
       .metric strong {
         display: block;
-        color: var(--strong);
+        color: var(--teal-dark);
         font-size: 20px;
+      }
+      .info-panel {
+        border-color: #c4d7e8;
+        background: var(--blue-soft);
+      }
+      .info-panel h2 {
+        color: #194568;
       }
       form {
         margin: 0;
@@ -318,6 +364,10 @@
         color: #067647;
         font-weight: 700;
       }
+      .money {
+        color: var(--blue);
+        font-weight: 700;
+      }
       .subtle {
         color: var(--muted);
         font-size: 13px;
@@ -372,6 +422,32 @@
         color: #7a4b08;
         padding: 14px;
       }
+      .filter-form {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
+        gap: 12px;
+        align-items: end;
+        margin-top: 18px;
+      }
+      .filter-form label {
+        display: grid;
+        gap: 6px;
+      }
+      .site-footer {
+        border-top: 1px solid var(--line);
+        background: #fff;
+      }
+      .site-footer-inner {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 20px;
+        color: var(--muted);
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+        font-size: 14px;
+      }
       .pagination {
         display: flex;
         justify-content: flex-end;
@@ -387,6 +463,11 @@
         .site-header-inner, .page-head, .grid-2, .result-grid {
           display: block;
         }
+        .hero {
+          min-height: 430px;
+          padding: 22px;
+          align-items: flex-end;
+        }
         nav {
           justify-content: flex-start;
           margin-top: 12px;
@@ -400,7 +481,7 @@
         .panel {
           padding: 17px;
         }
-        .search-form, .stack-form, .metric-grid {
+        .search-form, .stack-form, .metric-grid, .filter-form {
           grid-template-columns: 1fr;
         }
         .search-form button, .button {
@@ -419,11 +500,14 @@
     <header class="site-header">
       <div class="site-header-inner">
         <a class="brand" href="/">
-          <strong>Квартиры ниже рынка</strong>
+          <strong>Квартиры ниже рынка в Астане</strong>
           <span>Оценка объявлений Krisha по модели CatBoost</span>
         </a>
         <nav aria-label="Основная навигация">
-          <a href="/">Оценить ссылку</a>
+          {% if request.url.path != "/" %}
+          <a class="primary-nav" href="/">Вернуться на главную</a>
+          {% endif %}
+          <a href="/predict-page">Оценить ссылку</a>
           <a href="/undervalued-page">Ниже рынка</a>
         </nav>
       </div>
@@ -431,5 +515,11 @@
     <main>
       {% block content %}{% endblock %}
     </main>
+    <footer class="site-footer">
+      <div class="site-footer-inner">
+        <span>2026 · Данные получены из открытых объявлений на сайте krisha.kz.</span>
+        <span>Разработчик - Кайрат Жаркынбай</span>
+      </div>
+    </footer>
   </body>
 </html>

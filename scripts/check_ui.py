@@ -108,13 +108,22 @@ def main() -> None:
     if home.status_code != 200:
         raise SystemExit(f"Home page returned {home.status_code}")
     assert_contains(home.text, "Квартиры ниже рынка")
-    assert_contains(home.text, "Модель CatBoost")
+    assert_contains(home.text, "CatBoost оценивает")
+    assert_contains(home.text, "Квартиры ниже рынка в Астане")
     assert_contains(home.text, "Топ-10 квартир ниже рынка")
+    assert_contains(home.text, "Медианная оценка")
     assert_contains(home.text, "3-комнатная квартира · 40 м²")
     assert_contains(home.text, "Есиль")
+    assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
     assert_not_contains(home.text, "Статус сервиса")
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")
+
+    predict_entry = client.get("/predict-page")
+    if predict_entry.status_code != 200:
+        raise SystemExit(f"Predict entry page returned {predict_entry.status_code}")
+    assert_contains(predict_entry.text, "Оценить ссылку Krisha")
+    assert_contains(predict_entry.text, "Вернуться на главную")
 
     invalid_url = client.post("/predict", data={"url": "https://example.com/a/show/123"})
     if invalid_url.status_code != 400:
@@ -151,7 +160,9 @@ def main() -> None:
         "Объявление",
         "Оценка модели",
         "Нижняя оценка q10",
-        "Медиана",
+        "Медианная оценка q50",
+        "Абсолютная выгода по q10",
+        "Абсолютная выгода по медиане",
         "Выгода к цене по q10",
         "Ширина интервала",
         "CatBoost",
@@ -203,9 +214,11 @@ def main() -> None:
         "№",
         "Krisha",
         "Нижняя оценка",
-        "Медиана",
+        "Медианная оценка",
         "Выгода q10",
         "Выгода медиана",
+        "Количество комнат",
+        "Максимальная цена",
         "Есиль",
         "3-комнатная квартира · 40 м²",
         "Подробнее",
@@ -220,6 +233,12 @@ def main() -> None:
         raise SystemExit(f"Yesil filter returned {yesil_page.status_code}")
     assert_contains(yesil_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(yesil_page.text, "Показано 1 из 1")
+
+    room_price_page = client.get("/undervalued-page?rooms=3&max_price=21000000")
+    if room_price_page.status_code != 200:
+        raise SystemExit(f"Room/price filter returned {room_price_page.status_code}")
+    assert_contains(room_price_page.text, "3-комнатная квартира · 40 м²")
+    assert_contains(room_price_page.text, "Показано 1 из 1")
 
     nura_page = client.get("/undervalued-page?district=nura")
     if nura_page.status_code != 200:

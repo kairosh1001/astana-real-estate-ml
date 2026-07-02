@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Оценить ссылку Krisha{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Оценить ссылку Krisha</h1>
+    <p>
+      Вставьте ссылку на объявление Krisha.kz. Сервис загрузит параметры квартиры,
+      рассчитает цену за м² по модели и покажет, выглядит ли цена ниже рынка.
+    </p>
+  </div>
+</div>
+
+<section class="grid-2">
+  <section class="panel">
+    <h2>Ссылка на объявление</h2>
+    <form class="search-form" method="post" action="/predict">
+      <input
+        name="url"
+        type="url"
+        value="{{ url }}"
+        placeholder="https://krisha.kz/a/show/..."
+        required
+      >
+      <button type="submit">Оценить</button>
+    </form>
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+  </section>
+
+  <section class="panel info-panel">
+    <h2>Что вы получите</h2>
+    <p>
+      Страница результата отделяет данные объявления от оценки модели: цену,
+      площадь, q10, q50, q90, выгоду в процентах и абсолютную выгоду в тенге за м².
+    </p>
+    <p class="muted">
+      q50 в интерфейсе называется медианной оценкой, потому что это центральная
+      точка прогноза модели.
+    </p>
+  </section>
+</section>
+{% endblock %}

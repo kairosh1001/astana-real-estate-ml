@@ -21,6 +21,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
@@ -48,6 +49,7 @@ HOME_UNDERVALUED_LIMIT = 10
 UNDERVALUED_PAGE_SIZE = 10
 
 app = FastAPI(title="Оценка объявлений Krisha")
+app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")
 prediction_service = PredictionService(ROOT)
 DB_PATH = Path(os.getenv("DB_PATH", ROOT / "data" / "krisha.sqlite3"))
 with connect(DB_PATH) as db_connection:
@@ -105,6 +107,15 @@ def home(request: Request) -> HTMLResponse:
     )
 
 
+@app.get("/predict-page", response_class=HTMLResponse)
+def predict_entry_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "predict_form.html",
+        {"request": request, "error": None, "url": ""},
+    )
+
+
 @app.get("/predict", response_class=HTMLResponse)
 def predict_page(request: Request, url: str) -> HTMLResponse:
     try:
@@ -112,18 +123,8 @@ def predict_page(request: Request, url: str) -> HTMLResponse:
     except Exception as exc:
         return templates.TemplateResponse(
             request,
-            "index.html",
-            {
-                "request": request,
-                "error": str(exc),
-                "url": url,
-                "items": [],
-                "total_undervalued": 0,
-                "district_options": DISTRICT_OPTIONS,
-                "selected_district": None,
-                "start_rank": 1,
-                "is_preview": True,
-            },
+            "predict_form.html",
+            {"request": request, "error": str(exc), "url": url},
             status_code=400,
         )
 
@@ -141,18 +142,8 @@ def predict_form(request: Request, url: str = Form(...)) -> HTMLResponse:
     except Exception as exc:
         return templates.TemplateResponse(
             request,
-            "index.html",
-            {
-                "request": request,
-                "error": str(exc),
-                "url": url,
-                "items": [],
-                "total_undervalued": 0,
-                "district_options": DISTRICT_OPTIONS,
-                "selected_district": None,
-                "start_rank": 1,
-                "is_preview": True,
-            },
+            "predict_form.html",
+            {"request": request, "error": str(exc), "url": url},
             status_code=400,
         )
 
@@ -180,9 +171,13 @@ def undervalued(
     limit: int = 50,
     page: int = 1,
     district: str | None = None,
+    rooms: int | None = None,
+    max_price: float | None = None,
     include_stale: bool = False,
 ) -> dict:
     selected_district = valid_district_slug(district)
+    selected_rooms = rooms if rooms in {1, 2, 3, 4, 5} else None
+    selected_max_price = max_price if max_price and max_price > 0 else None
     safe_limit = min(max(limit, 1), 100)
     safe_page = max(page, 1)
     offset = (safe_page - 1) * safe_limit
@@ -192,11 +187,15 @@ def undervalued(
             limit=safe_limit,
             offset=offset,
             district=selected_district,
+            rooms=selected_rooms,
+            max_price=selected_max_price,
             include_stale=include_stale,
         )
         total = count_undervalued(
             db_connection,
             district=selected_district,
+            rooms=selected_rooms,
+            max_price=selected_max_price,
             include_stale=include_stale,
         )
     return {
@@ -205,6 +204,8 @@ def undervalued(
         "page": safe_page,
         "limit": safe_limit,
         "district": selected_district,
+        "rooms": selected_rooms,
+        "max_price": selected_max_price,
     }
 
 
@@ -213,9 +214,13 @@ def undervalued_page(
     request: Request,
     page: int = 1,
     district: str | None = None,
+    rooms: int | None = None,
+    max_price: float | None = None,
     include_stale: bool = False,
 ) -> HTMLResponse:
     selected_district = valid_district_slug(district)
+    selected_rooms = rooms if rooms in {1, 2, 3, 4, 5} else None
+    selected_max_price = max_price if max_price and max_price > 0 else None
     safe_page = max(page, 1)
     offset = (safe_page - 1) * UNDERVALUED_PAGE_SIZE
     with connect(DB_PATH) as db_connection:
@@ -224,11 +229,15 @@ def undervalued_page(
             limit=UNDERVALUED_PAGE_SIZE,
             offset=offset,
             district=selected_district,
+            rooms=selected_rooms,
+            max_price=selected_max_price,
             include_stale=include_stale,
         )
         total = count_undervalued(
             db_connection,
             district=selected_district,
+            rooms=selected_rooms,
+            max_price=selected_max_price,
             include_stale=include_stale,
         )
     return templates.TemplateResponse(
@@ -239,6 +248,8 @@ def undervalued_page(
             "items": items,
             "district_options": DISTRICT_OPTIONS,
             "selected_district": selected_district,
+            "selected_rooms": selected_rooms,
+            "selected_max_price": selected_max_price,
             "page": safe_page,
             "page_size": UNDERVALUED_PAGE_SIZE,
             "total": total,
