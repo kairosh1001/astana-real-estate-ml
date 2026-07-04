@@ -50,7 +50,7 @@ def seed_listing(db_path: Path) -> None:
             (
                 "https://krisha.kz/a/show/123",
                 "3-комнатная квартира, 80 м², 7/12 этаж, рядом с парком",
-                '{"Город": "Астана, Есиль р-н", "Год постройки": "2020", "Жилой комплекс": "Test ЖК"}',
+                '{"Город": "Астана, Есиль р-н", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "lat": 51.13, "lon": 71.43}',
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
@@ -179,10 +179,11 @@ def main() -> None:
         "q50",
         "q90",
         "квантили",
-        "Технический список признаков",
-        "ceiling_height",
+        "поделенная",
     ]:
         assert_contains(model_page.text, needle)
+    assert_not_contains(model_page.text, "Технический список признаков")
+    assert_not_contains(model_page.text, "магический")
 
     details_page = client.get("/listing-details?url=https://krisha.kz/a/show/123")
     if details_page.status_code != 200:
@@ -244,6 +245,10 @@ def main() -> None:
         "Жилой комплекс",
         "Площадь от",
         "Площадь до",
+        "Активных объявлений в базе: 1",
+        "Зона на карте",
+        "map_polygon",
+        "leaflet",
         "Есиль",
         "3-комнатная квартира · 40 м²",
         "Подробнее",
@@ -258,6 +263,13 @@ def main() -> None:
         raise SystemExit(f"Yesil filter returned {yesil_page.status_code}")
     assert_contains(yesil_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(yesil_page.text, "Показано 1 из 1")
+
+    multi_district_page = client.get("/undervalued-page?district=yesil&district=nura")
+    if multi_district_page.status_code != 200:
+        raise SystemExit(f"Multi district filter returned {multi_district_page.status_code}")
+    assert_contains(multi_district_page.text, "3-комнатная квартира · 40 м²")
+    assert_contains(multi_district_page.text, "value=\"yesil\"")
+    assert_contains(multi_district_page.text, "value=\"nura\"")
 
     room_price_page = client.get("/undervalued-page?rooms=3&max_price=21000000")
     if room_price_page.status_code != 200:
@@ -290,6 +302,21 @@ def main() -> None:
         raise SystemExit(f"Advanced filter returned {advanced_filter_page.status_code}")
     assert_contains(advanced_filter_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(advanced_filter_page.text, "Test")
+
+    polygon_page = client.get(
+        "/undervalued-page?map_polygon=51.0,71.3;51.0,71.6;51.3,71.6;51.3,71.3"
+    )
+    if polygon_page.status_code != 200:
+        raise SystemExit(f"Polygon filter returned {polygon_page.status_code}")
+    assert_contains(polygon_page.text, "3-комнатная квартира · 40 м²")
+    assert_contains(polygon_page.text, "Фильтр по зоне включён")
+
+    outside_polygon_page = client.get(
+        "/undervalued-page?map_polygon=51.5,71.7;51.5,71.9;51.7,71.9;51.7,71.7"
+    )
+    if outside_polygon_page.status_code != 200:
+        raise SystemExit(f"Outside polygon filter returned {outside_polygon_page.status_code}")
+    assert_contains(outside_polygon_page.text, "Показано 0 из 0")
 
     nura_page = client.get("/undervalued-page?district=nura")
     if nura_page.status_code != 200:

@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Квартиры ниже рынка{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
+{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
@@ -18,25 +22,46 @@
       <h2>Фильтр по району</h2>
       <p class="muted">
         Показано {{ items|length }} из {{ total }} вариантов.
+        Активных объявлений в базе: {{ active_listings }}.
         Страница {{ page }}.
       </p>
     </div>
   </div>
-  <div class="districts" aria-label="Фильтр по району">
-    {% for option in district_links %}
-    <a
-      class="chip {% if selected_district == option.slug %}active{% endif %}"
-      href="{{ option.href }}"
-    >
-      {{ option.label }}
-    </a>
-    {% endfor %}
-  </div>
 
-  <form class="filter-form" method="get" action="/undervalued-page">
-    {% if selected_district %}
-    <input type="hidden" name="district" value="{{ selected_district }}">
-    {% endif %}
+  <form id="filter-form" method="get" action="/undervalued-page">
+    <div class="check-grid" aria-label="Фильтр по району">
+      {% for option in district_options %}
+      <label class="check-chip {% if option.slug in selected_districts %}active{% endif %}">
+        <input
+          type="checkbox"
+          name="district"
+          value="{{ option.slug }}"
+          {% if option.slug in selected_districts %}checked{% endif %}
+        >
+        {{ option.label }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <input id="map-polygon" type="hidden" name="map_polygon" value="{{ selected_polygon }}">
+
+    <div class="map-panel">
+      <div class="toolbar">
+        <div>
+          <h3>Зона на карте</h3>
+          <p class="muted">
+            Нарисуйте область на карте, чтобы оставить в рейтинге только объявления внутри неё.
+          </p>
+        </div>
+        <button class="button secondary" type="button" id="clear-map-zone">Очистить зону</button>
+      </div>
+      <div id="listing-map" aria-label="Карта объявлений"></div>
+      <p class="subtle" id="map-state">
+        {% if selected_polygon %}Фильтр по зоне включён.{% else %}Фильтр по зоне не выбран.{% endif %}
+      </p>
+    </div>
+
+    <div class="filter-form">
     <label>
       Количество комнат
       <select name="rooms">
@@ -114,6 +139,7 @@
     </label>
     <button type="submit">Применить</button>
     <a class="button secondary" href="/undervalued-page">Сбросить</a>
+    </div>
   </form>
 </section>
 
@@ -139,4 +165,120 @@
     {% endif %}
   </div>
 </section>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script>
+  (function () {
+    const mapElement = document.getElementById("listing-map");
+    const polygonInput = document.getElementById("map-polygon");
+    const mapState = document.getElementById("map-state");
+    const clearButton = document.getElementById("clear-map-zone");
+    if (!mapElement || !window.L) {
+      if (mapState) {
+        mapState.textContent = "Карта временно недоступна.";
+      }
+      return;
+    }
+
+    const map = L.map(mapElement, { scrollWheelZoom: false }).setView([51.1282, 71.4304], 11);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap"
+    }).addTo(map);
+
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+    const drawControl = new L.Control.Draw({
+      draw: {
+        polyline: false,
+        rectangle: false,
+        circle: false,
+        circlemarker: false,
+        marker: false,
+        polygon: {
+          allowIntersection: false,
+          showArea: true
+        }
+      },
+      edit: {
+        featureGroup: drawnItems,
+        remove: true
+      }
+    });
+    map.addControl(drawControl);
+
+    const listings = [
+      {% for item in items if item.lat and item.lon %}
+      {
+        lat: {{ item.lat }},
+        lon: {{ item.lon }},
+        title: {{ item.short_title | tojson }},
+        url: {{ item.url | tojson }}
+      },
+      {% endfor %}
+    ];
+    const markerGroup = L.featureGroup();
+    listings.forEach((item) => {
+      L.marker([item.lat, item.lon])
+        .bindPopup(`<strong>${item.title}</strong><br><a href="${item.url}" target="_blank" rel="noreferrer">Открыть на Krisha</a>`)
+        .addTo(markerGroup);
+    });
+    markerGroup.addTo(map);
+
+    function polygonToValue(layer) {
+      const points = layer.getLatLngs()[0] || [];
+      return points.map((point) => `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`).join(";");
+    }
+
+    function setZoneLayer(layer) {
+      drawnItems.clearLayers();
+      drawnItems.addLayer(layer);
+      polygonInput.value = polygonToValue(layer);
+      mapState.textContent = "Фильтр по зоне включён.";
+    }
+
+    function restoreZone() {
+      if (!polygonInput.value) {
+        return false;
+      }
+      const points = polygonInput.value.split(";").map((point) => {
+        const parts = point.split(",").map(Number);
+        return [parts[0], parts[1]];
+      }).filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+      if (points.length < 3) {
+        polygonInput.value = "";
+        return false;
+      }
+      const layer = L.polygon(points);
+      drawnItems.addLayer(layer);
+      map.fitBounds(layer.getBounds(), { padding: [18, 18] });
+      return true;
+    }
+
+    map.on(L.Draw.Event.CREATED, function (event) {
+      setZoneLayer(event.layer);
+    });
+    map.on(L.Draw.Event.EDITED, function () {
+      drawnItems.eachLayer((layer) => {
+        polygonInput.value = polygonToValue(layer);
+      });
+    });
+    map.on(L.Draw.Event.DELETED, function () {
+      polygonInput.value = "";
+      mapState.textContent = "Фильтр по зоне не выбран.";
+    });
+    clearButton.addEventListener("click", function () {
+      drawnItems.clearLayers();
+      polygonInput.value = "";
+      mapState.textContent = "Фильтр по зоне не выбран.";
+    });
+
+    const hasZone = restoreZone();
+    if (!hasZone && listings.length > 0) {
+      map.fitBounds(markerGroup.getBounds(), { padding: [24, 24], maxZoom: 13 });
+    }
+  })();
+</script>
 {% endblock %}

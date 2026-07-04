@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Квартиры ниже рынка{% endblock %}</title>
+    {% block head_extra %}{% endblock %}
     <style>
       :root {
         color-scheme: light;
@@ -302,6 +303,53 @@
         border-color: var(--teal);
         color: #fff;
       }
+      .check-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 14px 0 18px;
+      }
+      .check-chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--text);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 14px;
+        padding: 8px 12px;
+      }
+      .check-chip input {
+        width: auto;
+        min-width: 0;
+        margin: 0;
+      }
+      .check-chip.active,
+      .check-chip:has(input:checked) {
+        background: var(--soft);
+        border-color: #99d6c4;
+        color: var(--teal-dark);
+      }
+      .map-panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcfa;
+        padding: 14px;
+        margin: 14px 0 18px;
+      }
+      #listing-map {
+        width: 100%;
+        min-height: 390px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #e7ece7;
+      }
+      .leaflet-container {
+        font-family: Inter, Arial, sans-serif;
+      }
       .toolbar {
         display: flex;
         justify-content: space-between;
@@ -511,6 +559,9 @@
         .search-form, .stack-form, .metric-grid, .filter-form, .quantile-bar {
           grid-template-columns: 1fr;
         }
+        #listing-map {
+          min-height: 330px;
+        }
         .feature-list {
           columns: 1;
         }
@@ -552,5 +603,6 @@
         <span>Разработчик - Кайрат Жаркынбай</span>
       </div>
     </footer>
+    {% block scripts %}{% endblock %}
   </body>
 </html>

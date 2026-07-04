@@ -17,6 +17,7 @@ from fastapi import (
     Form,
     Header,
     HTTPException,
+    Query,
     Request,
     status,
 )
@@ -33,7 +34,7 @@ from app.database import (
     fetch_status_summary,
     fetch_undervalued,
     init_db,
-    valid_district_slug,
+    valid_district_slugs,
 )
 from app.prediction_service import PredictionService
 from app.refresh_service import run_refresh
@@ -100,7 +101,6 @@ def home(request: Request) -> HTMLResponse:
             "items": preview_items,
             "total_undervalued": total_undervalued,
             "district_options": DISTRICT_OPTIONS,
-            "selected_district": None,
             "start_rank": 1,
             "is_preview": True,
         },
@@ -118,15 +118,10 @@ def predict_entry_page(request: Request) -> HTMLResponse:
 
 @app.get("/model-page", response_class=HTMLResponse)
 def model_page(request: Request) -> HTMLResponse:
-    metadata = prediction_service.model_service.metadata
     return templates.TemplateResponse(
         request,
         "model.html",
-        {
-            "request": request,
-            "feature_columns": metadata.feature_columns,
-            "categorical_features": metadata.categorical_features,
-        },
+        {"request": request},
     )
 
 
@@ -192,7 +187,7 @@ def predict_by_link(payload: PredictByLinkRequest) -> dict:
 def undervalued(
     limit: int = 50,
     page: int = 1,
-    district: str | None = None,
+    district: list[str] | None = Query(default=None),
     rooms: str | None = None,
     max_price: str | None = None,
     min_year: str | None = None,
@@ -200,9 +195,10 @@ def undervalued(
     residential_complex: str | None = None,
     min_area: str | None = None,
     max_area: str | None = None,
+    map_polygon: str | None = None,
     include_stale: bool = False,
 ) -> dict:
-    selected_district = valid_district_slug(district)
+    selected_districts = valid_district_slugs(district)
     selected_rooms = _parse_optional_int(rooms, allowed={1, 2, 3, 4, 5})
     selected_max_price = _parse_optional_positive_float(max_price)
     selected_min_year = _parse_optional_int(min_year)
@@ -210,6 +206,7 @@ def undervalued(
     selected_complex = _parse_optional_text(residential_complex)
     selected_min_area = _parse_optional_positive_float(min_area)
     selected_max_area = _parse_optional_positive_float(max_area)
+    selected_polygon = _parse_polygon(map_polygon)
     safe_limit = min(max(limit, 1), 100)
     safe_page = max(page, 1)
     offset = (safe_page - 1) * safe_limit
@@ -218,7 +215,7 @@ def undervalued(
             db_connection,
             limit=safe_limit,
             offset=offset,
-            district=selected_district,
+            districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
             min_year=selected_min_year,
@@ -226,11 +223,12 @@ def undervalued(
             residential_complex=selected_complex,
             min_area=selected_min_area,
             max_area=selected_max_area,
+            polygon=selected_polygon,
             include_stale=include_stale,
         )
         total = count_undervalued(
             db_connection,
-            district=selected_district,
+            districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
             min_year=selected_min_year,
@@ -238,6 +236,7 @@ def undervalued(
             residential_complex=selected_complex,
             min_area=selected_min_area,
             max_area=selected_max_area,
+            polygon=selected_polygon,
             include_stale=include_stale,
         )
     return {
@@ -245,7 +244,7 @@ def undervalued(
         "total": total,
         "page": safe_page,
         "limit": safe_limit,
-        "district": selected_district,
+        "districts": selected_districts,
         "rooms": selected_rooms,
         "max_price": selected_max_price,
         "min_year": selected_min_year,
@@ -253,6 +252,7 @@ def undervalued(
         "residential_complex": selected_complex,
         "min_area": selected_min_area,
         "max_area": selected_max_area,
+        "map_polygon": selected_polygon,
     }
 
 
@@ -260,7 +260,7 @@ def undervalued(
 def undervalued_page(
     request: Request,
     page: int = 1,
-    district: str | None = None,
+    district: list[str] | None = Query(default=None),
     rooms: str | None = None,
     max_price: str | None = None,
     min_year: str | None = None,
@@ -268,9 +268,10 @@ def undervalued_page(
     residential_complex: str | None = None,
     min_area: str | None = None,
     max_area: str | None = None,
+    map_polygon: str | None = None,
     include_stale: bool = False,
 ) -> HTMLResponse:
-    selected_district = valid_district_slug(district)
+    selected_districts = valid_district_slugs(district)
     selected_rooms = _parse_optional_int(rooms, allowed={1, 2, 3, 4, 5})
     selected_max_price = _parse_optional_positive_float(max_price)
     selected_min_year = _parse_optional_int(min_year)
@@ -278,6 +279,7 @@ def undervalued_page(
     selected_complex = _parse_optional_text(residential_complex)
     selected_min_area = _parse_optional_positive_float(min_area)
     selected_max_area = _parse_optional_positive_float(max_area)
+    selected_polygon = _parse_polygon(map_polygon)
     safe_page = max(page, 1)
     offset = (safe_page - 1) * UNDERVALUED_PAGE_SIZE
     with connect(DB_PATH) as db_connection:
@@ -285,7 +287,7 @@ def undervalued_page(
             db_connection,
             limit=UNDERVALUED_PAGE_SIZE,
             offset=offset,
-            district=selected_district,
+            districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
             min_year=selected_min_year,
@@ -293,11 +295,12 @@ def undervalued_page(
             residential_complex=selected_complex,
             min_area=selected_min_area,
             max_area=selected_max_area,
+            polygon=selected_polygon,
             include_stale=include_stale,
         )
         total = count_undervalued(
             db_connection,
-            district=selected_district,
+            districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
             min_year=selected_min_year,
@@ -305,8 +308,10 @@ def undervalued_page(
             residential_complex=selected_complex,
             min_area=selected_min_area,
             max_area=selected_max_area,
+            polygon=selected_polygon,
             include_stale=include_stale,
         )
+        status_summary = fetch_status_summary(db_connection)
     return templates.TemplateResponse(
         request,
         "undervalued.html",
@@ -314,7 +319,7 @@ def undervalued_page(
             "request": request,
             "items": items,
             "district_options": DISTRICT_OPTIONS,
-            "selected_district": selected_district,
+            "selected_districts": selected_districts,
             "selected_rooms": selected_rooms,
             "selected_max_price": selected_max_price,
             "selected_min_year": selected_min_year,
@@ -322,8 +327,9 @@ def undervalued_page(
             "selected_complex": selected_complex,
             "selected_min_area": selected_min_area,
             "selected_max_area": selected_max_area,
+            "selected_polygon": map_polygon or "",
             "filter_query": _build_filter_query(
-                district=selected_district,
+                districts=selected_districts,
                 rooms=selected_rooms,
                 max_price=selected_max_price,
                 min_year=selected_min_year,
@@ -331,16 +337,9 @@ def undervalued_page(
                 residential_complex=selected_complex,
                 min_area=selected_min_area,
                 max_area=selected_max_area,
+                map_polygon=map_polygon,
             ),
-            "district_links": _district_filter_links(
-                rooms=selected_rooms,
-                max_price=selected_max_price,
-                min_year=selected_min_year,
-                max_year=selected_max_year,
-                residential_complex=selected_complex,
-                min_area=selected_min_area,
-                max_area=selected_max_area,
-            ),
+            "active_listings": status_summary.get("active_listings") or 0,
             "page": safe_page,
             "page_size": UNDERVALUED_PAGE_SIZE,
             "total": total,
@@ -636,9 +635,26 @@ def _parse_optional_text(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _parse_polygon(value: str | None) -> list[tuple[float, float]] | None:
+    if not value:
+        return None
+    points: list[tuple[float, float]] = []
+    for raw_point in value.split(";"):
+        try:
+            lat_text, lon_text = raw_point.split(",", 1)
+            lat = float(lat_text)
+            lon = float(lon_text)
+        except ValueError:
+            return None
+        if not (50.0 <= lat <= 53.0 and 69.0 <= lon <= 73.0):
+            return None
+        points.append((lat, lon))
+    return points if len(points) >= 3 else None
+
+
 def _build_filter_query(
     *,
-    district: str | None = None,
+    districts: list[str] | None = None,
     rooms: int | None = None,
     max_price: float | None = None,
     min_year: int | None = None,
@@ -646,10 +662,11 @@ def _build_filter_query(
     residential_complex: str | None = None,
     min_area: float | None = None,
     max_area: float | None = None,
+    map_polygon: str | None = None,
     page: int | None = None,
 ) -> str:
     params = _filter_params(
-        district=district,
+        districts=districts,
         rooms=rooms,
         max_price=max_price,
         min_year=min_year,
@@ -657,64 +674,15 @@ def _build_filter_query(
         residential_complex=residential_complex,
         min_area=min_area,
         max_area=max_area,
+        map_polygon=map_polygon,
         page=page,
     )
     return urlencode(params)
 
 
-def _district_filter_links(
-    *,
-    rooms: int | None = None,
-    max_price: float | None = None,
-    min_year: int | None = None,
-    max_year: int | None = None,
-    residential_complex: str | None = None,
-    min_area: float | None = None,
-    max_area: float | None = None,
-) -> list[dict]:
-    links = [
-        {
-            "slug": None,
-            "label": "Все районы",
-            "href": f"/undervalued-page?{query}"
-            if (
-                query := _build_filter_query(
-                    rooms=rooms,
-                    max_price=max_price,
-                    min_year=min_year,
-                    max_year=max_year,
-                    residential_complex=residential_complex,
-                    min_area=min_area,
-                    max_area=max_area,
-                )
-            )
-            else "/undervalued-page",
-        }
-    ]
-    for option in DISTRICT_OPTIONS:
-        query = _build_filter_query(
-            district=option["slug"],
-            rooms=rooms,
-            max_price=max_price,
-            min_year=min_year,
-            max_year=max_year,
-            residential_complex=residential_complex,
-            min_area=min_area,
-            max_area=max_area,
-        )
-        links.append(
-            {
-                "slug": option["slug"],
-                "label": option["label"],
-                "href": f"/undervalued-page?{query}",
-            }
-        )
-    return links
-
-
 def _filter_params(
     *,
-    district: str | None = None,
+    districts: list[str] | None = None,
     rooms: int | None = None,
     max_price: float | None = None,
     min_year: int | None = None,
@@ -722,27 +690,30 @@ def _filter_params(
     residential_complex: str | None = None,
     min_area: float | None = None,
     max_area: float | None = None,
+    map_polygon: str | None = None,
     page: int | None = None,
-) -> dict[str, str]:
-    params: dict[str, str] = {}
+) -> list[tuple[str, str]]:
+    params: list[tuple[str, str]] = []
     if page and page > 1:
-        params["page"] = str(page)
-    if district:
-        params["district"] = district
+        params.append(("page", str(page)))
+    for district in districts or []:
+        params.append(("district", district))
     if rooms:
-        params["rooms"] = str(rooms)
+        params.append(("rooms", str(rooms)))
     if max_price:
-        params["max_price"] = _format_filter_number(max_price)
+        params.append(("max_price", _format_filter_number(max_price)))
     if min_year:
-        params["min_year"] = str(min_year)
+        params.append(("min_year", str(min_year)))
     if max_year:
-        params["max_year"] = str(max_year)
+        params.append(("max_year", str(max_year)))
     if residential_complex:
-        params["residential_complex"] = residential_complex
+        params.append(("residential_complex", residential_complex))
     if min_area:
-        params["min_area"] = _format_filter_number(min_area)
+        params.append(("min_area", _format_filter_number(min_area)))
     if max_area:
-        params["max_area"] = _format_filter_number(max_area)
+        params.append(("max_area", _format_filter_number(max_area)))
+    if map_polygon:
+        params.append(("map_polygon", map_polygon))
     return params
 
 

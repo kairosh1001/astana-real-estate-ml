@@ -232,7 +232,7 @@ def fetch_undervalued(
     *,
     limit: int = 50,
     offset: int = 0,
-    district: str | None = None,
+    districts: list[str] | None = None,
     rooms: int | None = None,
     max_price: float | None = None,
     min_year: int | None = None,
@@ -240,6 +240,7 @@ def fetch_undervalued(
     residential_complex: str | None = None,
     min_area: float | None = None,
     max_area: float | None = None,
+    polygon: list[tuple[float, float]] | None = None,
     include_stale: bool = False,
 ) -> list[dict]:
     status_clause = "" if include_stale else "AND status = 'active'"
@@ -268,8 +269,11 @@ def fetch_undervalued(
         """,
     ).fetchall()
     items = [_prepare_undervalued_item(dict(row)) for row in rows]
-    if district:
-        items = [item for item in items if item.get("district_slug") == district]
+    if districts:
+        allowed_districts = set(districts)
+        items = [
+            item for item in items if item.get("district_slug") in allowed_districts
+        ]
     if rooms:
         items = [item for item in items if item.get("rooms") == rooms]
     if max_price:
@@ -309,13 +313,21 @@ def fetch_undervalued(
             for item in items
             if item.get("area_m2") is not None and item["area_m2"] <= max_area
         ]
+    if polygon and len(polygon) >= 3:
+        items = [
+            item
+            for item in items
+            if item.get("lat") is not None
+            and item.get("lon") is not None
+            and _point_in_polygon(item["lat"], item["lon"], polygon)
+        ]
     return items[offset : offset + limit]
 
 
 def count_undervalued(
     connection: sqlite3.Connection,
     *,
-    district: str | None = None,
+    districts: list[str] | None = None,
     rooms: int | None = None,
     max_price: float | None = None,
     min_year: int | None = None,
@@ -323,6 +335,7 @@ def count_undervalued(
     residential_complex: str | None = None,
     min_area: float | None = None,
     max_area: float | None = None,
+    polygon: list[tuple[float, float]] | None = None,
     include_stale: bool = False,
 ) -> int:
     return len(
@@ -330,7 +343,7 @@ def count_undervalued(
             connection,
             limit=100000,
             offset=0,
-            district=district,
+            districts=districts,
             rooms=rooms,
             max_price=max_price,
             min_year=min_year,
@@ -338,6 +351,7 @@ def count_undervalued(
             residential_complex=residential_complex,
             min_area=min_area,
             max_area=max_area,
+            polygon=polygon,
             include_stale=include_stale,
         )
     )
@@ -352,6 +366,8 @@ def _prepare_undervalued_item(row: dict) -> dict:
     row["rooms"] = _extract_rooms(row.get("title"))
     row["construction_year"] = _extract_int(raw_listing.get("Год постройки"))
     row["residential_complex"] = _clean_text(raw_listing.get("Жилой комплекс"))
+    row["lat"] = _extract_float(raw_listing.get("lat"))
+    row["lon"] = _extract_float(raw_listing.get("lon"))
     row["short_title"] = _short_listing_title(row.get("title"), row.get("area_m2"))
     row.pop("raw_json", None)
     return row
@@ -395,6 +411,17 @@ def valid_district_slug(value: str | None) -> str | None:
     return value if value in slugs else None
 
 
+def valid_district_slugs(values: list[str] | None) -> list[str]:
+    if not values:
+        return []
+    slugs = {option["slug"] for option in DISTRICT_OPTIONS}
+    result = []
+    for value in values:
+        if value in slugs and value not in result:
+            result.append(value)
+    return result
+
+
 def _short_listing_title(title: object, area_m2: object) -> str:
     title_text = str(title or "")
     rooms = _extract_rooms(title_text)
@@ -425,9 +452,35 @@ def _extract_int(value: object) -> int | None:
     return int(match.group(0)) if match else None
 
 
+def _extract_float(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _clean_text(value: object) -> str:
     text = str(value or "").strip()
     return text if text and text.lower() != "nan" else ""
+
+
+def _point_in_polygon(
+    lat: float,
+    lon: float,
+    polygon: list[tuple[float, float]],
+) -> bool:
+    inside = False
+    previous_lat, previous_lon = polygon[-1]
+    for current_lat, current_lon in polygon:
+        crosses_latitude = (current_lat > lat) != (previous_lat > lat)
+        if crosses_latitude:
+            lon_delta = previous_lon - current_lon
+            lat_delta = previous_lat - current_lat
+            intersection_lon = lon_delta * (lat - current_lat) / lat_delta + current_lon
+            if lon < intersection_lon:
+                inside = not inside
+        previous_lat, previous_lon = current_lat, current_lon
+    return inside
 
 
 def fetch_refresh_runs(
