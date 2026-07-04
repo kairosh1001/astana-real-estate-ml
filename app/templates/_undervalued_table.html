@@ -10,6 +10,7 @@
         <th>№</th>
         <th>Объявление</th>
         <th>Район</th>
+        <th>Жилой комплекс</th>
         <th>Krisha</th>
         <th>Цена/м²</th>
         <th>
@@ -41,6 +42,7 @@
           <span>{{ "{:,.0f}".format(item.listed_price or 0) }} тг</span>
         </td>
         <td>{{ item.district_label }}</td>
+        <td>{{ item.residential_complex or "—" }}</td>
         <td><a href="{{ item.url }}" target="_blank" rel="noreferrer">Открыть</a></td>
         <td>{{ "{:,.0f}".format(item.listed_price_per_m2 or 0) }}</td>
         <td>{{ "{:,.0f}".format(item.pred_price_per_m2_q10 or 0) }}</td>

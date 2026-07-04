@@ -111,9 +111,12 @@ def main() -> None:
     assert_contains(home.text, "CatBoost оценивает")
     assert_contains(home.text, "Квартиры ниже рынка в Астане")
     assert_contains(home.text, "Топ-10 квартир ниже рынка")
+    assert_contains(home.text, "Активных объявлений в базе: 1")
     assert_contains(home.text, "Медианная оценка")
     assert_contains(home.text, "3-комнатная квартира · 40 м²")
     assert_contains(home.text, "Есиль")
+    assert_contains(home.text, "Жилой комплекс")
+    assert_contains(home.text, "Test ЖК")
     assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
     assert_contains(home.text, "/model-page")
     assert_not_contains(home.text, "Статус сервиса")
@@ -234,6 +237,7 @@ def main() -> None:
         "Фильтр по району",
         "№",
         "Krisha",
+        "Жилой комплекс",
         "Нижняя оценка",
         "Медианная оценка",
         "Выгода q10",
@@ -250,6 +254,7 @@ def main() -> None:
         "map_polygon",
         "leaflet",
         "Есиль",
+        "Test ЖК",
         "3-комнатная квартира · 40 м²",
         "Подробнее",
         "/listing-details?url=",

@@ -90,6 +90,7 @@ def home(request: Request) -> HTMLResponse:
             include_stale=False,
         )
         total_undervalued = count_undervalued(db_connection, include_stale=False)
+        status_summary = fetch_status_summary(db_connection)
 
     return templates.TemplateResponse(
         request,
@@ -100,6 +101,7 @@ def home(request: Request) -> HTMLResponse:
             "url": "",
             "items": preview_items,
             "total_undervalued": total_undervalued,
+            "active_listings": status_summary.get("active_listings") or 0,
             "district_options": DISTRICT_OPTIONS,
             "start_rank": 1,
             "is_preview": True,
