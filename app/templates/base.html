@@ -424,7 +424,7 @@
       }
       .filter-form {
         display: grid;
-        grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
+        grid-template-columns: repeat(4, minmax(150px, 1fr));
         gap: 12px;
         align-items: end;
         margin-top: 18px;
@@ -436,6 +436,33 @@
       .site-footer {
         border-top: 1px solid var(--line);
         background: #fff;
+      }
+      .feature-list {
+        columns: 2;
+        margin: 0;
+        padding-left: 18px;
+      }
+      .feature-list li {
+        break-inside: avoid;
+        margin-bottom: 7px;
+      }
+      .quantile-bar {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 8px;
+        margin: 16px 0;
+      }
+      .quantile-step {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+        background: #fff;
+      }
+      .quantile-step strong {
+        display: block;
+        color: var(--teal-dark);
+        font-size: 22px;
+        margin-bottom: 6px;
       }
       .site-footer-inner {
         max-width: 1180px;
@@ -481,8 +508,11 @@
         .panel {
           padding: 17px;
         }
-        .search-form, .stack-form, .metric-grid, .filter-form {
+        .search-form, .stack-form, .metric-grid, .filter-form, .quantile-bar {
           grid-template-columns: 1fr;
+        }
+        .feature-list {
+          columns: 1;
         }
         .search-form button, .button {
           width: 100%;
@@ -509,6 +539,7 @@
           {% endif %}
           <a href="/predict-page">Оценить ссылку</a>
           <a href="/undervalued-page">Ниже рынка</a>
+          <a href="/model-page">О модели</a>
         </nav>
       </div>
     </header>

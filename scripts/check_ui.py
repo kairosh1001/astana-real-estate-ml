@@ -50,7 +50,7 @@ def seed_listing(db_path: Path) -> None:
             (
                 "https://krisha.kz/a/show/123",
                 "3-комнатная квартира, 80 м², 7/12 этаж, рядом с парком",
-                '{"Город": "Астана, Есиль р-н"}',
+                '{"Город": "Астана, Есиль р-н", "Год постройки": "2020", "Жилой комплекс": "Test ЖК"}',
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
@@ -115,6 +115,7 @@ def main() -> None:
     assert_contains(home.text, "3-комнатная квартира · 40 м²")
     assert_contains(home.text, "Есиль")
     assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
+    assert_contains(home.text, "/model-page")
     assert_not_contains(home.text, "Статус сервиса")
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")
@@ -168,6 +169,20 @@ def main() -> None:
         "CatBoost",
     ]:
         assert_contains(result_page.text, needle)
+
+    model_page = client.get("/model-page")
+    if model_page.status_code != 200:
+        raise SystemExit(f"Model page returned {model_page.status_code}")
+    for needle in [
+        "Как работает модель",
+        "q10",
+        "q50",
+        "q90",
+        "квантили",
+        "Технический список признаков",
+        "ceiling_height",
+    ]:
+        assert_contains(model_page.text, needle)
 
     details_page = client.get("/listing-details?url=https://krisha.kz/a/show/123")
     if details_page.status_code != 200:
@@ -224,6 +239,11 @@ def main() -> None:
         "Выгода медиана",
         "Количество комнат",
         "Максимальная цена",
+        "Год постройки от",
+        "Год постройки до",
+        "Жилой комплекс",
+        "Площадь от",
+        "Площадь до",
         "Есиль",
         "3-комнатная квартира · 40 м²",
         "Подробнее",
@@ -253,6 +273,23 @@ def main() -> None:
     api_blank_price = client.get("/undervalued?rooms=3&max_price=")
     if api_blank_price.status_code != 200:
         raise SystemExit(f"Blank max price API returned {api_blank_price.status_code}")
+
+    blank_filters_page = client.get("/undervalued-page?rooms=&max_price=")
+    if blank_filters_page.status_code != 200:
+        raise SystemExit(f"Blank room/price filter returned {blank_filters_page.status_code}")
+    assert_contains(blank_filters_page.text, "3-комнатная квартира · 40 м²")
+
+    api_blank_filters = client.get("/undervalued?rooms=&max_price=")
+    if api_blank_filters.status_code != 200:
+        raise SystemExit(f"Blank room/price API returned {api_blank_filters.status_code}")
+
+    advanced_filter_page = client.get(
+        "/undervalued-page?min_year=2019&max_year=2021&residential_complex=Test&min_area=39&max_area=41"
+    )
+    if advanced_filter_page.status_code != 200:
+        raise SystemExit(f"Advanced filter returned {advanced_filter_page.status_code}")
+    assert_contains(advanced_filter_page.text, "3-комнатная квартира · 40 м²")
+    assert_contains(advanced_filter_page.text, "Test")
 
     nura_page = client.get("/undervalued-page?district=nura")
     if nura_page.status_code != 200:

@@ -23,16 +23,10 @@
     </div>
   </div>
   <div class="districts" aria-label="Фильтр по району">
-    <a
-      class="chip {% if not selected_district %}active{% endif %}"
-      href="/undervalued-page{% if selected_rooms or selected_max_price %}?{% if selected_rooms %}rooms={{ selected_rooms }}{% endif %}{% if selected_rooms and selected_max_price %}&{% endif %}{% if selected_max_price %}max_price={{ selected_max_price|int }}{% endif %}{% endif %}"
-    >
-      Все районы
-    </a>
-    {% for option in district_options %}
+    {% for option in district_links %}
     <a
       class="chip {% if selected_district == option.slug %}active{% endif %}"
-      href="/undervalued-page?district={{ option.slug }}{% if selected_rooms %}&rooms={{ selected_rooms }}{% endif %}{% if selected_max_price %}&max_price={{ selected_max_price|int }}{% endif %}"
+      href="{{ option.href }}"
     >
       {{ option.label }}
     </a>
@@ -63,6 +57,61 @@
         placeholder="Например, 45000000"
       >
     </label>
+    <label>
+      Год постройки от
+      <input
+        name="min_year"
+        type="number"
+        min="1950"
+        max="2030"
+        step="1"
+        value="{% if selected_min_year %}{{ selected_min_year }}{% endif %}"
+        placeholder="Например, 2015"
+      >
+    </label>
+    <label>
+      Год постройки до
+      <input
+        name="max_year"
+        type="number"
+        min="1950"
+        max="2030"
+        step="1"
+        value="{% if selected_max_year %}{{ selected_max_year }}{% endif %}"
+        placeholder="Например, 2026"
+      >
+    </label>
+    <label>
+      Жилой комплекс
+      <input
+        name="residential_complex"
+        type="text"
+        value="{{ selected_complex or '' }}"
+        placeholder="Например, Сенатор"
+      >
+    </label>
+    <label>
+      Площадь от, м²
+      <input
+        name="min_area"
+        type="number"
+        min="1"
+        step="0.1"
+        value="{% if selected_min_area %}{{ selected_min_area }}{% endif %}"
+        placeholder="Например, 45"
+      >
+    </label>
+    <label>
+      Площадь до, м²
+      <input
+        name="max_area"
+        type="number"
+        min="1"
+        step="0.1"
+        value="{% if selected_max_area %}{{ selected_max_area }}{% endif %}"
+        placeholder="Например, 90"
+      >
+    </label>
     <button type="submit">Применить</button>
     <a class="button secondary" href="/undervalued-page">Сбросить</a>
   </form>
@@ -75,7 +124,7 @@
     {% if has_previous %}
       <a
         class="button secondary"
-        href="/undervalued-page?page={{ page - 1 }}{% if selected_district %}&district={{ selected_district }}{% endif %}{% if selected_rooms %}&rooms={{ selected_rooms }}{% endif %}{% if selected_max_price %}&max_price={{ selected_max_price|int }}{% endif %}"
+        href="/undervalued-page?page={{ page - 1 }}{% if filter_query %}&{{ filter_query }}{% endif %}"
       >
         Назад
       </a>
@@ -83,7 +132,7 @@
     {% if has_next %}
       <a
         class="button"
-        href="/undervalued-page?page={{ page + 1 }}{% if selected_district %}&district={{ selected_district }}{% endif %}{% if selected_rooms %}&rooms={{ selected_rooms }}{% endif %}{% if selected_max_price %}&max_price={{ selected_max_price|int }}{% endif %}"
+        href="/undervalued-page?page={{ page + 1 }}{% if filter_query %}&{{ filter_query }}{% endif %}"
       >
         Следующие 10
       </a>

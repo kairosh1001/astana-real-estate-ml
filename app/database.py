@@ -235,6 +235,11 @@ def fetch_undervalued(
     district: str | None = None,
     rooms: int | None = None,
     max_price: float | None = None,
+    min_year: int | None = None,
+    max_year: int | None = None,
+    residential_complex: str | None = None,
+    min_area: float | None = None,
+    max_area: float | None = None,
     include_stale: bool = False,
 ) -> list[dict]:
     status_clause = "" if include_stale else "AND status = 'active'"
@@ -273,6 +278,37 @@ def fetch_undervalued(
             for item in items
             if item.get("listed_price") is not None and item["listed_price"] <= max_price
         ]
+    if min_year:
+        items = [
+            item
+            for item in items
+            if item.get("construction_year") and item["construction_year"] >= min_year
+        ]
+    if max_year:
+        items = [
+            item
+            for item in items
+            if item.get("construction_year") and item["construction_year"] <= max_year
+        ]
+    if residential_complex:
+        complex_query = residential_complex.casefold()
+        items = [
+            item
+            for item in items
+            if complex_query in str(item.get("residential_complex") or "").casefold()
+        ]
+    if min_area:
+        items = [
+            item
+            for item in items
+            if item.get("area_m2") is not None and item["area_m2"] >= min_area
+        ]
+    if max_area:
+        items = [
+            item
+            for item in items
+            if item.get("area_m2") is not None and item["area_m2"] <= max_area
+        ]
     return items[offset : offset + limit]
 
 
@@ -282,6 +318,11 @@ def count_undervalued(
     district: str | None = None,
     rooms: int | None = None,
     max_price: float | None = None,
+    min_year: int | None = None,
+    max_year: int | None = None,
+    residential_complex: str | None = None,
+    min_area: float | None = None,
+    max_area: float | None = None,
     include_stale: bool = False,
 ) -> int:
     return len(
@@ -292,6 +333,11 @@ def count_undervalued(
             district=district,
             rooms=rooms,
             max_price=max_price,
+            min_year=min_year,
+            max_year=max_year,
+            residential_complex=residential_complex,
+            min_area=min_area,
+            max_area=max_area,
             include_stale=include_stale,
         )
     )
@@ -304,6 +350,8 @@ def _prepare_undervalued_item(row: dict) -> dict:
     row["district_slug"] = district_slug
     row["district_label"] = district_label
     row["rooms"] = _extract_rooms(row.get("title"))
+    row["construction_year"] = _extract_int(raw_listing.get("Год постройки"))
+    row["residential_complex"] = _clean_text(raw_listing.get("Жилой комплекс"))
     row["short_title"] = _short_listing_title(row.get("title"), row.get("area_m2"))
     row.pop("raw_json", None)
     return row
@@ -370,6 +418,16 @@ def _short_listing_title(title: object, area_m2: object) -> str:
 def _extract_rooms(title: object) -> int | None:
     rooms_match = re.search(r"(\d+)\s*-\s*комнат", str(title or ""), flags=re.IGNORECASE)
     return int(rooms_match.group(1)) if rooms_match else None
+
+
+def _extract_int(value: object) -> int | None:
+    match = re.search(r"\d{4}", str(value or ""))
+    return int(match.group(0)) if match else None
+
+
+def _clean_text(value: object) -> str:
+    text = str(value or "").strip()
+    return text if text and text.lower() != "nan" else ""
 
 
 def fetch_refresh_runs(
