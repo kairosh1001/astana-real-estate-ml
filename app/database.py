@@ -241,6 +241,8 @@ def fetch_undervalued(
     min_area: float | None = None,
     max_area: float | None = None,
     polygon: list[tuple[float, float]] | None = None,
+    new_since: str | None = None,
+    min_discount_pct: float | None = None,
     include_stale: bool = False,
 ) -> list[dict]:
     status_clause = "" if include_stale else "AND status = 'active'"
@@ -251,6 +253,7 @@ def fetch_undervalued(
             title,
             raw_json,
             status,
+            first_seen_at,
             last_seen_at,
             listed_price,
             area_m2,
@@ -321,6 +324,19 @@ def fetch_undervalued(
             and item.get("lon") is not None
             and _point_in_polygon(item["lat"], item["lon"], polygon)
         ]
+    if new_since:
+        items = [
+            item
+            for item in items
+            if _iso_datetime_at_or_after(item.get("first_seen_at"), new_since)
+        ]
+    if min_discount_pct:
+        items = [
+            item
+            for item in items
+            if item.get("discount_vs_asking_pct_conservative") is not None
+            and item["discount_vs_asking_pct_conservative"] >= min_discount_pct
+        ]
     return items[offset : offset + limit]
 
 
@@ -336,6 +352,8 @@ def count_undervalued(
     min_area: float | None = None,
     max_area: float | None = None,
     polygon: list[tuple[float, float]] | None = None,
+    new_since: str | None = None,
+    min_discount_pct: float | None = None,
     include_stale: bool = False,
 ) -> int:
     return len(
@@ -352,6 +370,8 @@ def count_undervalued(
             min_area=min_area,
             max_area=max_area,
             polygon=polygon,
+            new_since=new_since,
+            min_discount_pct=min_discount_pct,
             include_stale=include_stale,
         )
     )
@@ -462,6 +482,19 @@ def _extract_float(value: object) -> float | None:
 def _clean_text(value: object) -> str:
     text = str(value or "").strip()
     return text if text and text.lower() != "nan" else ""
+
+
+def _iso_datetime_at_or_after(value: object, threshold: str) -> bool:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        parsed_threshold = datetime.fromisoformat(threshold.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    if parsed_threshold.tzinfo is None:
+        parsed_threshold = parsed_threshold.replace(tzinfo=timezone.utc)
+    return parsed >= parsed_threshold
 
 
 def _point_in_polygon(

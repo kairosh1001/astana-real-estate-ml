@@ -61,6 +61,7 @@
       <p class="muted">
         Сейчас в базе: {{ total_undervalued }} активных вариантов ниже рынка.
         Активных объявлений в базе: {{ active_listings }}.
+        {% if latest_refresh %}Последнее обновление: {{ latest_refresh.finished_at | astana_time }}.{% endif %}
         Сортировка идёт от самой высокой выгоды по низкой оценке q10 к более низкой.
       </p>
     </div>

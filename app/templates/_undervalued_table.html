@@ -3,8 +3,16 @@
   Квартиры ниже рынка пока не найдены. Проверьте позже после очередного обновления данных.
 </div>
 {% else %}
+<div class="listing-actions-bar" data-listing-actions-bar>
+  <button class="button secondary compact-action" type="button" data-toggle-hidden>
+    Показать скрытые
+  </button>
+  <button class="button secondary compact-action" type="button" data-toggle-saved>
+    Только сохранённые
+  </button>
+</div>
 <div class="table-wrap">
-  <table>
+  <table class="listing-table">
     <thead>
       <tr>
         <th>№</th>
@@ -30,27 +38,31 @@
           <span class="hint" title="Насколько медианная оценка модели выше цены объявления. Это менее консервативная оценка потенциальной выгоды.">?</span>
         </th>
         <th>Найдено</th>
-        <th>Детали</th>
+        <th>Действия</th>
       </tr>
     </thead>
     <tbody>
       {% for item in items %}
-      <tr>
-        <td class="rank">{{ start_rank + loop.index0 }}</td>
-        <td class="listing-cell">
+      <tr data-listing-row data-url="{{ item.url }}">
+        <td class="rank" data-label="№">{{ start_rank + loop.index0 }}</td>
+        <td class="listing-cell" data-label="Объявление">
           <strong>{{ item.short_title }}</strong>
           <span>{{ "{:,.0f}".format(item.listed_price or 0) }} тг</span>
         </td>
-        <td>{{ item.district_label }}</td>
-        <td>{{ item.residential_complex or "—" }}</td>
-        <td><a href="{{ item.url }}" target="_blank" rel="noreferrer">Открыть</a></td>
-        <td>{{ "{:,.0f}".format(item.listed_price_per_m2 or 0) }}</td>
-        <td>{{ "{:,.0f}".format(item.pred_price_per_m2_q10 or 0) }}</td>
-        <td>{{ "{:,.0f}".format(item.pred_price_per_m2_q50 or 0) }}</td>
-        <td class="positive">{{ "{:.1%}".format(item.discount_vs_asking_pct_conservative or 0) }}</td>
-        <td class="positive">{{ "{:.1%}".format(item.discount_vs_asking_pct_median or 0) }}</td>
-        <td>{{ item.last_seen_at | astana_time }}</td>
-        <td><a href="/listing-details?url={{ item.url | urlencode }}">Подробнее</a></td>
+        <td data-label="Район">{{ item.district_label }}</td>
+        <td data-label="Жилой комплекс">{{ item.residential_complex or "—" }}</td>
+        <td data-label="Krisha"><a href="{{ item.url }}" target="_blank" rel="noreferrer">Открыть</a></td>
+        <td data-label="Цена/м²">{{ "{:,.0f}".format(item.listed_price_per_m2 or 0) }}</td>
+        <td data-label="Нижняя оценка">{{ "{:,.0f}".format(item.pred_price_per_m2_q10 or 0) }}</td>
+        <td data-label="Медианная оценка">{{ "{:,.0f}".format(item.pred_price_per_m2_q50 or 0) }}</td>
+        <td class="positive" data-label="Выгода q10">{{ "{:.1%}".format(item.discount_vs_asking_pct_conservative or 0) }}</td>
+        <td class="positive" data-label="Выгода медиана">{{ "{:.1%}".format(item.discount_vs_asking_pct_median or 0) }}</td>
+        <td data-label="Найдено">{{ item.last_seen_at | astana_time }}</td>
+        <td class="action-cell" data-label="Действия">
+          <a href="/listing-details?url={{ item.url | urlencode }}">Подробнее</a>
+          <button class="inline-action" type="button" data-save-listing>Сохранить</button>
+          <button class="inline-action muted-action" type="button" data-hide-listing>Скрыть</button>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

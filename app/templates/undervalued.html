@@ -137,6 +137,23 @@
         placeholder="Например, 90"
       >
     </label>
+    <label>
+      Новизна
+      <select name="new_since_hours">
+        <option value="">Любая дата</option>
+        <option value="24" {% if selected_new_since_hours == 24 %}selected{% endif %}>Новые за 24 часа</option>
+        <option value="48" {% if selected_new_since_hours == 48 %}selected{% endif %}>Новые за 48 часов</option>
+      </select>
+    </label>
+    <label>
+      Минимальная выгода q10, %
+      <select name="min_discount_pct">
+        <option value="">Любая</option>
+        {% for value in [5, 10, 15, 20] %}
+        <option value="{{ value }}" {% if selected_min_discount_pct and (selected_min_discount_pct * 100)|round|int == value %}selected{% endif %}>от {{ value }}%</option>
+        {% endfor %}
+      </select>
+    </label>
     <button type="submit">Применить</button>
     <a class="button secondary" href="/undervalued-page">Сбросить</a>
     </div>
@@ -175,6 +192,7 @@
     const polygonInput = document.getElementById("map-polygon");
     const mapState = document.getElementById("map-state");
     const clearButton = document.getElementById("clear-map-zone");
+    const filterForm = document.getElementById("filter-form");
     if (!mapElement || !window.L) {
       if (mapState) {
         mapState.textContent = "Карта временно недоступна.";
@@ -236,7 +254,14 @@
       drawnItems.clearLayers();
       drawnItems.addLayer(layer);
       polygonInput.value = polygonToValue(layer);
-      mapState.textContent = "Фильтр по зоне включён.";
+      mapState.textContent = "Фильтр по зоне включён. Применяю...";
+      submitFilters();
+    }
+
+    function submitFilters() {
+      if (filterForm) {
+        window.setTimeout(() => filterForm.submit(), 200);
+      }
     }
 
     function restoreZone() {
@@ -264,15 +289,19 @@
       drawnItems.eachLayer((layer) => {
         polygonInput.value = polygonToValue(layer);
       });
+      mapState.textContent = "Фильтр по зоне обновлён. Применяю...";
+      submitFilters();
     });
     map.on(L.Draw.Event.DELETED, function () {
       polygonInput.value = "";
-      mapState.textContent = "Фильтр по зоне не выбран.";
+      mapState.textContent = "Фильтр по зоне не выбран. Применяю...";
+      submitFilters();
     });
     clearButton.addEventListener("click", function () {
       drawnItems.clearLayers();
       polygonInput.value = "";
-      mapState.textContent = "Фильтр по зоне не выбран.";
+      mapState.textContent = "Фильтр по зоне не выбран. Применяю...";
+      submitFilters();
     });
 
     const hasZone = restoreZone();

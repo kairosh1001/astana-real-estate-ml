@@ -364,6 +364,13 @@
         border-radius: 8px;
         background: #fff;
       }
+      .listing-actions-bar {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
       table {
         width: 100%;
         min-width: 940px;
@@ -407,6 +414,42 @@
         color: var(--muted);
         margin-top: 4px;
         font-size: 13px;
+      }
+      .action-cell {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .inline-action,
+      .compact-action {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 7px 9px;
+      }
+      .inline-action:hover,
+      .compact-action:hover {
+        background: #f7faf7;
+        color: var(--teal-dark);
+      }
+      .muted-action {
+        color: var(--muted);
+      }
+      tr.saved-listing {
+        background: #f0faf6;
+      }
+      tr.hidden-listing {
+        display: none;
+      }
+      body.show-hidden-listings tr.hidden-listing {
+        display: table-row;
+        opacity: 0.58;
+      }
+      body.show-saved-only tr[data-listing-row]:not(.saved-listing) {
+        display: none;
       }
       .positive {
         color: #067647;
@@ -574,6 +617,50 @@
         .toolbar .button {
           margin-top: 12px;
         }
+        .listing-table {
+          min-width: 0;
+        }
+        .listing-table thead {
+          display: none;
+        }
+        .listing-table,
+        .listing-table tbody,
+        .listing-table tr,
+        .listing-table td {
+          display: block;
+          width: 100%;
+        }
+        .listing-table tr {
+          border-bottom: 1px solid var(--line);
+          padding: 13px 0;
+        }
+        .listing-table tr:last-child {
+          border-bottom: 0;
+        }
+        .listing-table td {
+          border-bottom: 0;
+          display: flex;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 7px 10px;
+          white-space: normal;
+        }
+        .listing-table td::before {
+          content: attr(data-label);
+          color: var(--muted);
+          flex: 0 0 42%;
+          font-weight: 700;
+        }
+        .listing-table .listing-cell,
+        .listing-table .action-cell {
+          min-width: 0;
+        }
+        .listing-table .action-cell {
+          justify-content: flex-start;
+        }
+        .listing-table .action-cell::before {
+          flex-basis: 100%;
+        }
       }
     </style>
   </head>
@@ -603,6 +690,89 @@
         <span>Разработчик - Кайрат Жаркынбай</span>
       </div>
     </footer>
+    <script>
+      (function () {
+        const savedKey = "krisha_saved_listing_urls";
+        const hiddenKey = "krisha_hidden_listing_urls";
+
+        function readSet(key) {
+          try {
+            return new Set(JSON.parse(localStorage.getItem(key) || "[]"));
+          } catch (_error) {
+            return new Set();
+          }
+        }
+
+        function writeSet(key, values) {
+          localStorage.setItem(key, JSON.stringify(Array.from(values)));
+        }
+
+        let saved = readSet(savedKey);
+        let hidden = readSet(hiddenKey);
+
+        function applyState() {
+          document.querySelectorAll("[data-listing-row]").forEach((row) => {
+            const url = row.dataset.url;
+            row.classList.toggle("saved-listing", saved.has(url));
+            row.classList.toggle("hidden-listing", hidden.has(url));
+
+            const saveButton = row.querySelector("[data-save-listing]");
+            if (saveButton) {
+              saveButton.textContent = saved.has(url) ? "Сохранено" : "Сохранить";
+            }
+            const hideButton = row.querySelector("[data-hide-listing]");
+            if (hideButton) {
+              hideButton.textContent = hidden.has(url) ? "Вернуть" : "Скрыть";
+            }
+          });
+        }
+
+        document.addEventListener("click", (event) => {
+          const saveButton = event.target.closest("[data-save-listing]");
+          if (saveButton) {
+            const row = saveButton.closest("[data-listing-row]");
+            const url = row && row.dataset.url;
+            if (url) {
+              saved.has(url) ? saved.delete(url) : saved.add(url);
+              writeSet(savedKey, saved);
+              applyState();
+            }
+            return;
+          }
+
+          const hideButton = event.target.closest("[data-hide-listing]");
+          if (hideButton) {
+            const row = hideButton.closest("[data-listing-row]");
+            const url = row && row.dataset.url;
+            if (url) {
+              hidden.has(url) ? hidden.delete(url) : hidden.add(url);
+              writeSet(hiddenKey, hidden);
+              applyState();
+            }
+            return;
+          }
+
+          const hiddenToggle = event.target.closest("[data-toggle-hidden]");
+          if (hiddenToggle) {
+            document.body.classList.toggle("show-hidden-listings");
+            hiddenToggle.textContent = document.body.classList.contains("show-hidden-listings")
+              ? "Скрыть скрытые"
+              : "Показать скрытые";
+            return;
+          }
+
+          const savedToggle = event.target.closest("[data-toggle-saved]");
+          if (savedToggle) {
+            document.body.classList.toggle("show-saved-only");
+            savedToggle.textContent = document.body.classList.contains("show-saved-only")
+              ? "Показать все"
+              : "Только сохранённые";
+          }
+        });
+
+        applyState();
+      })();
+    </script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

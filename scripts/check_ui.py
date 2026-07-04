@@ -10,10 +10,11 @@ if str(ROOT) not in sys.path:
 
 
 def seed_listing(db_path: Path) -> None:
-    from app.database import connect, init_db
+    from app.database import connect, init_db, utc_now
 
     with connect(db_path) as connection:
         init_db(connection)
+        first_seen_at = utc_now()
         connection.execute(
             """
             INSERT INTO refresh_runs (
@@ -51,7 +52,7 @@ def seed_listing(db_path: Path) -> None:
                 "https://krisha.kz/a/show/123",
                 "3-комнатная квартира, 80 м², 7/12 этаж, рядом с парком",
                 '{"Город": "Астана, Есиль р-н", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "lat": 51.13, "lon": 71.43}',
-                "2026-06-29T00:00:00+00:00",
+                first_seen_at,
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
                 0,
@@ -112,11 +113,14 @@ def main() -> None:
     assert_contains(home.text, "Квартиры ниже рынка в Астане")
     assert_contains(home.text, "Топ-10 квартир ниже рынка")
     assert_contains(home.text, "Активных объявлений в базе: 1")
+    assert_contains(home.text, "Последнее обновление: 2026-06-29 05:05")
     assert_contains(home.text, "Медианная оценка")
     assert_contains(home.text, "3-комнатная квартира · 40 м²")
     assert_contains(home.text, "Есиль")
     assert_contains(home.text, "Жилой комплекс")
     assert_contains(home.text, "Test ЖК")
+    assert_contains(home.text, "Сохранить")
+    assert_contains(home.text, "Скрыть")
     assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
     assert_contains(home.text, "/model-page")
     assert_not_contains(home.text, "Статус сервиса")
@@ -249,6 +253,9 @@ def main() -> None:
         "Жилой комплекс",
         "Площадь от",
         "Площадь до",
+        "Новые за 24 часа",
+        "Минимальная выгода q10",
+        "Только сохранённые",
         "Активных объявлений в базе: 1",
         "Зона на карте",
         "map_polygon",
@@ -307,6 +314,22 @@ def main() -> None:
         raise SystemExit(f"Advanced filter returned {advanced_filter_page.status_code}")
     assert_contains(advanced_filter_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(advanced_filter_page.text, "Test")
+
+    fresh_strong_page = client.get("/undervalued-page?new_since_hours=24&min_discount_pct=10")
+    if fresh_strong_page.status_code != 200:
+        raise SystemExit(f"Fresh/strong filter returned {fresh_strong_page.status_code}")
+    assert_contains(fresh_strong_page.text, "3-комнатная квартира · 40 м²")
+
+    too_strong_page = client.get("/undervalued-page?min_discount_pct=15")
+    if too_strong_page.status_code != 200:
+        raise SystemExit(f"Too strong filter returned {too_strong_page.status_code}")
+    assert_contains(too_strong_page.text, "Показано 0 из 0")
+
+    api_fresh_strong = client.get("/undervalued?new_since_hours=24&min_discount_pct=10")
+    if api_fresh_strong.status_code != 200:
+        raise SystemExit(f"Fresh/strong API returned {api_fresh_strong.status_code}")
+    if api_fresh_strong.json()["total"] != 1:
+        raise SystemExit("Fresh/strong API did not return the seeded listing")
 
     polygon_page = client.get(
         "/undervalued-page?map_polygon=51.0,71.3;51.0,71.6;51.3,71.6;51.3,71.3"

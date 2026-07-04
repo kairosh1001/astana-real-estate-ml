@@ -102,6 +102,7 @@ def home(request: Request) -> HTMLResponse:
             "items": preview_items,
             "total_undervalued": total_undervalued,
             "active_listings": status_summary.get("active_listings") or 0,
+            "latest_refresh": status_summary.get("latest_refresh"),
             "district_options": DISTRICT_OPTIONS,
             "start_rank": 1,
             "is_preview": True,
@@ -198,6 +199,8 @@ def undervalued(
     min_area: str | None = None,
     max_area: str | None = None,
     map_polygon: str | None = None,
+    new_since_hours: str | None = None,
+    min_discount_pct: str | None = None,
     include_stale: bool = False,
 ) -> dict:
     selected_districts = valid_district_slugs(district)
@@ -209,6 +212,9 @@ def undervalued(
     selected_min_area = _parse_optional_positive_float(min_area)
     selected_max_area = _parse_optional_positive_float(max_area)
     selected_polygon = _parse_polygon(map_polygon)
+    selected_new_since_hours = _parse_optional_int(new_since_hours, allowed={24, 48})
+    selected_new_since = _new_since_threshold(selected_new_since_hours)
+    selected_min_discount_pct = _parse_optional_percent(min_discount_pct)
     safe_limit = min(max(limit, 1), 100)
     safe_page = max(page, 1)
     offset = (safe_page - 1) * safe_limit
@@ -226,6 +232,8 @@ def undervalued(
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
+            new_since=selected_new_since,
+            min_discount_pct=selected_min_discount_pct,
             include_stale=include_stale,
         )
         total = count_undervalued(
@@ -239,6 +247,8 @@ def undervalued(
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
+            new_since=selected_new_since,
+            min_discount_pct=selected_min_discount_pct,
             include_stale=include_stale,
         )
     return {
@@ -255,6 +265,8 @@ def undervalued(
         "min_area": selected_min_area,
         "max_area": selected_max_area,
         "map_polygon": selected_polygon,
+        "new_since_hours": selected_new_since_hours,
+        "min_discount_pct": selected_min_discount_pct,
     }
 
 
@@ -271,6 +283,8 @@ def undervalued_page(
     min_area: str | None = None,
     max_area: str | None = None,
     map_polygon: str | None = None,
+    new_since_hours: str | None = None,
+    min_discount_pct: str | None = None,
     include_stale: bool = False,
 ) -> HTMLResponse:
     selected_districts = valid_district_slugs(district)
@@ -282,6 +296,9 @@ def undervalued_page(
     selected_min_area = _parse_optional_positive_float(min_area)
     selected_max_area = _parse_optional_positive_float(max_area)
     selected_polygon = _parse_polygon(map_polygon)
+    selected_new_since_hours = _parse_optional_int(new_since_hours, allowed={24, 48})
+    selected_new_since = _new_since_threshold(selected_new_since_hours)
+    selected_min_discount_pct = _parse_optional_percent(min_discount_pct)
     safe_page = max(page, 1)
     offset = (safe_page - 1) * UNDERVALUED_PAGE_SIZE
     with connect(DB_PATH) as db_connection:
@@ -298,6 +315,8 @@ def undervalued_page(
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
+            new_since=selected_new_since,
+            min_discount_pct=selected_min_discount_pct,
             include_stale=include_stale,
         )
         total = count_undervalued(
@@ -311,6 +330,8 @@ def undervalued_page(
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
+            new_since=selected_new_since,
+            min_discount_pct=selected_min_discount_pct,
             include_stale=include_stale,
         )
         status_summary = fetch_status_summary(db_connection)
@@ -330,6 +351,8 @@ def undervalued_page(
             "selected_min_area": selected_min_area,
             "selected_max_area": selected_max_area,
             "selected_polygon": map_polygon or "",
+            "selected_new_since_hours": selected_new_since_hours,
+            "selected_min_discount_pct": selected_min_discount_pct,
             "filter_query": _build_filter_query(
                 districts=selected_districts,
                 rooms=selected_rooms,
@@ -340,6 +363,8 @@ def undervalued_page(
                 min_area=selected_min_area,
                 max_area=selected_max_area,
                 map_polygon=map_polygon,
+                new_since_hours=selected_new_since_hours,
+                min_discount_pct=selected_min_discount_pct,
             ),
             "active_listings": status_summary.get("active_listings") or 0,
             "page": safe_page,
@@ -614,6 +639,15 @@ def _parse_optional_positive_float(value: str | None) -> float | None:
     return parsed if parsed > 0 else None
 
 
+def _parse_optional_percent(value: str | None) -> float | None:
+    parsed = _parse_optional_positive_float(value)
+    if parsed is None:
+        return None
+    if parsed > 100:
+        return None
+    return parsed / 100 if parsed > 1 else parsed
+
+
 def _parse_optional_int(
     value: str | None,
     *,
@@ -635,6 +669,14 @@ def _parse_optional_text(value: str | None) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _new_since_threshold(hours: int | None) -> str | None:
+    if not hours:
+        return None
+    return (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat(
+        timespec="seconds"
+    )
 
 
 def _parse_polygon(value: str | None) -> list[tuple[float, float]] | None:
@@ -665,6 +707,8 @@ def _build_filter_query(
     min_area: float | None = None,
     max_area: float | None = None,
     map_polygon: str | None = None,
+    new_since_hours: int | None = None,
+    min_discount_pct: float | None = None,
     page: int | None = None,
 ) -> str:
     params = _filter_params(
@@ -677,6 +721,8 @@ def _build_filter_query(
         min_area=min_area,
         max_area=max_area,
         map_polygon=map_polygon,
+        new_since_hours=new_since_hours,
+        min_discount_pct=min_discount_pct,
         page=page,
     )
     return urlencode(params)
@@ -693,6 +739,8 @@ def _filter_params(
     min_area: float | None = None,
     max_area: float | None = None,
     map_polygon: str | None = None,
+    new_since_hours: int | None = None,
+    min_discount_pct: float | None = None,
     page: int | None = None,
 ) -> list[tuple[str, str]]:
     params: list[tuple[str, str]] = []
@@ -716,6 +764,10 @@ def _filter_params(
         params.append(("max_area", _format_filter_number(max_area)))
     if map_polygon:
         params.append(("map_polygon", map_polygon))
+    if new_since_hours:
+        params.append(("new_since_hours", str(new_since_hours)))
+    if min_discount_pct:
+        params.append(("min_discount_pct", _format_filter_number(min_discount_pct * 100)))
     return params
 
 
