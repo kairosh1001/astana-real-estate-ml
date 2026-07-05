@@ -84,13 +84,16 @@ class PredictionService:
         )
 
     def _load_training_raw(self) -> pd.DataFrame:
-        return pd.concat(
-            [
-                pd.read_csv(self.root / "krisha_data_raw_orig.csv"),
-                pd.read_csv(self.root / "krisha_data_raw.csv"),
-            ],
-            ignore_index=True,
-        )
+        raw_paths = [
+            self.root / "krisha_data_raw_orig.csv",
+            self.root / "krisha_data_raw.csv",
+        ]
+        if all(path.exists() for path in raw_paths):
+            return pd.concat(
+                [pd.read_csv(path) for path in raw_paths],
+                ignore_index=True,
+            )
+        return pd.read_csv(self.root / "df_check.csv")
 
     @staticmethod
     def _scrape_listing(url: str) -> dict:

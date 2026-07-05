@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
 COPY scripts ./scripts
 COPY models ./models
-COPY scrape.py model_metadata.json df_check.csv krisha_data_raw.csv krisha_data_raw_orig.csv ./
+COPY scrape.py model_metadata.json df_check.csv ./
 
 RUN mkdir -p /app/data
 

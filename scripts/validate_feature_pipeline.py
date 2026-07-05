@@ -14,11 +14,21 @@ from app.feature_pipeline import build_feature_config, build_model_features
 
 
 def main() -> None:
+    raw_paths = [
+        ROOT / "krisha_data_raw_orig.csv",
+        ROOT / "krisha_data_raw.csv",
+    ]
+    missing_raw = [path.name for path in raw_paths if not path.exists()]
+    if missing_raw:
+        print(
+            "Feature pipeline validation skipped because raw scrape snapshots "
+            f"are not present: {missing_raw}."
+        )
+        print("The public repository keeps df_check.csv as the model-ready snapshot.")
+        return
+
     raw = pd.concat(
-        [
-            pd.read_csv(ROOT / "krisha_data_raw_orig.csv"),
-            pd.read_csv(ROOT / "krisha_data_raw.csv"),
-        ],
+        [pd.read_csv(path) for path in raw_paths],
         ignore_index=True,
     )
     expected = pd.read_csv(ROOT / "df_check.csv")

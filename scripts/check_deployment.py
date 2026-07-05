@@ -17,8 +17,6 @@ from app.model_service import PriceModelService
 REQUIRED_PATHS = [
     "model_metadata.json",
     "df_check.csv",
-    "krisha_data_raw.csv",
-    "krisha_data_raw_orig.csv",
     "scrape.py",
     "models/catboost_q10_price_per_m2_log.cbm",
     "models/catboost_q50_price_per_m2_log.cbm",

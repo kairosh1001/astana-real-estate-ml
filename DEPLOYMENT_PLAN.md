@@ -19,7 +19,7 @@ The service should:
 The repository currently contains:
 
 - `scrape.py`: working scraper used to collect Krisha listing data.
-- `krisha_data_raw.csv` and `krisha_data_raw_orig.csv`: two raw scraped datasets.
+- Raw scraped datasets: local intermediate artifacts used to build `df_check.csv`; excluded from the polished public repository state.
 - `dataset.ipynb`: notebook containing cleaning, feature engineering, training, evaluation, and model export.
 - `df_check.csv`: final model-ready dataset used for CatBoost work.
 - `model_metadata.json`: final model feature contract.

@@ -19,7 +19,7 @@ Use this order when deploying for the first time:
 3. Clone the repo:
 
 ```bash
-git clone https://github.com/kairosh1001/Pet-projects.git /opt/krisha
+git clone https://github.com/kairosh1001/astana-real-estate-ml.git /opt/krisha
 cd /opt/krisha
 ```
 

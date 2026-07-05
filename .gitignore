@@ -4,6 +4,12 @@ data/*.sqlite3-*
 logs/
 backups/
 .Rhistory
+df_raw.csv
+df_meta.csv
+krisha_data_raw.csv
+krisha_data_raw_orig.csv
+Turar's code/
+models_candidate/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

@@ -116,6 +116,15 @@ class FeatureConfig:
 
 
 def build_feature_config(raw_df: pd.DataFrame) -> FeatureConfig:
+    if {"district", "residential_complex"}.issubset(raw_df.columns):
+        mapping = (
+            raw_df.dropna(subset=["district"])
+            .drop_duplicates("residential_complex")
+            .set_index("residential_complex")["district"]
+            .to_dict()
+        )
+        return FeatureConfig(complex_to_district=mapping)
+
     frame = _prepare_base_frame(raw_df, FeatureConfig(), build_mapping=False)
     mapping = (
         frame.dropna(subset=["district"])
