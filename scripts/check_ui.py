@@ -10,12 +10,12 @@ if str(ROOT) not in sys.path:
 
 
 def seed_listing(db_path: Path) -> None:
-    from app.database import connect, init_db, utc_now
+    from app.database import connect, create_monitoring_snapshot, init_db, utc_now
 
     with connect(db_path) as connection:
         init_db(connection)
         first_seen_at = utc_now()
-        connection.execute(
+        refresh_cursor = connection.execute(
             """
             INSERT INTO refresh_runs (
                 started_at, finished_at, kind, start_page, end_page,
@@ -36,6 +36,7 @@ def seed_listing(db_path: Path) -> None:
                 "completed",
             ),
         )
+        run_id = int(refresh_cursor.lastrowid)
         connection.execute(
             """
             INSERT INTO listings (
@@ -90,6 +91,7 @@ def seed_listing(db_path: Path) -> None:
             ),
         )
         connection.commit()
+        create_monitoring_snapshot(connection, run_id=run_id)
 
 
 def assert_contains(text: str, needle: str) -> None:
@@ -252,7 +254,12 @@ def main() -> None:
         if response.status_code != 401:
             raise SystemExit(f"{path} without login returned {response.status_code}")
 
-    for path in ["/refresh-runs-page", "/status-page", "/admin-refresh-page"]:
+    for path in [
+        "/refresh-runs-page",
+        "/status-page",
+        "/admin-refresh-page",
+        "/model-monitoring-page",
+    ]:
         response = client.get(path, follow_redirects=False)
         if response.status_code != 303:
             raise SystemExit(f"{path} without login returned {response.status_code}")
@@ -342,15 +349,16 @@ def main() -> None:
     assert_contains(room_price_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(room_price_page.text, "Показано 1 из 1")
 
-    sorted_page = client.get("/undervalued-page?sort=price_per_m2")
+    sorted_page = client.get("/undervalued-page?sort=price_per_m2_desc")
     if sorted_page.status_code != 200:
         raise SystemExit(f"Sorted filter returned {sorted_page.status_code}")
-    assert_contains(sorted_page.text, "По цене за м²")
+    assert_contains(sorted_page.text, "Цена за м²: сначала дороже")
+    assert_contains(sorted_page.text, "Площадь: сначала меньше")
 
-    api_sorted = client.get("/undervalued?sort=newest")
+    api_sorted = client.get("/undervalued?sort=listed_price_desc")
     if api_sorted.status_code != 200:
         raise SystemExit(f"Sorted API returned {api_sorted.status_code}")
-    if api_sorted.json()["sort"] != "newest":
+    if api_sorted.json()["sort"] != "listed_price_desc":
         raise SystemExit("Sorted API did not echo selected sort")
 
     blank_price_page = client.get("/undervalued-page?rooms=3&max_price=")
@@ -445,9 +453,22 @@ def main() -> None:
         "Всего объявлений в базе",
         "Квартир ниже рынка",
         "Последнее обновление",
+        "Мониторинг модели",
         "2026-06-29 05:05",
     ]:
         assert_contains(status_page.text, needle)
+
+    monitoring_page = client.get("/model-monitoring-page")
+    if monitoring_page.status_code != 200:
+        raise SystemExit(f"Model monitoring page returned {monitoring_page.status_code}")
+    for needle in [
+        "Мониторинг модели",
+        "История snapshots",
+        "Последние предупреждения",
+        "Доля ниже рынка",
+        "Медиана q50/м²",
+    ]:
+        assert_contains(monitoring_page.text, needle)
 
     admin_page = client.get("/admin-refresh-page")
     if admin_page.status_code != 200:

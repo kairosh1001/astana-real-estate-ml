@@ -34,6 +34,7 @@ from app.database import (
     fetch_listing_by_url,
     fetch_listings_by_urls,
     fetch_market_dashboard,
+    fetch_monitoring_snapshots,
     fetch_price_history,
     fetch_refresh_runs,
     fetch_status_summary,
@@ -526,6 +527,31 @@ def status_page(
         request,
         "status.html",
         {"request": request, "summary": summary},
+    )
+
+
+@app.get("/model-monitoring-page", response_class=HTMLResponse)
+def model_monitoring_page(
+    request: Request,
+    limit: int = 30,
+) -> HTMLResponse:
+    redirect = _admin_page_redirect_if_needed(request)
+    if redirect:
+        return redirect
+
+    safe_limit = min(max(limit, 1), 100)
+    with connect(DB_PATH) as db_connection:
+        snapshots = fetch_monitoring_snapshots(db_connection, limit=safe_limit)
+        summary = fetch_status_summary(db_connection)
+
+    return templates.TemplateResponse(
+        request,
+        "model_monitoring.html",
+        {
+            "request": request,
+            "snapshots": snapshots,
+            "summary": summary,
+        },
     )
 
 

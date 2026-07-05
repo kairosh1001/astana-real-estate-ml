@@ -160,9 +160,12 @@
         <option value="q10_discount" {% if selected_sort == "q10_discount" %}selected{% endif %}>По выгоде q10</option>
         <option value="median_discount" {% if selected_sort == "median_discount" %}selected{% endif %}>По выгоде медианы</option>
         <option value="newest" {% if selected_sort == "newest" %}selected{% endif %}>Сначала новые</option>
-        <option value="listed_price" {% if selected_sort == "listed_price" %}selected{% endif %}>По общей цене</option>
-        <option value="price_per_m2" {% if selected_sort == "price_per_m2" %}selected{% endif %}>По цене за м²</option>
-        <option value="area_desc" {% if selected_sort == "area_desc" %}selected{% endif %}>По площади</option>
+        <option value="listed_price_asc" {% if selected_sort in ["listed_price", "listed_price_asc"] %}selected{% endif %}>Общая цена: сначала дешевле</option>
+        <option value="listed_price_desc" {% if selected_sort == "listed_price_desc" %}selected{% endif %}>Общая цена: сначала дороже</option>
+        <option value="price_per_m2_asc" {% if selected_sort in ["price_per_m2", "price_per_m2_asc"] %}selected{% endif %}>Цена за м²: сначала дешевле</option>
+        <option value="price_per_m2_desc" {% if selected_sort == "price_per_m2_desc" %}selected{% endif %}>Цена за м²: сначала дороже</option>
+        <option value="area_asc" {% if selected_sort == "area_asc" %}selected{% endif %}>Площадь: сначала меньше</option>
+        <option value="area_desc" {% if selected_sort == "area_desc" %}selected{% endif %}>Площадь: сначала больше</option>
       </select>
     </label>
     <button type="submit">Применить</button>

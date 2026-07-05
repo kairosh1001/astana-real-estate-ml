@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Мониторинг модели{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Мониторинг модели</h1>
+    <p>
+      Админ-сводка качества данных, scrape-процесса и прокси-сигналов drift.
+      Эти метрики не заменяют проверку на реальных сделках, но помогают заметить сбои.
+    </p>
+  </div>
+  <a class="button secondary" href="/status-page">Статус сервиса</a>
+</div>
+
+<section class="metric-grid">
+  <div class="metric">
+    <span>Активных объявлений</span>
+    <strong>{{ summary.active_listings or 0 }}</strong>
+  </div>
+  <div class="metric">
+    <span>Квартир ниже рынка</span>
+    <strong>{{ summary.below_market_active or 0 }}</strong>
+  </div>
+  <div class="metric">
+    <span>Последний snapshot</span>
+    <strong>{% if snapshots %}{{ snapshots[0].created_at | astana_time }}{% else %}-{% endif %}</strong>
+  </div>
+</section>
+
+<section class="section panel">
+  <h2>Последние предупреждения</h2>
+  {% if snapshots and snapshots[0].warnings %}
+  <ul class="feature-list">
+    {% for warning in snapshots[0].warnings %}
+    <li>{{ warning }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="success">Критичных предупреждений по последнему snapshot нет.</p>
+  {% endif %}
+</section>
+
+<section class="section panel">
+  <h2>История snapshots</h2>
+  {% if not snapshots %}
+  <div class="empty-state">
+    Snapshots пока нет. Они появятся после следующего refresh.
+  </div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>Время</th>
+          <th>Run</th>
+          <th>Активных</th>
+          <th>Ниже рынка</th>
+          <th>Доля ниже рынка</th>
+          <th>Медиана цены/м²</th>
+          <th>Медиана q50/м²</th>
+          <th>Нет года</th>
+          <th>Нет координат</th>
+          <th>Ошибки scrape</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in snapshots %}
+        <tr>
+          <td data-label="Время">{{ item.created_at | astana_time }}</td>
+          <td data-label="Run">{{ item.run_id or "-" }}</td>
+          <td data-label="Активных">{{ item.active_listings }}</td>
+          <td data-label="Ниже рынка">{{ item.below_market_active }}</td>
+          <td data-label="Доля ниже рынка">{{ "{:.1%}".format(item.below_market_share or 0) }}</td>
+          <td data-label="Медиана цены/м²">{{ "{:,.0f}".format(item.median_listed_price_per_m2 or 0) }}</td>
+          <td data-label="Медиана q50/м²">{{ "{:,.0f}".format(item.median_pred_q50_per_m2 or 0) }}</td>
+          <td data-label="Нет года">{{ "{:.1%}".format(item.missing_year_share or 0) }}</td>
+          <td data-label="Нет координат">{{ "{:.1%}".format(item.missing_coords_share or 0) }}</td>
+          <td data-label="Ошибки scrape">{{ "{:.1%}".format(item.scrape_failed_share or 0) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

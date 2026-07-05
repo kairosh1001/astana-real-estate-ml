@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.database import (
     connect,
+    create_monitoring_snapshot,
     finish_refresh_run,
     init_db,
     iter_unique_urls,
@@ -127,6 +128,7 @@ def run_refresh(
             status=status,
             error=error,
         )
+        create_monitoring_snapshot(connection, run_id=run_id)
         connection.close()
         print(
             "[INFO] Refresh complete: "

@@ -98,6 +98,28 @@ def init_db(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_price_history_url_observed
         ON listing_price_history(url, observed_at);
+
+        CREATE TABLE IF NOT EXISTS model_monitoring_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            run_id INTEGER,
+            total_listings INTEGER NOT NULL DEFAULT 0,
+            active_listings INTEGER NOT NULL DEFAULT 0,
+            below_market_active INTEGER NOT NULL DEFAULT 0,
+            below_market_share REAL NOT NULL DEFAULT 0,
+            median_listed_price_per_m2 REAL,
+            median_pred_q50_per_m2 REAL,
+            missing_year_share REAL NOT NULL DEFAULT 0,
+            missing_coords_share REAL NOT NULL DEFAULT 0,
+            unknown_district_share REAL NOT NULL DEFAULT 0,
+            missing_complex_share REAL NOT NULL DEFAULT 0,
+            scrape_failed_share REAL NOT NULL DEFAULT 0,
+            warnings_json TEXT NOT NULL DEFAULT '[]',
+            FOREIGN KEY(run_id) REFERENCES refresh_runs(id) ON DELETE SET NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_monitoring_snapshots_created
+        ON model_monitoring_snapshots(created_at);
         """
     )
     connection.commit()
@@ -574,6 +596,148 @@ def fetch_market_dashboard(connection: sqlite3.Connection) -> dict:
     }
 
 
+def create_monitoring_snapshot(
+    connection: sqlite3.Connection,
+    *,
+    run_id: int | None = None,
+) -> int:
+    rows = connection.execute(
+        """
+        SELECT raw_json, listed_price_per_m2, pred_price_per_m2_q50,
+               discount_vs_asking_pct_conservative, status
+        FROM listings
+        """
+    ).fetchall()
+    active_rows = [row for row in rows if row["status"] == "active"]
+    active_count = len(active_rows)
+    total_count = len(rows)
+    below_market_count = sum(
+        1
+        for row in active_rows
+        if (row["discount_vs_asking_pct_conservative"] or 0) > 0
+    )
+    listed_prices = [
+        float(row["listed_price_per_m2"])
+        for row in active_rows
+        if row["listed_price_per_m2"] is not None
+    ]
+    pred_q50 = [
+        float(row["pred_price_per_m2_q50"])
+        for row in active_rows
+        if row["pred_price_per_m2_q50"] is not None
+    ]
+
+    missing_year = 0
+    missing_coords = 0
+    unknown_district = 0
+    missing_complex = 0
+    for row in active_rows:
+        raw_listing = _load_raw_listing(row["raw_json"])
+        if not _extract_int(raw_listing.get("Год постройки")):
+            missing_year += 1
+        if _extract_float(raw_listing.get("lat")) is None or _extract_float(raw_listing.get("lon")) is None:
+            missing_coords += 1
+        if not normalize_district(raw_listing.get("Город")):
+            unknown_district += 1
+        if not _clean_text(raw_listing.get("Жилой комплекс")):
+            missing_complex += 1
+
+    failed_share = 0.0
+    if run_id:
+        run = connection.execute(
+            """
+            SELECT listings_processed, listings_failed, status
+            FROM refresh_runs
+            WHERE id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+        if run:
+            attempted = (run["listings_processed"] or 0) + (run["listings_failed"] or 0)
+            failed_share = (run["listings_failed"] or 0) / attempted if attempted else 0.0
+
+    below_market_share = below_market_count / active_count if active_count else 0.0
+    warnings = _monitoring_warnings(
+        active_count=active_count,
+        below_market_share=below_market_share,
+        missing_year_share=_share(missing_year, active_count),
+        missing_coords_share=_share(missing_coords, active_count),
+        unknown_district_share=_share(unknown_district, active_count),
+        missing_complex_share=_share(missing_complex, active_count),
+        scrape_failed_share=failed_share,
+    )
+    cursor = connection.execute(
+        """
+        INSERT INTO model_monitoring_snapshots (
+            created_at, run_id, total_listings, active_listings,
+            below_market_active, below_market_share, median_listed_price_per_m2,
+            median_pred_q50_per_m2, missing_year_share, missing_coords_share,
+            unknown_district_share, missing_complex_share, scrape_failed_share,
+            warnings_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            utc_now(),
+            run_id,
+            total_count,
+            active_count,
+            below_market_count,
+            below_market_share,
+            _median(listed_prices) if listed_prices else None,
+            _median(pred_q50) if pred_q50 else None,
+            _share(missing_year, active_count),
+            _share(missing_coords, active_count),
+            _share(unknown_district, active_count),
+            _share(missing_complex, active_count),
+            failed_share,
+            json.dumps(warnings, ensure_ascii=False),
+        ),
+    )
+    connection.commit()
+    return int(cursor.lastrowid)
+
+
+def fetch_monitoring_snapshots(
+    connection: sqlite3.Connection,
+    *,
+    limit: int = 30,
+) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT
+            id,
+            created_at,
+            run_id,
+            total_listings,
+            active_listings,
+            below_market_active,
+            below_market_share,
+            median_listed_price_per_m2,
+            median_pred_q50_per_m2,
+            missing_year_share,
+            missing_coords_share,
+            unknown_district_share,
+            missing_complex_share,
+            scrape_failed_share,
+            warnings_json
+        FROM model_monitoring_snapshots
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    snapshots = []
+    for row in rows:
+        snapshot = dict(row)
+        try:
+            snapshot["warnings"] = json.loads(snapshot.pop("warnings_json") or "[]")
+        except json.JSONDecodeError:
+            snapshot["warnings"] = []
+        snapshots.append(snapshot)
+    return snapshots
+
+
 def _prepare_undervalued_item(row: dict) -> dict:
     raw_listing = _load_raw_listing(row.get("raw_json"))
     district_slug = normalize_district(raw_listing.get("Город"))
@@ -601,11 +765,25 @@ def _sort_undervalued_items(items: list[dict], sort: str) -> list[dict]:
             True,
         ),
         "listed_price": (lambda item: item.get("listed_price") or float("inf"), False),
+        "listed_price_asc": (
+            lambda item: item.get("listed_price") or float("inf"),
+            False,
+        ),
+        "listed_price_desc": (lambda item: item.get("listed_price") or 0, True),
         "price_per_m2": (
             lambda item: item.get("listed_price_per_m2") or float("inf"),
             False,
         ),
+        "price_per_m2_asc": (
+            lambda item: item.get("listed_price_per_m2") or float("inf"),
+            False,
+        ),
+        "price_per_m2_desc": (
+            lambda item: item.get("listed_price_per_m2") or 0,
+            True,
+        ),
         "newest": (lambda item: item.get("first_seen_at") or "", True),
+        "area_asc": (lambda item: item.get("area_m2") or float("inf"), False),
         "area_desc": (lambda item: item.get("area_m2") or 0, True),
     }
     key, reverse = sorters.get(sort, sorters["q10_discount"])
@@ -618,6 +796,38 @@ def _median(values: list[float]) -> float:
     if len(sorted_values) % 2:
         return sorted_values[middle]
     return (sorted_values[middle - 1] + sorted_values[middle]) / 2
+
+
+def _share(count: int, total: int) -> float:
+    return count / total if total else 0.0
+
+
+def _monitoring_warnings(
+    *,
+    active_count: int,
+    below_market_share: float,
+    missing_year_share: float,
+    missing_coords_share: float,
+    unknown_district_share: float,
+    missing_complex_share: float,
+    scrape_failed_share: float,
+) -> list[str]:
+    warnings = []
+    if active_count == 0:
+        warnings.append("Нет активных объявлений в базе.")
+    if scrape_failed_share >= 0.10:
+        warnings.append("Доля ошибок scrape выше 10%.")
+    if below_market_share >= 0.20:
+        warnings.append("Доля квартир ниже рынка необычно высокая.")
+    if missing_year_share >= 0.30:
+        warnings.append("У многих объявлений отсутствует год постройки.")
+    if missing_coords_share >= 0.10:
+        warnings.append("У части объявлений отсутствуют координаты.")
+    if unknown_district_share >= 0.10:
+        warnings.append("У части объявлений не распознан район.")
+    if missing_complex_share >= 0.40:
+        warnings.append("У многих объявлений не указан ЖК.")
+    return warnings
 
 
 def _load_raw_listing(raw_json: object) -> dict:
