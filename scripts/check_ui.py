@@ -145,6 +145,7 @@ def main() -> None:
     assert_contains(home.text, "Telegram")
     assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
     assert_contains(home.text, "/model-page")
+    assert_contains(home.text, "/market-page")
     assert_not_contains(home.text, "Статус сервиса")
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")
@@ -219,6 +220,9 @@ def main() -> None:
         raise SystemExit(f"Listing details page returned {details_page.status_code}")
     assert_contains(details_page.text, "Результат оценки")
     assert_contains(details_page.text, "История цены")
+    assert_contains(details_page.text, "График истории цены")
+    assert_contains(details_page.text, "На что обратить внимание")
+    assert_contains(details_page.text, "Цена снижалась")
     assert_contains(details_page.text, "Жилой комплекс")
     assert_contains(details_page.text, "Активных объявлений в базе")
     assert_contains(details_page.text, "2026-06-30 05:00")
@@ -229,6 +233,19 @@ def main() -> None:
     assert_contains(compare_page.text, "Сравнение квартир")
     assert_contains(compare_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(compare_page.text, "Выгода q10")
+
+    market_page = client.get("/market-page")
+    if market_page.status_code != 200:
+        raise SystemExit(f"Market page returned {market_page.status_code}")
+    for needle in [
+        "Рынок квартир в Астане",
+        "Районы",
+        "Жилые комплексы",
+        "Медиана цены/м²",
+        "Test ЖК",
+        "Есиль",
+    ]:
+        assert_contains(market_page.text, needle)
 
     for path in ["/refresh-runs", "/status-summary"]:
         response = client.get(path)
@@ -288,6 +305,8 @@ def main() -> None:
         "Площадь до",
         "Новые за 24 часа",
         "Минимальная выгода q10",
+        "Сортировка",
+        "Сначала новые",
         "Только сохранённые",
         "Выбрано для сравнения",
         "Активных объявлений в базе: 1",
@@ -322,6 +341,17 @@ def main() -> None:
         raise SystemExit(f"Room/price filter returned {room_price_page.status_code}")
     assert_contains(room_price_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(room_price_page.text, "Показано 1 из 1")
+
+    sorted_page = client.get("/undervalued-page?sort=price_per_m2")
+    if sorted_page.status_code != 200:
+        raise SystemExit(f"Sorted filter returned {sorted_page.status_code}")
+    assert_contains(sorted_page.text, "По цене за м²")
+
+    api_sorted = client.get("/undervalued?sort=newest")
+    if api_sorted.status_code != 200:
+        raise SystemExit(f"Sorted API returned {api_sorted.status_code}")
+    if api_sorted.json()["sort"] != "newest":
+        raise SystemExit("Sorted API did not echo selected sort")
 
     blank_price_page = client.get("/undervalued-page?rooms=3&max_price=")
     if blank_price_page.status_code != 200:

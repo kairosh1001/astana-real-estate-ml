@@ -270,6 +270,7 @@ def fetch_undervalued(
     polygon: list[tuple[float, float]] | None = None,
     new_since: str | None = None,
     min_discount_pct: float | None = None,
+    sort: str = "q10_discount",
     include_stale: bool = False,
 ) -> list[dict]:
     status_clause = "" if include_stale else "AND status = 'active'"
@@ -364,6 +365,7 @@ def fetch_undervalued(
             if item.get("discount_vs_asking_pct_conservative") is not None
             and item["discount_vs_asking_pct_conservative"] >= min_discount_pct
         ]
+    items = _sort_undervalued_items(items, sort)
     return items[offset : offset + limit]
 
 
@@ -381,6 +383,7 @@ def count_undervalued(
     polygon: list[tuple[float, float]] | None = None,
     new_since: str | None = None,
     min_discount_pct: float | None = None,
+    sort: str = "q10_discount",
     include_stale: bool = False,
 ) -> int:
     return len(
@@ -399,6 +402,7 @@ def count_undervalued(
             polygon=polygon,
             new_since=new_since,
             min_discount_pct=min_discount_pct,
+            sort=sort,
             include_stale=include_stale,
         )
     )
@@ -493,20 +497,80 @@ def fetch_complex_stats(
     if not prices:
         return None
 
-    prices.sort()
-    middle = len(prices) // 2
-    if len(prices) % 2:
-        median_price = prices[middle]
-    else:
-        median_price = (prices[middle - 1] + prices[middle]) / 2
-
     return {
         "name": query,
         "count": len(prices),
         "below_market": below_market,
         "min_price_per_m2": min(prices),
-        "median_price_per_m2": median_price,
+        "median_price_per_m2": _median(prices),
         "max_price_per_m2": max(prices),
+    }
+
+
+def fetch_market_dashboard(connection: sqlite3.Connection) -> dict:
+    rows = connection.execute(
+        """
+        SELECT raw_json, listed_price_per_m2, discount_vs_asking_pct_conservative
+        FROM listings
+        WHERE status = 'active'
+          AND listed_price_per_m2 IS NOT NULL
+        """
+    ).fetchall()
+    district_prices: dict[str, list[float]] = {}
+    district_below_market: dict[str, int] = {}
+    complex_prices: dict[str, list[float]] = {}
+    complex_below_market: dict[str, int] = {}
+
+    for row in rows:
+        raw_listing = _load_raw_listing(row["raw_json"])
+        price = float(row["listed_price_per_m2"])
+        is_below_market = (row["discount_vs_asking_pct_conservative"] or 0) > 0
+
+        district_slug = normalize_district(raw_listing.get("Город"))
+        district_label = district_label_for_slug(district_slug)
+        district_prices.setdefault(district_label, []).append(price)
+        if is_below_market:
+            district_below_market[district_label] = (
+                district_below_market.get(district_label, 0) + 1
+            )
+
+        complex_name = _clean_text(raw_listing.get("Жилой комплекс"))
+        if complex_name:
+            complex_prices.setdefault(complex_name, []).append(price)
+            if is_below_market:
+                complex_below_market[complex_name] = (
+                    complex_below_market.get(complex_name, 0) + 1
+                )
+
+    districts = [
+        {
+            "name": name,
+            "count": len(prices),
+            "below_market": district_below_market.get(name, 0),
+            "median_price_per_m2": _median(prices),
+            "min_price_per_m2": min(prices),
+            "max_price_per_m2": max(prices),
+        }
+        for name, prices in district_prices.items()
+    ]
+    districts.sort(key=lambda item: item["median_price_per_m2"], reverse=True)
+
+    complexes = [
+        {
+            "name": name,
+            "count": len(prices),
+            "below_market": complex_below_market.get(name, 0),
+            "median_price_per_m2": _median(prices),
+            "min_price_per_m2": min(prices),
+            "max_price_per_m2": max(prices),
+        }
+        for name, prices in complex_prices.items()
+    ]
+    complexes.sort(key=lambda item: (item["below_market"], item["count"]), reverse=True)
+
+    return {
+        "districts": districts,
+        "complexes": complexes[:20],
     }
 
 
@@ -524,6 +588,36 @@ def _prepare_undervalued_item(row: dict) -> dict:
     row["short_title"] = _short_listing_title(row.get("title"), row.get("area_m2"))
     row.pop("raw_json", None)
     return row
+
+
+def _sort_undervalued_items(items: list[dict], sort: str) -> list[dict]:
+    sorters = {
+        "q10_discount": (
+            lambda item: item.get("discount_vs_asking_pct_conservative") or 0,
+            True,
+        ),
+        "median_discount": (
+            lambda item: item.get("discount_vs_asking_pct_median") or 0,
+            True,
+        ),
+        "listed_price": (lambda item: item.get("listed_price") or float("inf"), False),
+        "price_per_m2": (
+            lambda item: item.get("listed_price_per_m2") or float("inf"),
+            False,
+        ),
+        "newest": (lambda item: item.get("first_seen_at") or "", True),
+        "area_desc": (lambda item: item.get("area_m2") or 0, True),
+    }
+    key, reverse = sorters.get(sort, sorters["q10_discount"])
+    return sorted(items, key=key, reverse=reverse)
+
+
+def _median(values: list[float]) -> float:
+    sorted_values = sorted(values)
+    middle = len(sorted_values) // 2
+    if len(sorted_values) % 2:
+        return sorted_values[middle]
+    return (sorted_values[middle - 1] + sorted_values[middle]) / 2
 
 
 def _load_raw_listing(raw_json: object) -> dict:

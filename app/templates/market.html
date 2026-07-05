@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Рынок квартир{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Рынок квартир в Астане</h1>
+    <p>
+      Сводка по активным объявлениям в базе: районные медианы, диапазоны цены за м²
+      и жилые комплексы, где чаще встречаются варианты ниже рынка.
+    </p>
+  </div>
+  <a class="button secondary" href="/undervalued-page">Квартиры ниже рынка</a>
+</div>
+
+<section class="metric-grid">
+  <div class="metric">
+    <span>Активных объявлений</span>
+    <strong>{{ summary.active_listings or 0 }}</strong>
+  </div>
+  <div class="metric">
+    <span>Квартир ниже рынка</span>
+    <strong>{{ summary.below_market_active or 0 }}</strong>
+  </div>
+  <div class="metric">
+    <span>Последнее обновление</span>
+    <strong>
+      {% if summary.latest_refresh %}{{ summary.latest_refresh.finished_at | astana_time }}{% else %}-{% endif %}
+    </strong>
+  </div>
+</section>
+
+<section class="section panel">
+  <h2>Районы</h2>
+  {% if not dashboard.districts %}
+  <div class="empty-state">Пока нет данных для сводки.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>Район</th>
+          <th>Активных</th>
+          <th>Ниже рынка</th>
+          <th>Медиана цены/м²</th>
+          <th>Диапазон цены/м²</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in dashboard.districts %}
+        <tr>
+          <td data-label="Район">{{ row.name }}</td>
+          <td data-label="Активных">{{ row.count }}</td>
+          <td data-label="Ниже рынка">{{ row.below_market }}</td>
+          <td data-label="Медиана цены/м²">{{ "{:,.0f}".format(row.median_price_per_m2) }} тг</td>
+          <td data-label="Диапазон цены/м²">
+            {{ "{:,.0f}".format(row.min_price_per_m2) }}
+            -
+            {{ "{:,.0f}".format(row.max_price_per_m2) }} тг
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="section panel">
+  <h2>Жилые комплексы</h2>
+  {% if not dashboard.complexes %}
+  <div class="empty-state">Пока нет данных по жилым комплексам.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>ЖК</th>
+          <th>Активных</th>
+          <th>Ниже рынка</th>
+          <th>Медиана цены/м²</th>
+          <th>Диапазон цены/м²</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in dashboard.complexes %}
+        <tr>
+          <td data-label="ЖК">{{ row.name }}</td>
+          <td data-label="Активных">{{ row.count }}</td>
+          <td data-label="Ниже рынка">{{ row.below_market }}</td>
+          <td data-label="Медиана цены/м²">{{ "{:,.0f}".format(row.median_price_per_m2) }} тг</td>
+          <td data-label="Диапазон цены/м²">
+            {{ "{:,.0f}".format(row.min_price_per_m2) }}
+            -
+            {{ "{:,.0f}".format(row.max_price_per_m2) }} тг
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

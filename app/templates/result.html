@@ -114,11 +114,34 @@
   </div>
 </section>
 
+<section class="section panel">
+  <h2>На что обратить внимание</h2>
+  <div class="risk-grid">
+    {% for flag in risk_flags %}
+    <div class="risk-item {{ flag.level }}">
+      <strong>{{ flag.title }}</strong>
+      <span class="muted">{{ flag.text }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
 {% if price_history or complex_stats %}
 <section class="section grid-2">
   <section class="panel">
     <h2>История цены</h2>
     {% if price_history %}
+    {% if price_chart_points|length > 1 %}
+    <div class="price-chart" aria-label="График истории цены">
+      {% for point in price_chart_points %}
+      <div
+        class="price-bar"
+        style="height: {{ point.height }}%;"
+        title="{{ point.observed_at | astana_time }}: {{ '{:,.0f}'.format(point.listed_price) }} тг"
+      ></div>
+      {% endfor %}
+    </div>
+    {% endif %}
     <ul class="history-list">
       {% for point in price_history %}
       <li>

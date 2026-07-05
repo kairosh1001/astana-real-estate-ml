@@ -154,6 +154,17 @@
         {% endfor %}
       </select>
     </label>
+    <label>
+      Сортировка
+      <select name="sort">
+        <option value="q10_discount" {% if selected_sort == "q10_discount" %}selected{% endif %}>По выгоде q10</option>
+        <option value="median_discount" {% if selected_sort == "median_discount" %}selected{% endif %}>По выгоде медианы</option>
+        <option value="newest" {% if selected_sort == "newest" %}selected{% endif %}>Сначала новые</option>
+        <option value="listed_price" {% if selected_sort == "listed_price" %}selected{% endif %}>По общей цене</option>
+        <option value="price_per_m2" {% if selected_sort == "price_per_m2" %}selected{% endif %}>По цене за м²</option>
+        <option value="area_desc" {% if selected_sort == "area_desc" %}selected{% endif %}>По площади</option>
+      </select>
+    </label>
     <button type="submit">Применить</button>
     <a class="button secondary" href="/undervalued-page">Сбросить</a>
     </div>

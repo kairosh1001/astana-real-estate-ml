@@ -560,6 +560,43 @@
         border-bottom: 0;
         padding-bottom: 0;
       }
+      .price-chart {
+        align-items: end;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        gap: 10px;
+        min-height: 150px;
+        padding-top: 14px;
+      }
+      .price-bar {
+        background: linear-gradient(180deg, var(--teal), var(--teal-dark));
+        border-radius: 6px 6px 0 0;
+        flex: 1;
+        min-width: 24px;
+      }
+      .risk-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .risk-item {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+        background: #fbfcfa;
+      }
+      .risk-item strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+      .risk-item.warning {
+        background: var(--amber-bg);
+        border-color: #fedf89;
+      }
+      .risk-item.positive {
+        background: var(--green-bg);
+        border-color: #abefc6;
+      }
       .filter-form {
         display: grid;
         grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -649,6 +686,9 @@
         .search-form, .stack-form, .metric-grid, .filter-form, .quantile-bar {
           grid-template-columns: 1fr;
         }
+        .risk-grid {
+          grid-template-columns: 1fr;
+        }
         #listing-map {
           min-height: 330px;
         }
@@ -732,6 +772,7 @@
           {% endif %}
           <a href="/predict-page">Оценить ссылку</a>
           <a href="/undervalued-page">Ниже рынка</a>
+          <a href="/market-page">Рынок</a>
           <a href="/model-page">О модели</a>
         </nav>
       </div>

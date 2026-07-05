@@ -33,6 +33,7 @@ from app.database import (
     fetch_complex_stats,
     fetch_listing_by_url,
     fetch_listings_by_urls,
+    fetch_market_dashboard,
     fetch_price_history,
     fetch_refresh_runs,
     fetch_status_summary,
@@ -202,6 +203,23 @@ def compare_page(
     )
 
 
+@app.get("/market-page", response_class=HTMLResponse)
+def market_page(request: Request) -> HTMLResponse:
+    with connect(DB_PATH) as db_connection:
+        dashboard = fetch_market_dashboard(db_connection)
+        status_summary = fetch_status_summary(db_connection)
+
+    return templates.TemplateResponse(
+        request,
+        "market.html",
+        {
+            "request": request,
+            "dashboard": dashboard,
+            "summary": status_summary,
+        },
+    )
+
+
 @app.post("/predict-by-link")
 def predict_by_link(payload: PredictByLinkRequest) -> dict:
     try:
@@ -229,6 +247,7 @@ def undervalued(
     map_polygon: str | None = None,
     new_since_hours: str | None = None,
     min_discount_pct: str | None = None,
+    sort: str = "q10_discount",
     include_stale: bool = False,
 ) -> dict:
     selected_districts = valid_district_slugs(district)
@@ -262,6 +281,7 @@ def undervalued(
             polygon=selected_polygon,
             new_since=selected_new_since,
             min_discount_pct=selected_min_discount_pct,
+            sort=sort,
             include_stale=include_stale,
         )
         total = count_undervalued(
@@ -277,6 +297,7 @@ def undervalued(
             polygon=selected_polygon,
             new_since=selected_new_since,
             min_discount_pct=selected_min_discount_pct,
+            sort=sort,
             include_stale=include_stale,
         )
     return {
@@ -295,6 +316,7 @@ def undervalued(
         "map_polygon": selected_polygon,
         "new_since_hours": selected_new_since_hours,
         "min_discount_pct": selected_min_discount_pct,
+        "sort": sort,
     }
 
 
@@ -313,6 +335,7 @@ def undervalued_page(
     map_polygon: str | None = None,
     new_since_hours: str | None = None,
     min_discount_pct: str | None = None,
+    sort: str = "q10_discount",
     include_stale: bool = False,
 ) -> HTMLResponse:
     selected_districts = valid_district_slugs(district)
@@ -345,6 +368,7 @@ def undervalued_page(
             polygon=selected_polygon,
             new_since=selected_new_since,
             min_discount_pct=selected_min_discount_pct,
+            sort=sort,
             include_stale=include_stale,
         )
         total = count_undervalued(
@@ -360,6 +384,7 @@ def undervalued_page(
             polygon=selected_polygon,
             new_since=selected_new_since,
             min_discount_pct=selected_min_discount_pct,
+            sort=sort,
             include_stale=include_stale,
         )
         status_summary = fetch_status_summary(db_connection)
@@ -381,6 +406,7 @@ def undervalued_page(
             "selected_polygon": map_polygon or "",
             "selected_new_since_hours": selected_new_since_hours,
             "selected_min_discount_pct": selected_min_discount_pct,
+            "selected_sort": sort,
             "filter_query": _build_filter_query(
                 districts=selected_districts,
                 rooms=selected_rooms,
@@ -393,6 +419,7 @@ def undervalued_page(
                 map_polygon=map_polygon,
                 new_since_hours=selected_new_since_hours,
                 min_discount_pct=selected_min_discount_pct,
+                sort=sort,
             ),
             "active_listings": status_summary.get("active_listings") or 0,
             "page": safe_page,
@@ -669,6 +696,8 @@ def _prediction_context(request: Request, prediction: object) -> dict:
                 db_connection,
                 listing.get("residential_complex"),
             )
+    risk_flags = _build_risk_flags(prediction, listing, price_history, complex_stats)
+    price_chart_points = _price_chart_points(price_history)
 
     return {
         "request": request,
@@ -676,7 +705,101 @@ def _prediction_context(request: Request, prediction: object) -> dict:
         "listing": listing,
         "price_history": price_history,
         "complex_stats": complex_stats,
+        "risk_flags": risk_flags,
+        "price_chart_points": price_chart_points,
     }
+
+
+def _build_risk_flags(
+    prediction: object,
+    listing: dict | None,
+    price_history: list[dict],
+    complex_stats: dict | None,
+) -> list[dict]:
+    flags = []
+    if getattr(prediction, "interval_width_pct", 0) >= 0.35:
+        flags.append(
+            {
+                "level": "warning",
+                "title": "Широкий интервал оценки",
+                "text": "Модель менее уверена в оценке для этого объявления.",
+            }
+        )
+    if listing and not listing.get("residential_complex"):
+        flags.append(
+            {
+                "level": "neutral",
+                "title": "ЖК не указан",
+                "text": "Сравнение по жилому комплексу для этого объявления ограничено.",
+            }
+        )
+    if listing and (listing.get("lat") is None or listing.get("lon") is None):
+        flags.append(
+            {
+                "level": "warning",
+                "title": "Нет координат",
+                "text": "Карта и географические признаки могут быть менее точными.",
+            }
+        )
+    if complex_stats and complex_stats.get("count", 0) < 3:
+        flags.append(
+            {
+                "level": "neutral",
+                "title": "Мало объявлений по ЖК",
+                "text": "Статистика по жилому комплексу основана на небольшом числе объектов.",
+            }
+        )
+    if len(price_history) >= 2:
+        first_price = price_history[0].get("listed_price") or 0
+        last_price = price_history[-1].get("listed_price") or 0
+        if first_price and last_price < first_price:
+            flags.append(
+                {
+                    "level": "positive",
+                    "title": "Цена снижалась",
+                    "text": f"С момента первого наблюдения цена ниже на {first_price - last_price:,.0f} тг.",
+                }
+            )
+        elif first_price and last_price > first_price:
+            flags.append(
+                {
+                    "level": "warning",
+                    "title": "Цена повышалась",
+                    "text": f"С момента первого наблюдения цена выше на {last_price - first_price:,.0f} тг.",
+                }
+            )
+    if not flags:
+        flags.append(
+            {
+                "level": "positive",
+                "title": "Критичных предупреждений нет",
+                "text": "По доступным данным явных технических ограничений для оценки не найдено.",
+            }
+        )
+    return flags
+
+
+def _price_chart_points(price_history: list[dict]) -> list[dict]:
+    prices = [point.get("listed_price") for point in price_history if point.get("listed_price")]
+    if not prices:
+        return []
+    min_price = min(prices)
+    max_price = max(prices)
+    span = max(max_price - min_price, 1)
+    points = []
+    for point in price_history:
+        price = point.get("listed_price")
+        if not price:
+            continue
+        height = 22 + ((price - min_price) / span) * 78
+        points.append(
+            {
+                "observed_at": point.get("observed_at"),
+                "listed_price": price,
+                "height": height,
+            }
+        )
+    return points
 
 
 def _parse_optional_positive_float(value: str | None) -> float | None:
@@ -759,6 +882,7 @@ def _build_filter_query(
     map_polygon: str | None = None,
     new_since_hours: int | None = None,
     min_discount_pct: float | None = None,
+    sort: str | None = None,
     page: int | None = None,
 ) -> str:
     params = _filter_params(
@@ -773,6 +897,7 @@ def _build_filter_query(
         map_polygon=map_polygon,
         new_since_hours=new_since_hours,
         min_discount_pct=min_discount_pct,
+        sort=sort,
         page=page,
     )
     return urlencode(params)
@@ -791,6 +916,7 @@ def _filter_params(
     map_polygon: str | None = None,
     new_since_hours: int | None = None,
     min_discount_pct: float | None = None,
+    sort: str | None = None,
     page: int | None = None,
 ) -> list[tuple[str, str]]:
     params: list[tuple[str, str]] = []
@@ -818,6 +944,8 @@ def _filter_params(
         params.append(("new_since_hours", str(new_since_hours)))
     if min_discount_pct:
         params.append(("min_discount_pct", _format_filter_number(min_discount_pct * 100)))
+    if sort and sort != "q10_discount":
+        params.append(("sort", sort))
     return params
 
 
