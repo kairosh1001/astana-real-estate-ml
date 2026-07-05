@@ -85,6 +85,19 @@ def init_db(connection: sqlite3.Connection) -> None:
             discount_vs_asking_pct_median REAL,
             interval_width_pct REAL
         );
+
+        CREATE TABLE IF NOT EXISTS listing_price_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            listed_price REAL,
+            listed_price_per_m2 REAL,
+            status TEXT NOT NULL DEFAULT 'active',
+            FOREIGN KEY(url) REFERENCES listings(url) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_price_history_url_observed
+        ON listing_price_history(url, observed_at);
         """
     )
     connection.commit()
@@ -223,6 +236,20 @@ def upsert_listing_prediction(
             "raw_json": raw_json,
             "now": now,
         },
+    )
+    connection.execute(
+        """
+        INSERT INTO listing_price_history (
+            url, observed_at, listed_price, listed_price_per_m2, status
+        )
+        VALUES (?, ?, ?, ?, 'active')
+        """,
+        (
+            prediction.url,
+            now,
+            prediction.listed_price,
+            prediction.listed_price_per_m2,
+        ),
     )
     connection.commit()
 
@@ -375,6 +402,112 @@ def count_undervalued(
             include_stale=include_stale,
         )
     )
+
+
+def fetch_listing_by_url(connection: sqlite3.Connection, url: str) -> dict | None:
+    row = connection.execute(
+        """
+        SELECT
+            url,
+            title,
+            raw_json,
+            status,
+            first_seen_at,
+            last_seen_at,
+            listed_price,
+            area_m2,
+            listed_price_per_m2,
+            pred_price_per_m2_q10,
+            pred_price_per_m2_q50,
+            pred_price_per_m2_q90,
+            pred_total_q50,
+            discount_vs_asking_pct_conservative,
+            discount_vs_asking_pct_median,
+            interval_width_pct
+        FROM listings
+        WHERE url = ?
+        """,
+        (url,),
+    ).fetchone()
+    return _prepare_undervalued_item(dict(row)) if row else None
+
+
+def fetch_listings_by_urls(
+    connection: sqlite3.Connection,
+    urls: list[str],
+) -> list[dict]:
+    result = []
+    for url in urls[:5]:
+        item = fetch_listing_by_url(connection, url)
+        if item:
+            result.append(item)
+    return result
+
+
+def fetch_price_history(
+    connection: sqlite3.Connection,
+    url: str,
+    *,
+    limit: int = 30,
+) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT observed_at, listed_price, listed_price_per_m2, status
+        FROM listing_price_history
+        WHERE url = ?
+        ORDER BY observed_at DESC
+        LIMIT ?
+        """,
+        (url, limit),
+    ).fetchall()
+    return list(reversed([dict(row) for row in rows]))
+
+
+def fetch_complex_stats(
+    connection: sqlite3.Connection,
+    residential_complex: str | None,
+) -> dict | None:
+    query = _clean_text(residential_complex)
+    if not query:
+        return None
+
+    rows = connection.execute(
+        """
+        SELECT raw_json, listed_price_per_m2, discount_vs_asking_pct_conservative
+        FROM listings
+        WHERE status = 'active'
+          AND listed_price_per_m2 IS NOT NULL
+        """
+    ).fetchall()
+    prices = []
+    below_market = 0
+    for row in rows:
+        raw_listing = _load_raw_listing(row["raw_json"])
+        complex_name = _clean_text(raw_listing.get("Жилой комплекс"))
+        if complex_name.casefold() != query.casefold():
+            continue
+        prices.append(float(row["listed_price_per_m2"]))
+        if (row["discount_vs_asking_pct_conservative"] or 0) > 0:
+            below_market += 1
+
+    if not prices:
+        return None
+
+    prices.sort()
+    middle = len(prices) // 2
+    if len(prices) % 2:
+        median_price = prices[middle]
+    else:
+        median_price = (prices[middle - 1] + prices[middle]) / 2
+
+    return {
+        "name": query,
+        "count": len(prices),
+        "below_market": below_market,
+        "min_price_per_m2": min(prices),
+        "median_price_per_m2": median_price,
+        "max_price_per_m2": max(prices),
+    }
 
 
 def _prepare_undervalued_item(row: dict) -> dict:

@@ -60,7 +60,9 @@
         <td data-label="Найдено">{{ item.last_seen_at | astana_time }}</td>
         <td class="action-cell" data-label="Действия">
           <a href="/listing-details?url={{ item.url | urlencode }}">Подробнее</a>
+          <a href="https://t.me/share/url?url={{ item.url | urlencode }}&text={{ item.short_title | urlencode }}" target="_blank" rel="noreferrer">Telegram</a>
           <button class="inline-action" type="button" data-save-listing>Сохранить</button>
+          <button class="inline-action" type="button" data-compare-listing>Сравнить</button>
           <button class="inline-action muted-action" type="button" data-hide-listing>Скрыть</button>
         </td>
       </tr>

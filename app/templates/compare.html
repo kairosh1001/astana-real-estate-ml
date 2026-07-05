@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Сравнение квартир{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Сравнение квартир</h1>
+    <p>
+      Выберите несколько объявлений в рейтинге и сравните цену, оценку модели,
+      жилой комплекс и потенциальную выгоду.
+    </p>
+  </div>
+  <a class="button secondary" href="/undervalued-page">Вернуться к рейтингу</a>
+</div>
+
+{% if not items %}
+<section class="panel empty-state">
+  Выберите объявления в рейтинге с помощью кнопки «Сравнить».
+</section>
+{% else %}
+<section class="panel">
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>Параметр</th>
+          {% for item in items %}
+          <th>{{ item.short_title }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-label="Параметр">Цена</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{{ "{:,.0f}".format(item.listed_price or 0) }} тг</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td data-label="Параметр">Цена за м²</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{{ "{:,.0f}".format(item.listed_price_per_m2 or 0) }} тг</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td data-label="Параметр">Нижняя оценка q10</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{{ "{:,.0f}".format(item.pred_price_per_m2_q10 or 0) }} тг</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td data-label="Параметр">Медианная оценка q50</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{{ "{:,.0f}".format(item.pred_price_per_m2_q50 or 0) }} тг</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td data-label="Параметр">Выгода q10</td>
+          {% for item in items %}
+          <td class="positive" data-label="{{ item.short_title }}">{{ "{:.1%}".format(item.discount_vs_asking_pct_conservative or 0) }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td data-label="Параметр">Район</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{{ item.district_label }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td data-label="Параметр">Жилой комплекс</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{{ item.residential_complex or "—" }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td data-label="Параметр">Ссылки</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">
+            <a href="/listing-details?url={{ item.url | urlencode }}">Подробнее</a>
+            ·
+            <a href="{{ item.url }}" target="_blank" rel="noreferrer">Krisha</a>
+          </td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

@@ -114,6 +114,57 @@
   </div>
 </section>
 
+{% if price_history or complex_stats %}
+<section class="section grid-2">
+  <section class="panel">
+    <h2>История цены</h2>
+    {% if price_history %}
+    <ul class="history-list">
+      {% for point in price_history %}
+      <li>
+        <span>{{ point.observed_at | astana_time }}</span>
+        <strong>{{ "{:,.0f}".format(point.listed_price or 0) }} тг</strong>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">История появится после нескольких обновлений базы.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Жилой комплекс</h2>
+    {% if complex_stats %}
+    <h3>{{ complex_stats.name }}</h3>
+    <dl class="detail-list">
+      <div class="detail-row">
+        <dt>Активных объявлений в базе</dt>
+        <dd>{{ complex_stats.count }}</dd>
+      </div>
+      <div class="detail-row">
+        <dt>Ниже рынка</dt>
+        <dd>{{ complex_stats.below_market }}</dd>
+      </div>
+      <div class="detail-row">
+        <dt>Медиана цены за м²</dt>
+        <dd>{{ "{:,.0f}".format(complex_stats.median_price_per_m2) }} тг</dd>
+      </div>
+      <div class="detail-row">
+        <dt>Диапазон цены за м²</dt>
+        <dd>
+          {{ "{:,.0f}".format(complex_stats.min_price_per_m2) }}
+          -
+          {{ "{:,.0f}".format(complex_stats.max_price_per_m2) }} тг
+        </dd>
+      </div>
+    </dl>
+    {% else %}
+    <p class="muted">По этому ЖК пока недостаточно объявлений в базе.</p>
+    {% endif %}
+  </section>
+</section>
+{% endif %}
+
 <section class="section callout">
   CatBoost - это модель градиентного бустинга. В этом сервисе она обучена на
   объявлениях Krisha по Астане и оценивает цену за м² по характеристикам

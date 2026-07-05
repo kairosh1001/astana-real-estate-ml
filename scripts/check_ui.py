@@ -69,6 +69,26 @@ def seed_listing(db_path: Path) -> None:
                 0.25,
             ),
         )
+        connection.execute(
+            """
+            INSERT INTO listing_price_history (
+                url, observed_at, listed_price, listed_price_per_m2, status
+            )
+            VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)
+            """,
+            (
+                "https://krisha.kz/a/show/123",
+                "2026-06-29T00:00:00+00:00",
+                21000000,
+                525000,
+                "active",
+                "https://krisha.kz/a/show/123",
+                "2026-06-30T00:00:00+00:00",
+                20000000,
+                500000,
+                "active",
+            ),
+        )
         connection.commit()
 
 
@@ -121,6 +141,8 @@ def main() -> None:
     assert_contains(home.text, "Test ЖК")
     assert_contains(home.text, "Сохранить")
     assert_contains(home.text, "Скрыть")
+    assert_contains(home.text, "Сравнить")
+    assert_contains(home.text, "Telegram")
     assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
     assert_contains(home.text, "/model-page")
     assert_not_contains(home.text, "Статус сервиса")
@@ -196,6 +218,17 @@ def main() -> None:
     if details_page.status_code != 200:
         raise SystemExit(f"Listing details page returned {details_page.status_code}")
     assert_contains(details_page.text, "Результат оценки")
+    assert_contains(details_page.text, "История цены")
+    assert_contains(details_page.text, "Жилой комплекс")
+    assert_contains(details_page.text, "Активных объявлений в базе")
+    assert_contains(details_page.text, "2026-06-30 05:00")
+
+    compare_page = client.get("/compare-page?url=https://krisha.kz/a/show/123")
+    if compare_page.status_code != 200:
+        raise SystemExit(f"Compare page returned {compare_page.status_code}")
+    assert_contains(compare_page.text, "Сравнение квартир")
+    assert_contains(compare_page.text, "3-комнатная квартира · 40 м²")
+    assert_contains(compare_page.text, "Выгода q10")
 
     for path in ["/refresh-runs", "/status-summary"]:
         response = client.get(path)
@@ -256,6 +289,7 @@ def main() -> None:
         "Новые за 24 часа",
         "Минимальная выгода q10",
         "Только сохранённые",
+        "Выбрано для сравнения",
         "Активных объявлений в базе: 1",
         "Зона на карте",
         "map_polygon",

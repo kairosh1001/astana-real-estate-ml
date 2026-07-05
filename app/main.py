@@ -30,6 +30,10 @@ from app.database import (
     DISTRICT_OPTIONS,
     connect,
     count_undervalued,
+    fetch_complex_stats,
+    fetch_listing_by_url,
+    fetch_listings_by_urls,
+    fetch_price_history,
     fetch_refresh_runs,
     fetch_status_summary,
     fetch_undervalued,
@@ -151,7 +155,7 @@ def predict_page(request: Request, url: str = "") -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "result.html",
-        {"request": request, "prediction": prediction},
+        _prediction_context(request, prediction),
     )
 
 
@@ -170,7 +174,31 @@ def predict_form(request: Request, url: str = Form(...)) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "result.html",
-        {"request": request, "prediction": prediction},
+        _prediction_context(request, prediction),
+    )
+
+
+@app.get("/compare-page", response_class=HTMLResponse)
+def compare_page(
+    request: Request,
+    url: list[str] | None = Query(default=None),
+) -> HTMLResponse:
+    selected_urls = []
+    for value in url or []:
+        if value not in selected_urls:
+            selected_urls.append(value)
+
+    with connect(DB_PATH) as db_connection:
+        items = fetch_listings_by_urls(db_connection, selected_urls)
+
+    return templates.TemplateResponse(
+        request,
+        "compare.html",
+        {
+            "request": request,
+            "items": items,
+            "selected_count": len(selected_urls),
+        },
     )
 
 
@@ -626,6 +654,28 @@ def _default_refresh_form() -> dict:
         "min_delay": 1.0,
         "max_delay": 2.0,
         "max_listings": 0,
+    }
+
+
+def _prediction_context(request: Request, prediction: object) -> dict:
+    listing = None
+    price_history = []
+    complex_stats = None
+    with connect(DB_PATH) as db_connection:
+        listing = fetch_listing_by_url(db_connection, prediction.url)
+        price_history = fetch_price_history(db_connection, prediction.url)
+        if listing:
+            complex_stats = fetch_complex_stats(
+                db_connection,
+                listing.get("residential_complex"),
+            )
+
+    return {
+        "request": request,
+        "prediction": prediction,
+        "listing": listing,
+        "price_history": price_history,
+        "complex_stats": complex_stats,
     }
 
 

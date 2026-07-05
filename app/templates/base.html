@@ -451,6 +451,35 @@
       body.show-saved-only tr[data-listing-row]:not(.saved-listing) {
         display: none;
       }
+      .compare-bar {
+        position: fixed;
+        left: 50%;
+        bottom: 18px;
+        z-index: 900;
+        transform: translateX(-50%);
+        width: min(720px, calc(100% - 28px));
+        border: 1px solid #99d6c4;
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: var(--shadow);
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+      }
+      .compare-bar.active {
+        display: flex;
+      }
+      .compare-bar span {
+        color: var(--text);
+        font-weight: 700;
+      }
+      .compare-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
       .positive {
         color: #067647;
         font-weight: 700;
@@ -512,6 +541,24 @@
         border-radius: 8px;
         color: #7a4b08;
         padding: 14px;
+      }
+      .history-list {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .history-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        border-bottom: 1px solid #edf0ea;
+        padding-bottom: 9px;
+      }
+      .history-list li:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
       }
       .filter-form {
         display: grid;
@@ -617,6 +664,14 @@
         .toolbar .button {
           margin-top: 12px;
         }
+        .compare-bar {
+          display: none;
+          align-items: stretch;
+          flex-direction: column;
+        }
+        .compare-bar.active {
+          display: flex;
+        }
         .listing-table {
           min-width: 0;
         }
@@ -690,10 +745,18 @@
         <span>Разработчик - Кайрат Жаркынбай</span>
       </div>
     </footer>
+    <div class="compare-bar" data-compare-bar>
+      <span data-compare-count>Выбрано для сравнения: 0</span>
+      <div class="compare-actions">
+        <a class="button" href="/compare-page" data-open-compare>Сравнить</a>
+        <button class="button secondary compact-action" type="button" data-clear-compare>Очистить</button>
+      </div>
+    </div>
     <script>
       (function () {
         const savedKey = "krisha_saved_listing_urls";
         const hiddenKey = "krisha_hidden_listing_urls";
+        const compareKey = "krisha_compare_listing_urls";
 
         function readSet(key) {
           try {
@@ -709,6 +772,7 @@
 
         let saved = readSet(savedKey);
         let hidden = readSet(hiddenKey);
+        let compare = readSet(compareKey);
 
         function applyState() {
           document.querySelectorAll("[data-listing-row]").forEach((row) => {
@@ -724,7 +788,26 @@
             if (hideButton) {
               hideButton.textContent = hidden.has(url) ? "Вернуть" : "Скрыть";
             }
+            const compareButton = row.querySelector("[data-compare-listing]");
+            if (compareButton) {
+              compareButton.textContent = compare.has(url) ? "В сравнении" : "Сравнить";
+            }
           });
+
+          const compareBar = document.querySelector("[data-compare-bar]");
+          const compareCount = document.querySelector("[data-compare-count]");
+          const openCompare = document.querySelector("[data-open-compare]");
+          const urls = Array.from(compare).slice(0, 5);
+          if (compareBar) {
+            compareBar.classList.toggle("active", urls.length > 0);
+          }
+          if (compareCount) {
+            compareCount.textContent = `Выбрано для сравнения: ${urls.length}`;
+          }
+          if (openCompare) {
+            const query = urls.map((url) => `url=${encodeURIComponent(url)}`).join("&");
+            openCompare.href = query ? `/compare-page?${query}` : "/compare-page";
+          }
         }
 
         document.addEventListener("click", (event) => {
@@ -752,6 +835,22 @@
             return;
           }
 
+          const compareButton = event.target.closest("[data-compare-listing]");
+          if (compareButton) {
+            const row = compareButton.closest("[data-listing-row]");
+            const url = row && row.dataset.url;
+            if (url) {
+              if (compare.has(url)) {
+                compare.delete(url);
+              } else if (compare.size < 5) {
+                compare.add(url);
+              }
+              writeSet(compareKey, compare);
+              applyState();
+            }
+            return;
+          }
+
           const hiddenToggle = event.target.closest("[data-toggle-hidden]");
           if (hiddenToggle) {
             document.body.classList.toggle("show-hidden-listings");
@@ -767,6 +866,14 @@
             savedToggle.textContent = document.body.classList.contains("show-saved-only")
               ? "Показать все"
               : "Только сохранённые";
+            return;
+          }
+
+          const clearCompare = event.target.closest("[data-clear-compare]");
+          if (clearCompare) {
+            compare = new Set();
+            writeSet(compareKey, compare);
+            applyState();
           }
         });
 
