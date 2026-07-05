@@ -57,6 +57,28 @@
 <section class="section panel">
   <div class="toolbar">
     <div>
+      <h2>Новые выгодные за 24 часа</h2>
+      <p class="muted">
+        Свежие объявления, которые впервые попали в базу за последние сутки и проходят фильтр ниже рынка по q10.
+        Если список пустой, значит за сутки новых вариантов с запасом по низкой оценке не найдено.
+      </p>
+    </div>
+    <a class="button secondary" href="/undervalued-page?new_since_hours=24">Открыть все новые</a>
+  </div>
+  <div class="section">
+    {% set top_items = items %}
+    {% set top_start_rank = start_rank %}
+    {% set items = fresh_items %}
+    {% set start_rank = 1 %}
+    {% include "_undervalued_table.html" %}
+    {% set items = top_items %}
+    {% set start_rank = top_start_rank %}
+  </div>
+</section>
+
+<section class="section panel">
+  <div class="toolbar">
+    <div>
       <h2>Топ-10 квартир ниже рынка</h2>
       <p class="muted">
         Сейчас в базе: {{ total_undervalued }} активных вариантов ниже рынка.

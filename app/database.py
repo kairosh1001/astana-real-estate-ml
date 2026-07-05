@@ -982,6 +982,31 @@ def fetch_refresh_runs(
     return [dict(row) for row in rows]
 
 
+def fetch_running_refresh(connection: sqlite3.Connection) -> dict | None:
+    row = connection.execute(
+        """
+        SELECT
+            id,
+            started_at,
+            finished_at,
+            kind,
+            start_page,
+            end_page,
+            pages_seen,
+            urls_seen,
+            listings_processed,
+            listings_failed,
+            status,
+            error
+        FROM refresh_runs
+        WHERE status = 'running'
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def fetch_status_summary(connection: sqlite3.Connection) -> dict:
     listing_counts = connection.execute(
         """

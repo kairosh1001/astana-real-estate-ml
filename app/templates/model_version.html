@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Версия модели{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Версия модели</h1>
+    <p>
+      Админская страница для проверки, какие CatBoost-файлы сейчас загружены в сервис
+      и с каким набором признаков они должны работать.
+    </p>
+  </div>
+  <a class="button secondary" href="/model-monitoring-page">Мониторинг модели</a>
+</div>
+
+<section class="metric-grid">
+  <div class="metric">
+    <span>Целевая переменная</span>
+    <strong>{{ model_info.target or "-" }}</strong>
+  </div>
+  <div class="metric">
+    <span>Признаков</span>
+    <strong>{{ model_info.feature_count }}</strong>
+  </div>
+  <div class="metric">
+    <span>Категориальных</span>
+    <strong>{{ model_info.categorical_count }}</strong>
+  </div>
+</section>
+
+<section class="section panel">
+  <h2>Файлы модели</h2>
+  <p class="muted">
+    Время указано по Астане. После retrain здесь должно измениться время файлов q10, q50 и q90.
+  </p>
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>Квантиль</th>
+          <th>Файл</th>
+          <th>Размер</th>
+          <th>Изменён</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in model_info.model_files %}
+        <tr>
+          <td data-label="Квантиль">{{ item.quantile }}</td>
+          <td data-label="Файл">{{ item.filename }}</td>
+          <td data-label="Размер">
+            {% if item.size_mb is not none %}{{ "{:.1f}".format(item.size_mb) }} MB{% else %}-{% endif %}
+          </td>
+          <td data-label="Изменён">{{ item.modified_at | astana_time }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section panel">
+  <h2>Metadata</h2>
+  <dl class="detail-list">
+    <div class="detail-row">
+      <dt>Файл metadata</dt>
+      <dd>{{ model_info.metadata_modified_at | astana_time }}</dd>
+    </div>
+  </dl>
+</section>
+{% endblock %}

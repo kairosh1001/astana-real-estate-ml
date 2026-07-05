@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import secrets
 import time
 from dataclasses import asdict
@@ -37,11 +38,13 @@ from app.database import (
     fetch_monitoring_snapshots,
     fetch_price_history,
     fetch_refresh_runs,
+    fetch_running_refresh,
     fetch_status_summary,
     fetch_undervalued,
     init_db,
     valid_district_slugs,
 )
+from app.model_service import MODEL_FILENAMES
 from app.prediction_service import PredictionService
 from app.refresh_service import run_refresh
 
@@ -95,6 +98,12 @@ def home(request: Request) -> HTMLResponse:
             limit=HOME_UNDERVALUED_LIMIT,
             include_stale=False,
         )
+        fresh_items = fetch_undervalued(
+            db_connection,
+            limit=5,
+            new_since=_new_since_threshold(24),
+            include_stale=False,
+        )
         total_undervalued = count_undervalued(db_connection, include_stale=False)
         status_summary = fetch_status_summary(db_connection)
 
@@ -106,6 +115,7 @@ def home(request: Request) -> HTMLResponse:
             "error": None,
             "url": "",
             "items": preview_items,
+            "fresh_items": fresh_items,
             "total_undervalued": total_undervalued,
             "active_listings": status_summary.get("active_listings") or 0,
             "latest_refresh": status_summary.get("latest_refresh"),
@@ -130,6 +140,15 @@ def model_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "model.html",
+        {"request": request},
+    )
+
+
+@app.get("/about-page", response_class=HTMLResponse)
+def about_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "about.html",
         {"request": request},
     )
 
@@ -555,6 +574,22 @@ def model_monitoring_page(
     )
 
 
+@app.get("/model-version-page", response_class=HTMLResponse)
+def model_version_page(request: Request) -> Response:
+    redirect = _admin_page_redirect_if_needed(request)
+    if redirect:
+        return redirect
+
+    return templates.TemplateResponse(
+        request,
+        "model_version.html",
+        {
+            "request": request,
+            "model_info": _model_version_info(),
+        },
+    )
+
+
 @app.get("/refresh-runs-page", response_class=HTMLResponse)
 def refresh_runs_page(
     request: Request,
@@ -581,6 +616,8 @@ def admin_refresh_page(
     if redirect:
         return redirect
 
+    with connect(DB_PATH) as db_connection:
+        running_refresh = fetch_running_refresh(db_connection)
     return templates.TemplateResponse(
         request,
         "admin_refresh.html",
@@ -589,6 +626,7 @@ def admin_refresh_page(
             "error": None,
             "message": None,
             "form": _default_refresh_form(),
+            "running_refresh": running_refresh,
         },
     )
 
@@ -626,12 +664,24 @@ def admin_refresh_form(
             max_listings=max_listings,
         )
     except ValueError as exc:
+        with connect(DB_PATH) as db_connection:
+            running_refresh = fetch_running_refresh(db_connection)
         return templates.TemplateResponse(
             request,
             "admin_refresh.html",
-            {"request": request, "error": str(exc), "message": None, "form": form},
+            {
+                "request": request,
+                "error": str(exc),
+                "message": None,
+                "form": form,
+                "running_refresh": running_refresh,
+            },
             status_code=400,
         )
+
+    conflict_response = _refresh_conflict_response(request, form)
+    if conflict_response:
+        return conflict_response
 
     background_tasks.add_task(
         run_refresh,
@@ -652,7 +702,27 @@ def admin_refresh_form(
             "error": None,
             "message": "Обновление запущено. Проверьте историю обновлений через несколько минут.",
             "form": form,
+            "running_refresh": None,
         },
+    )
+
+
+def _refresh_conflict_response(request: Request, form: dict) -> HTMLResponse | None:
+    with connect(DB_PATH) as db_connection:
+        running_refresh = fetch_running_refresh(db_connection)
+    if not running_refresh:
+        return None
+    return templates.TemplateResponse(
+        request,
+        "admin_refresh.html",
+        {
+            "request": request,
+            "error": f"Обновление уже выполняется: run #{running_refresh['id']}. Дождитесь завершения.",
+            "message": None,
+            "form": form,
+            "running_refresh": running_refresh,
+        },
+        status_code=409,
     )
 
 
@@ -677,6 +747,14 @@ def refresh_listings(
         if "админ-токен" in str(exc):
             status_code = 403
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+
+    with connect(DB_PATH) as db_connection:
+        running_refresh = fetch_running_refresh(db_connection)
+    if running_refresh:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Обновление уже выполняется: run #{running_refresh['id']}.",
+        )
 
     background_tasks.add_task(
         run_refresh,
@@ -707,6 +785,61 @@ def _default_refresh_form() -> dict:
         "min_delay": 1.0,
         "max_delay": 2.0,
         "max_listings": 0,
+    }
+
+
+def _model_version_info() -> dict:
+    metadata_path = ROOT / "model_metadata.json"
+    metadata = {
+        "feature_columns": prediction_service.model_service.metadata.feature_columns,
+        "categorical_features": prediction_service.model_service.metadata.categorical_features,
+        "target": prediction_service.model_service.metadata.target,
+    }
+    if metadata_path.exists():
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            pass
+
+    model_files = []
+    for quantile, filename in MODEL_FILENAMES.items():
+        path = ROOT / "models" / filename
+        if path.exists():
+            stat = path.stat()
+            model_files.append(
+                {
+                    "quantile": quantile,
+                    "filename": filename,
+                    "size_mb": stat.st_size / (1024 * 1024),
+                    "modified_at": datetime.fromtimestamp(
+                        stat.st_mtime,
+                        timezone.utc,
+                    ).isoformat(timespec="seconds"),
+                }
+            )
+        else:
+            model_files.append(
+                {
+                    "quantile": quantile,
+                    "filename": filename,
+                    "size_mb": None,
+                    "modified_at": None,
+                }
+            )
+
+    return {
+        "target": metadata.get("target"),
+        "feature_count": len(metadata.get("feature_columns") or []),
+        "categorical_count": len(metadata.get("categorical_features") or []),
+        "metadata_modified_at": (
+            datetime.fromtimestamp(
+                metadata_path.stat().st_mtime,
+                timezone.utc,
+            ).isoformat(timespec="seconds")
+            if metadata_path.exists()
+            else None
+        ),
+        "model_files": model_files,
     }
 
 

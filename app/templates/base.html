@@ -774,6 +774,7 @@
           <a href="/undervalued-page">Ниже рынка</a>
           <a href="/market-page">Рынок</a>
           <a href="/model-page">О модели</a>
+          <a href="/about-page">О проекте</a>
         </nav>
       </div>
     </header>
@@ -915,8 +916,42 @@
             compare = new Set();
             writeSet(compareKey, compare);
             applyState();
+            return;
+          }
+
+          const copyButton = event.target.closest("[data-copy-current-url]");
+          if (copyButton) {
+            const originalText = copyButton.textContent;
+            const url = window.location.href;
+            const done = function () {
+              copyButton.textContent = "Ссылка скопирована";
+              window.setTimeout(function () {
+                copyButton.textContent = originalText;
+              }, 1800);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(url).then(done).catch(function () {
+                fallbackCopy(url);
+                done();
+              });
+            } else {
+              fallbackCopy(url);
+              done();
+            }
           }
         });
+
+        function fallbackCopy(text) {
+          const input = document.createElement("textarea");
+          input.value = text;
+          input.setAttribute("readonly", "");
+          input.style.position = "absolute";
+          input.style.left = "-9999px";
+          document.body.appendChild(input);
+          input.select();
+          document.execCommand("copy");
+          document.body.removeChild(input);
+        }
 
         applyState();
       })();

@@ -8,6 +8,13 @@
   {% if message %}
   <p class="success">{{ message }}</p>
   {% endif %}
+  {% if running_refresh %}
+  <p class="callout">
+    Сейчас уже выполняется обновление run #{{ running_refresh.id }}:
+    {{ running_refresh.started_at | astana_time }}.
+    Новый запуск лучше делать после завершения текущего.
+  </p>
+  {% endif %}
   <form class="stack-form" method="post" action="/admin-refresh">
     <label>
       Тип обновления
@@ -37,9 +44,10 @@
       Макс. пауза, сек.
       <input name="max_delay" type="number" min="0" step="0.1" value="{{ form.max_delay }}" required>
     </label>
-    <button class="wide" type="submit">Запустить обновление</button>
+    <button class="wide" type="submit" {% if running_refresh %}disabled{% endif %}>Запустить обновление</button>
   </form>
 </section>
 <p><a class="button" href="/refresh-runs-page">История обновлений</a></p>
+<p><a class="button secondary" href="/model-version-page">Версия модели</a></p>
 <p><a class="button" href="/">Назад</a></p>
 {% endblock %}

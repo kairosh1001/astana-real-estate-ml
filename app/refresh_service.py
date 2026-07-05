@@ -9,6 +9,7 @@ from app.database import (
     connect,
     create_monitoring_snapshot,
     finish_refresh_run,
+    fetch_running_refresh,
     init_db,
     iter_unique_urls,
     mark_refresh_started,
@@ -47,6 +48,12 @@ def run_refresh(
     end_page = start_page + pages - 1
     connection = connect(db_path)
     init_db(connection)
+    running_refresh = fetch_running_refresh(connection)
+    if running_refresh:
+        connection.close()
+        raise RuntimeError(
+            f"Refresh уже выполняется: run #{running_refresh['id']}."
+        )
     run_id = start_refresh_run(
         connection,
         kind=kind,

@@ -134,6 +134,7 @@ def main() -> None:
     assert_contains(home.text, "CatBoost оценивает")
     assert_contains(home.text, "Квартиры ниже рынка в Астане")
     assert_contains(home.text, "Топ-10 квартир ниже рынка")
+    assert_contains(home.text, "Новые выгодные за 24 часа")
     assert_contains(home.text, "Активных объявлений в базе: 1")
     assert_contains(home.text, "Последнее обновление: 2026-06-29 05:05")
     assert_contains(home.text, "Медианная оценка")
@@ -148,6 +149,7 @@ def main() -> None:
     assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
     assert_contains(home.text, "/model-page")
     assert_contains(home.text, "/market-page")
+    assert_contains(home.text, "/about-page")
     assert_not_contains(home.text, "Статус сервиса")
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")
@@ -249,6 +251,17 @@ def main() -> None:
     ]:
         assert_contains(market_page.text, needle)
 
+    about_page = client.get("/about-page")
+    if about_page.status_code != 200:
+        raise SystemExit(f"About page returned {about_page.status_code}")
+    for needle in [
+        "О проекте",
+        "Для кого",
+        "Источник данных",
+        "Данные получены из открытых объявлений на сайте krisha.kz",
+    ]:
+        assert_contains(about_page.text, needle)
+
     for path in ["/refresh-runs", "/status-summary"]:
         response = client.get(path)
         if response.status_code != 401:
@@ -259,6 +272,7 @@ def main() -> None:
         "/status-page",
         "/admin-refresh-page",
         "/model-monitoring-page",
+        "/model-version-page",
     ]:
         response = client.get(path, follow_redirects=False)
         if response.status_code != 303:
@@ -315,6 +329,7 @@ def main() -> None:
         "Сортировка",
         "Сначала новые",
         "Только сохранённые",
+        "Скопировать поиск",
         "Выбрано для сравнения",
         "Активных объявлений в базе: 1",
         "Зона на карте",
@@ -454,6 +469,7 @@ def main() -> None:
         "Квартир ниже рынка",
         "Последнее обновление",
         "Мониторинг модели",
+        "Версия модели",
         "2026-06-29 05:05",
     ]:
         assert_contains(status_page.text, needle)
@@ -469,6 +485,18 @@ def main() -> None:
         "Медиана q50/м²",
     ]:
         assert_contains(monitoring_page.text, needle)
+
+    model_version_page = client.get("/model-version-page")
+    if model_version_page.status_code != 200:
+        raise SystemExit(f"Model version page returned {model_version_page.status_code}")
+    for needle in [
+        "Версия модели",
+        "Целевая переменная",
+        "catboost_q10_price_per_m2_log.cbm",
+        "catboost_q50_price_per_m2_log.cbm",
+        "catboost_q90_price_per_m2_log.cbm",
+    ]:
+        assert_contains(model_version_page.text, needle)
 
     admin_page = client.get("/admin-refresh-page")
     if admin_page.status_code != 200:
