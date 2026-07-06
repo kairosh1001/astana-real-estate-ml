@@ -72,6 +72,12 @@
           {% endfor %}
         </tr>
         <tr>
+          <td data-label="Параметр">Застройщик</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{{ item.developer or "—" }}</td>
+          {% endfor %}
+        </tr>
+        <tr>
           <td data-label="Параметр">Ссылки</td>
           {% for item in items %}
           <td data-label="{{ item.short_title }}">

@@ -747,11 +747,26 @@ def _prepare_undervalued_item(row: dict) -> dict:
     row["rooms"] = _extract_rooms(row.get("title"))
     row["construction_year"] = _extract_int(raw_listing.get("Год постройки"))
     row["residential_complex"] = _clean_text(raw_listing.get("Жилой комплекс"))
+    row["developer"] = _extract_developer(raw_listing)
     row["lat"] = _extract_float(raw_listing.get("lat"))
     row["lon"] = _extract_float(raw_listing.get("lon"))
     row["short_title"] = _short_listing_title(row.get("title"), row.get("area_m2"))
     row.pop("raw_json", None)
     return row
+
+
+def _extract_developer(raw_listing: dict) -> str:
+    for key in [
+        "Застройщик",
+        "Застройщик ЖК",
+        "Застройщик жилого комплекса",
+        "developer",
+        "builder",
+    ]:
+        cleaned = _clean_text(raw_listing.get(key))
+        if cleaned:
+            return cleaned
+    return ""
 
 
 def _sort_undervalued_items(items: list[dict], sort: str) -> list[dict]:

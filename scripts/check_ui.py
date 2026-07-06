@@ -52,7 +52,7 @@ def seed_listing(db_path: Path) -> None:
             (
                 "https://krisha.kz/a/show/123",
                 "3-комнатная квартира, 80 м², 7/12 этаж, рядом с парком",
-                '{"Город": "Астана, Есиль р-н", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "lat": 51.13, "lon": 71.43}',
+                '{"Город": "Астана, Есиль р-н", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "Застройщик": "Test Developer", "lat": 51.13, "lon": 71.43}',
                 first_seen_at,
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
@@ -141,7 +141,9 @@ def main() -> None:
     assert_contains(home.text, "3-комнатная квартира · 40 м²")
     assert_contains(home.text, "Есиль")
     assert_contains(home.text, "Жилой комплекс")
+    assert_contains(home.text, "Застройщик")
     assert_contains(home.text, "Test ЖК")
+    assert_contains(home.text, "Test Developer")
     assert_contains(home.text, "Сохранить")
     assert_contains(home.text, "Скрыть")
     assert_contains(home.text, "Сравнить")
@@ -228,6 +230,8 @@ def main() -> None:
     assert_contains(details_page.text, "На что обратить внимание")
     assert_contains(details_page.text, "Цена снижалась")
     assert_contains(details_page.text, "Жилой комплекс")
+    assert_contains(details_page.text, "Застройщик")
+    assert_contains(details_page.text, "Test Developer")
     assert_contains(details_page.text, "Активных объявлений в базе")
     assert_contains(details_page.text, "2026-06-30 05:00")
 
@@ -237,6 +241,8 @@ def main() -> None:
     assert_contains(compare_page.text, "Сравнение квартир")
     assert_contains(compare_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(compare_page.text, "Выгода q10")
+    assert_contains(compare_page.text, "Застройщик")
+    assert_contains(compare_page.text, "Test Developer")
 
     market_page = client.get("/market-page")
     if market_page.status_code != 200:
@@ -313,6 +319,7 @@ def main() -> None:
         "№",
         "Krisha",
         "Жилой комплекс",
+        "Застройщик",
         "Нижняя оценка",
         "Медианная оценка",
         "Выгода q10",
@@ -337,6 +344,7 @@ def main() -> None:
         "leaflet",
         "Есиль",
         "Test ЖК",
+        "Test Developer",
         "3-комнатная квартира · 40 м²",
         "Подробнее",
         "/listing-details?url=",

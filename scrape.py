@@ -73,6 +73,9 @@ class ApartmentScraper:
                     advert = data.get('advert', {})
                     row_data['lat'] = advert.get('map', {}).get('lat')
                     row_data['lon'] = advert.get('map', {}).get('lon')
+                    developer = self.find_developer_name(advert)
+                    if developer:
+                        row_data['Застройщик'] = developer
 
             # 3. Apartment Info
             info_container = soup.select_one('.offer__advert-info')
@@ -95,6 +98,36 @@ class ApartmentScraper:
             return row_data
         except Exception:
             return None
+
+    def find_developer_name(self, value) -> Optional[str]:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                key_text = str(key).lower()
+                if any(marker in key_text for marker in ["застрой", "developer", "builder"]):
+                    cleaned = self.extract_name_from_value(item)
+                    if cleaned:
+                        return cleaned
+                nested = self.find_developer_name(item)
+                if nested:
+                    return nested
+        elif isinstance(value, list):
+            for item in value:
+                nested = self.find_developer_name(item)
+                if nested:
+                    return nested
+        return None
+
+    @staticmethod
+    def extract_name_from_value(value) -> Optional[str]:
+        if isinstance(value, str):
+            cleaned = value.strip()
+            return cleaned or None
+        if isinstance(value, dict):
+            for key in ["name", "title", "label"]:
+                item = value.get(key)
+                if isinstance(item, str) and item.strip():
+                    return item.strip()
+        return None
     
     def get_listing_urls(self, page_url: str) -> List[str]:
         html = self.fetch_page(page_url)
