@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Предложения пользователей{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Предложения пользователей</h1>
+    <p>Приватная админская страница. После обработки предложение можно удалить.</p>
+  </div>
+  <div class="listing-actions-bar">
+    <a class="button secondary" href="/status-page">Статус сервиса</a>
+    <a class="button secondary" href="/traffic-page">Трафик сайта</a>
+  </div>
+</div>
+
+{% if message %}
+<p class="success">{{ message }}</p>
+{% endif %}
+
+<section class="panel">
+  {% if not items %}
+  <div class="empty-state">Предложений пока нет.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>Время</th>
+          <th>Email</th>
+          <th>Сообщение</th>
+          <th>Посетитель</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td data-label="Время">{{ item.created_at | astana_time }}</td>
+          <td data-label="Email">{{ item.email or "—" }}</td>
+          <td data-label="Сообщение" class="feedback-message">{{ item.message }}</td>
+          <td data-label="Посетитель">{{ item.client_hash[:8] }}</td>
+          <td data-label="Действие">
+            <form method="post" action="/feedback-admin-delete">
+              <input type="hidden" name="feedback_id" value="{{ item.id }}">
+              <button class="compact-action" type="submit">Удалить</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

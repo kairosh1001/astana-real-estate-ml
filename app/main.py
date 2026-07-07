@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import time
 from dataclasses import asdict
@@ -31,8 +32,11 @@ from app.database import (
     DISTRICT_OPTIONS,
     connect,
     count_undervalued,
+    create_feedback_message,
+    delete_feedback_message,
     fetch_complex_stats,
     fetch_cached_prediction,
+    fetch_feedback_messages,
     fetch_listing_by_url,
     fetch_listings_by_urls,
     fetch_market_dashboard,
@@ -191,6 +195,65 @@ def about_page(request: Request) -> HTMLResponse:
         request,
         "about.html",
         {"request": request},
+    )
+
+
+@app.get("/feedback-page", response_class=HTMLResponse)
+def feedback_page(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "feedback.html",
+        {
+            "request": request,
+            "error": None,
+            "message": "",
+            "email": "",
+            "success": False,
+        },
+    )
+
+
+@app.post("/feedback-page", response_class=HTMLResponse)
+def submit_feedback(
+    request: Request,
+    message: str = Form(...),
+    email: str = Form(""),
+) -> HTMLResponse:
+    cleaned_email = _parse_optional_email(email)
+    cleaned_message = message.strip()
+    error = _feedback_error(cleaned_message, cleaned_email, email)
+    if error:
+        return templates.TemplateResponse(
+            request,
+            "feedback.html",
+            {
+                "request": request,
+                "error": error,
+                "message": cleaned_message,
+                "email": email.strip(),
+                "success": False,
+            },
+            status_code=400,
+        )
+
+    with connect(DB_PATH) as db_connection:
+        create_feedback_message(
+            db_connection,
+            email=cleaned_email,
+            message=cleaned_message,
+            client_hash=_client_hash(request),
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "feedback.html",
+        {
+            "request": request,
+            "error": None,
+            "message": "",
+            "email": "",
+            "success": True,
+        },
     )
 
 
@@ -680,6 +743,60 @@ def traffic_page(
             "rate_limit_per_minute": PREDICT_RATE_LIMIT_PER_MINUTE,
             "rate_limit_per_hour": PREDICT_RATE_LIMIT_PER_HOUR,
             "cache_ttl_hours": PREDICTION_CACHE_TTL_SECONDS / 3600,
+        },
+    )
+
+
+@app.get("/feedback-admin-page", response_class=HTMLResponse)
+def feedback_admin_page(
+    request: Request,
+    limit: int = 100,
+) -> Response:
+    redirect = _admin_page_redirect_if_needed(request)
+    if redirect:
+        return redirect
+
+    safe_limit = min(max(limit, 1), 200)
+    with connect(DB_PATH) as db_connection:
+        items = fetch_feedback_messages(db_connection, limit=safe_limit)
+
+    return templates.TemplateResponse(
+        request,
+        "feedback_admin.html",
+        {
+            "request": request,
+            "items": items,
+            "message": None,
+        },
+    )
+
+
+@app.post("/feedback-admin-delete", response_class=HTMLResponse)
+def delete_feedback_admin(
+    request: Request,
+    feedback_id: int = Form(...),
+) -> Response:
+    redirect = _admin_page_redirect_if_needed(request)
+    if redirect:
+        return redirect
+
+    with connect(DB_PATH) as db_connection:
+        deleted = delete_feedback_message(db_connection, feedback_id)
+        items = fetch_feedback_messages(db_connection, limit=100)
+
+    return templates.TemplateResponse(
+        request,
+        "feedback_admin.html",
+        {
+            "request": request,
+            "items": items,
+            "message": (
+                "\u041f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435 "
+                "\u0443\u0434\u0430\u043b\u0435\u043d\u043e."
+                if deleted
+                else "\u041f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u0435 "
+                "\u0443\u0436\u0435 \u0443\u0434\u0430\u043b\u0435\u043d\u043e."
+            ),
         },
     )
 
@@ -1180,6 +1297,31 @@ def _parse_optional_text(value: str | None) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def _parse_optional_email(value: str | None) -> str | None:
+    cleaned = (value or "").strip()
+    return cleaned or None
+
+
+def _feedback_error(
+    message: str,
+    cleaned_email: str | None,
+    raw_email: str,
+) -> str | None:
+    if len(message) < 10:
+        return "\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430, \u0445\u043e\u0442\u044f \u0431\u044b 10 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432."
+    if len(message) > 3000:
+        return "\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0441\u043b\u0438\u0448\u043a\u043e\u043c \u0434\u043b\u0438\u043d\u043d\u043e\u0435. \u041b\u0438\u043c\u0438\u0442 - 3000 \u0441\u0438\u043c\u0432\u043e\u043b\u043e\u0432."
+    if raw_email.strip() and not cleaned_email:
+        return "\u0423\u043a\u0430\u0436\u0438\u0442\u0435 email \u0438\u043b\u0438 \u043e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u043f\u043e\u043b\u0435 \u043f\u0443\u0441\u0442\u044b\u043c."
+    if cleaned_email:
+        if len(cleaned_email) > 254 or not re.match(
+            r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+            cleaned_email,
+        ):
+            return "\u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 email: \u043e\u043d \u043f\u043e\u0445\u043e\u0436 \u043d\u0430 \u043e\u0448\u0438\u0431\u043a\u0443."
+    return None
 
 
 def _new_since_threshold(hours: int | None) -> str | None:

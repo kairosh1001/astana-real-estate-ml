@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Предложения по улучшению{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Предложения по улучшению</h1>
+    <p>
+      Напишите, что можно улучшить на сайте: фильтры, объяснения модели, дизайн,
+      новые функции или ошибки в работе сервиса.
+    </p>
+  </div>
+</div>
+
+<section class="panel">
+  {% if success %}
+  <p class="success">Спасибо. Предложение отправлено разработчику.</p>
+  {% endif %}
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+
+  <form class="stack-form" method="post" action="/feedback-page">
+    <label class="wide">
+      Email для ответа, если нужен
+      <input
+        name="email"
+        type="email"
+        value="{{ email }}"
+        placeholder="name@example.com"
+        autocomplete="email"
+      >
+    </label>
+    <label class="wide">
+      Предложение или сообщение об ошибке
+      <textarea
+        name="message"
+        rows="8"
+        maxlength="3000"
+        required
+        placeholder="Например: добавить фильтр по сроку сдачи ЖК..."
+      >{{ message }}</textarea>
+    </label>
+    <p class="muted wide">
+      Сообщение увидит только администратор сайта. Email можно не указывать.
+    </p>
+    <button class="wide" type="submit">Отправить</button>
+  </form>
+</section>
+{% endblock %}

@@ -301,6 +301,36 @@ def main() -> None:
     ]:
         assert_contains(about_page.text, needle)
 
+    feedback_page = client.get("/feedback-page")
+    if feedback_page.status_code != 200:
+        raise SystemExit(f"Feedback page returned {feedback_page.status_code}")
+    for needle in [
+        "Предложения по улучшению",
+        "Email для ответа",
+        "Предложение или сообщение об ошибке",
+        "Отправить",
+    ]:
+        assert_contains(feedback_page.text, needle)
+
+    bad_feedback = client.post(
+        "/feedback-page",
+        data={"email": "not-email", "message": "коротко"},
+    )
+    if bad_feedback.status_code != 400:
+        raise SystemExit(f"Bad feedback returned {bad_feedback.status_code}")
+    assert_contains(bad_feedback.text, "хотя бы 10 символов")
+
+    good_feedback = client.post(
+        "/feedback-page",
+        data={
+            "email": "user@example.com",
+            "message": "Добавьте, пожалуйста, фильтр по сроку сдачи жилого комплекса.",
+        },
+    )
+    if good_feedback.status_code != 200:
+        raise SystemExit(f"Good feedback returned {good_feedback.status_code}")
+    assert_contains(good_feedback.text, "Предложение отправлено")
+
     for path in ["/refresh-runs", "/status-summary"]:
         response = client.get(path)
         if response.status_code != 401:
@@ -312,6 +342,8 @@ def main() -> None:
         "/admin-refresh-page",
         "/model-monitoring-page",
         "/model-version-page",
+        "/traffic-page",
+        "/feedback-admin-page",
     ]:
         response = client.get(path, follow_redirects=False)
         if response.status_code != 303:
@@ -519,9 +551,27 @@ def main() -> None:
         "Мониторинг модели",
         "Версия модели",
         "Трафик сайта",
+        "Предложения пользователей",
         "2026-06-29 05:05",
     ]:
         assert_contains(status_page.text, needle)
+
+    feedback_admin = client.get("/feedback-admin-page")
+    if feedback_admin.status_code != 200:
+        raise SystemExit(f"Feedback admin page returned {feedback_admin.status_code}")
+    assert_contains(feedback_admin.text, "Предложения пользователей")
+    assert_contains(feedback_admin.text, "user@example.com")
+    assert_contains(feedback_admin.text, "фильтр по сроку сдачи")
+    assert_contains(feedback_admin.text, "Удалить")
+
+    delete_feedback = client.post(
+        "/feedback-admin-delete",
+        data={"feedback_id": 1},
+    )
+    if delete_feedback.status_code != 200:
+        raise SystemExit(f"Delete feedback returned {delete_feedback.status_code}")
+    assert_contains(delete_feedback.text, "Предложение удалено")
+    assert_not_contains(delete_feedback.text, "user@example.com")
 
     traffic_page = client.get("/traffic-page")
     if traffic_page.status_code != 200:

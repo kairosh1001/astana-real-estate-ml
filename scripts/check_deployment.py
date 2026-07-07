@@ -23,6 +23,8 @@ REQUIRED_PATHS = [
     "models/catboost_q90_price_per_m2_log.cbm",
     "app/main.py",
     "app/templates/base.html",
+    "app/templates/feedback.html",
+    "app/templates/feedback_admin.html",
     "app/templates/traffic.html",
 ]
 

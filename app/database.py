@@ -148,6 +148,17 @@ def init_db(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_request_events_path_created
         ON request_events(path, created_at);
+
+        CREATE TABLE IF NOT EXISTS feedback_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            email TEXT,
+            message TEXT NOT NULL,
+            client_hash TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_feedback_messages_created
+        ON feedback_messages(created_at);
         """
     )
     connection.commit()
@@ -318,6 +329,49 @@ def fetch_traffic_summary(
         "recent_events": [dict(row) for row in recent],
         "slow_requests": [dict(row) for row in slow],
     }
+
+
+def create_feedback_message(
+    connection: sqlite3.Connection,
+    *,
+    email: str | None,
+    message: str,
+    client_hash: str,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO feedback_messages (created_at, email, message, client_hash)
+        VALUES (?, ?, ?, ?)
+        """,
+        (utc_now(), email, message, client_hash[:32]),
+    )
+    connection.commit()
+
+
+def fetch_feedback_messages(
+    connection: sqlite3.Connection,
+    *,
+    limit: int = 100,
+) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT id, created_at, email, message, client_hash
+        FROM feedback_messages
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def delete_feedback_message(connection: sqlite3.Connection, feedback_id: int) -> bool:
+    cursor = connection.execute(
+        "DELETE FROM feedback_messages WHERE id = ?",
+        (feedback_id,),
+    )
+    connection.commit()
+    return cursor.rowcount > 0
 
 
 def start_refresh_run(

@@ -216,7 +216,7 @@
         gap: 10px;
         margin-top: 16px;
       }
-      input, select {
+      input, select, textarea {
         width: 100%;
         min-width: 0;
         border: 1px solid #c9d1c8;
@@ -225,6 +225,10 @@
         color: var(--text);
         font-size: 15px;
         padding: 12px 13px;
+      }
+      textarea {
+        font-family: inherit;
+        resize: vertical;
       }
       label {
         color: var(--muted);
@@ -420,6 +424,10 @@
         gap: 8px;
         flex-wrap: wrap;
         align-items: center;
+      }
+      .feedback-message {
+        max-width: 460px;
+        white-space: normal;
       }
       .inline-action,
       .compact-action {
@@ -772,6 +780,7 @@
           <a href="/market-page">Рынок</a>
           <a href="/model-page">О модели</a>
           <a href="/about-page">О проекте</a>
+          <a href="/feedback-page">Предложения</a>
         </nav>
       </div>
     </header>
