@@ -6,7 +6,7 @@ services:
     environment:
       APP_ROOT: /app
       DB_PATH: ${DB_PATH:-/app/data/krisha.sqlite3}
-      SQLITE_JOURNAL_MODE: ${SQLITE_JOURNAL_MODE:-DELETE}
+      SQLITE_JOURNAL_MODE: ${SQLITE_JOURNAL_MODE:-WAL}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
     volumes:
       - ./data:/app/data
@@ -37,7 +37,7 @@ services:
     environment:
       APP_ROOT: /app
       DB_PATH: ${DB_PATH:-/app/data/krisha.sqlite3}
-      SQLITE_JOURNAL_MODE: ${SQLITE_JOURNAL_MODE:-DELETE}
+      SQLITE_JOURNAL_MODE: ${SQLITE_JOURNAL_MODE:-WAL}
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups

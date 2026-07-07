@@ -9,7 +9,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlparse, urlunparse
 
 from fastapi import (
     BackgroundTasks,
@@ -32,6 +32,7 @@ from app.database import (
     connect,
     count_undervalued,
     fetch_complex_stats,
+    fetch_cached_prediction,
     fetch_listing_by_url,
     fetch_listings_by_urls,
     fetch_market_dashboard,
@@ -40,12 +41,19 @@ from app.database import (
     fetch_refresh_runs,
     fetch_running_refresh,
     fetch_status_summary,
+    fetch_traffic_summary,
     fetch_undervalued,
     init_db,
+    record_request_event,
+    store_cached_prediction,
     valid_district_slugs,
 )
 from app.model_service import MODEL_FILENAMES
-from app.prediction_service import PredictionService
+from app.prediction_service import (
+    ListingPrediction,
+    PredictionService,
+    validate_krisha_url,
+)
 from app.refresh_service import run_refresh
 
 
@@ -57,6 +65,12 @@ ADMIN_SESSION_COOKIE = "krisha_admin_session"
 ADMIN_SESSION_TTL_SECONDS = 60 * 60 * 12
 HOME_UNDERVALUED_LIMIT = 10
 UNDERVALUED_PAGE_SIZE = 10
+PREDICTION_CACHE_TTL_SECONDS = int(
+    os.getenv("PREDICTION_CACHE_TTL_SECONDS", str(60 * 60 * 6))
+)
+PREDICT_RATE_LIMIT_PER_MINUTE = int(os.getenv("PREDICT_RATE_LIMIT_PER_MINUTE", "12"))
+PREDICT_RATE_LIMIT_PER_HOUR = int(os.getenv("PREDICT_RATE_LIMIT_PER_HOUR", "80"))
+RATE_LIMIT_BUCKETS: dict[str, list[float]] = {}
 
 app = FastAPI(title="Оценка объявлений Krisha")
 app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")
@@ -64,6 +78,33 @@ prediction_service = PredictionService(ROOT)
 DB_PATH = Path(os.getenv("DB_PATH", ROOT / "data" / "krisha.sqlite3"))
 with connect(DB_PATH) as db_connection:
     init_db(db_connection)
+
+
+@app.middleware("http")
+async def traffic_middleware(request: Request, call_next):
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        duration_ms = (time.perf_counter() - started) * 1000
+        if _should_track_request(request):
+            try:
+                with connect(DB_PATH) as db_connection:
+                    record_request_event(
+                        db_connection,
+                        method=request.method,
+                        path=request.url.path,
+                        status_code=status_code,
+                        duration_ms=duration_ms,
+                        client_hash=_client_hash(request),
+                        user_agent=request.headers.get("user-agent"),
+                        referer=request.headers.get("referer"),
+                    )
+            except Exception:
+                pass
 
 
 class PredictByLinkRequest(BaseModel):
@@ -164,7 +205,14 @@ def predict_page(request: Request, url: str = "") -> HTMLResponse:
         )
 
     try:
-        prediction = prediction_service.predict_by_url(url)
+        prediction = _predict_for_request(request, url)
+    except HTTPException as exc:
+        return templates.TemplateResponse(
+            request,
+            "predict_form.html",
+            {"request": request, "error": str(exc.detail), "url": url},
+            status_code=exc.status_code,
+        )
     except Exception as exc:
         return templates.TemplateResponse(
             request,
@@ -183,7 +231,14 @@ def predict_page(request: Request, url: str = "") -> HTMLResponse:
 @app.post("/predict", response_class=HTMLResponse)
 def predict_form(request: Request, url: str = Form(...)) -> HTMLResponse:
     try:
-        prediction = prediction_service.predict_by_url(url)
+        prediction = _predict_for_request(request, url)
+    except HTTPException as exc:
+        return templates.TemplateResponse(
+            request,
+            "predict_form.html",
+            {"request": request, "error": str(exc.detail), "url": url},
+            status_code=exc.status_code,
+        )
     except Exception as exc:
         return templates.TemplateResponse(
             request,
@@ -241,12 +296,14 @@ def market_page(request: Request) -> HTMLResponse:
 
 
 @app.post("/predict-by-link")
-def predict_by_link(payload: PredictByLinkRequest) -> dict:
+def predict_by_link(request: Request, payload: PredictByLinkRequest) -> dict:
     try:
-        prediction = prediction_service.predict_by_url(payload.url)
+        prediction = _predict_for_request(request, payload.url)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
+        if isinstance(exc, HTTPException):
+            raise exc
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return asdict(prediction)
@@ -601,6 +658,32 @@ def model_version_page(request: Request) -> Response:
     )
 
 
+@app.get("/traffic-page", response_class=HTMLResponse)
+def traffic_page(
+    request: Request,
+    limit: int = 30,
+) -> Response:
+    redirect = _admin_page_redirect_if_needed(request)
+    if redirect:
+        return redirect
+
+    safe_limit = min(max(limit, 1), 100)
+    with connect(DB_PATH) as db_connection:
+        traffic = fetch_traffic_summary(db_connection, limit=safe_limit)
+
+    return templates.TemplateResponse(
+        request,
+        "traffic.html",
+        {
+            "request": request,
+            "traffic": traffic,
+            "rate_limit_per_minute": PREDICT_RATE_LIMIT_PER_MINUTE,
+            "rate_limit_per_hour": PREDICT_RATE_LIMIT_PER_HOUR,
+            "cache_ttl_hours": PREDICTION_CACHE_TTL_SECONDS / 3600,
+        },
+    )
+
+
 @app.get("/refresh-runs-page", response_class=HTMLResponse)
 def refresh_runs_page(
     request: Request,
@@ -852,6 +935,91 @@ def _model_version_info() -> dict:
         ),
         "model_files": model_files,
     }
+
+
+def _predict_for_request(request: Request, url: str) -> ListingPrediction:
+    normalized_url = _normalize_prediction_url(url)
+    validate_krisha_url(normalized_url)
+    _enforce_predict_rate_limit(request)
+
+    with connect(DB_PATH) as db_connection:
+        cached = fetch_cached_prediction(
+            db_connection,
+            normalized_url,
+            ttl_seconds=PREDICTION_CACHE_TTL_SECONDS,
+        )
+    if cached:
+        return ListingPrediction(**cached)
+
+    prediction = prediction_service.predict_by_url(normalized_url)
+    with connect(DB_PATH) as db_connection:
+        store_cached_prediction(
+            db_connection,
+            url=normalized_url,
+            prediction=asdict(prediction),
+        )
+    return prediction
+
+
+def _normalize_prediction_url(url: str) -> str:
+    parsed = urlparse(url.strip())
+    netloc = parsed.netloc.lower()
+    if netloc == "www.krisha.kz":
+        netloc = "krisha.kz"
+    path = parsed.path.rstrip("/")
+    return urlunparse(("https", netloc, path, "", "", ""))
+
+
+def _enforce_predict_rate_limit(request: Request) -> None:
+    key = _client_hash(request)
+    now = time.time()
+    bucket = [item for item in RATE_LIMIT_BUCKETS.get(key, []) if now - item < 3600]
+    requests_last_minute = sum(1 for item in bucket if now - item < 60)
+    if (
+        requests_last_minute >= PREDICT_RATE_LIMIT_PER_MINUTE
+        or len(bucket) >= PREDICT_RATE_LIMIT_PER_HOUR
+    ):
+        RATE_LIMIT_BUCKETS[key] = bucket
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "\u0421\u043b\u0438\u0448\u043a\u043e\u043c \u043c\u043d\u043e\u0433\u043e "
+                "\u0437\u0430\u043f\u0440\u043e\u0441\u043e\u0432 \u043a "
+                "\u043e\u0446\u0435\u043d\u043a\u0435. \u041f\u043e\u0434\u043e\u0436\u0434\u0438\u0442\u0435 "
+                "\u043c\u0438\u043d\u0443\u0442\u0443 \u0438 \u043f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u0435."
+            ),
+        )
+    bucket.append(now)
+    RATE_LIMIT_BUCKETS[key] = bucket
+
+
+def _should_track_request(request: Request) -> bool:
+    path = request.url.path
+    if path.startswith("/static/"):
+        return False
+    return path not in {"/health", "/favicon.ico"}
+
+
+def _client_hash(request: Request) -> str:
+    client_ip = _client_ip(request)
+    salt = os.getenv("ANALYTICS_SALT") or os.getenv("ADMIN_TOKEN") or "local-dev"
+    return hmac.new(
+        salt.encode("utf-8"),
+        client_ip.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:32]
+
+
+def _client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    if request.client:
+        return request.client.host
+    return "unknown"
 
 
 def _prediction_context(request: Request, prediction: object) -> dict:

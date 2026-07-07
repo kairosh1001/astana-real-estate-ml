@@ -195,7 +195,10 @@ def main() -> None:
 
     from app.prediction_service import ListingPrediction
 
+    predict_calls = []
+
     def fake_predict_by_url(url: str) -> ListingPrediction:
+        predict_calls.append(url)
         return ListingPrediction(
             url=url,
             title="3-комнатная квартира, 80 м², 7/12 этаж",
@@ -218,6 +221,8 @@ def main() -> None:
     )
     if result_page.status_code != 200:
         raise SystemExit(f"Result page returned {result_page.status_code}")
+    if predict_calls != ["https://krisha.kz/a/show/123"]:
+        raise SystemExit(f"Expected first prediction to call the model once, got {predict_calls}")
     for needle in [
         "Результат оценки",
         "Объявление",
@@ -250,6 +255,8 @@ def main() -> None:
     details_page = client.get("/listing-details?url=https://krisha.kz/a/show/123")
     if details_page.status_code != 200:
         raise SystemExit(f"Listing details page returned {details_page.status_code}")
+    if predict_calls != ["https://krisha.kz/a/show/123"]:
+        raise SystemExit("Prediction cache did not reuse the first Krisha URL result")
     assert_contains(details_page.text, "Результат оценки")
     assert_contains(details_page.text, "История цены")
     assert_contains(details_page.text, "График истории цены")
@@ -511,9 +518,25 @@ def main() -> None:
         "Последнее обновление",
         "Мониторинг модели",
         "Версия модели",
+        "Трафик сайта",
         "2026-06-29 05:05",
     ]:
         assert_contains(status_page.text, needle)
+
+    traffic_page = client.get("/traffic-page")
+    if traffic_page.status_code != 200:
+        raise SystemExit(f"Traffic page returned {traffic_page.status_code}")
+    for needle in [
+        "Трафик сайта",
+        "Запросов за 24 часа",
+        "Посетителей за 24 часа",
+        "Оценок ссылок за 24 часа",
+        "Rate limit",
+        "Кэш прогноза",
+        "Популярные страницы",
+        "Последние события",
+    ]:
+        assert_contains(traffic_page.text, needle)
 
     monitoring_page = client.get("/model-monitoring-page")
     if monitoring_page.status_code != 200:

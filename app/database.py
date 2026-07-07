@@ -5,7 +5,7 @@ import os
 import re
 import sqlite3
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -41,7 +41,8 @@ def connect(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
-    journal_mode = os.getenv("SQLITE_JOURNAL_MODE", "DELETE").upper()
+    connection.execute("PRAGMA busy_timeout=5000")
+    journal_mode = os.getenv("SQLITE_JOURNAL_MODE", "WAL").upper()
     connection.execute(f"PRAGMA journal_mode={journal_mode}")
     connection.execute("PRAGMA foreign_keys=ON")
     return connection
@@ -120,9 +121,203 @@ def init_db(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_monitoring_snapshots_created
         ON model_monitoring_snapshots(created_at);
+
+        CREATE TABLE IF NOT EXISTS prediction_cache (
+            url TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            prediction_json TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_prediction_cache_created
+        ON prediction_cache(created_at);
+
+        CREATE TABLE IF NOT EXISTS request_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            method TEXT NOT NULL,
+            path TEXT NOT NULL,
+            status_code INTEGER NOT NULL,
+            duration_ms REAL NOT NULL,
+            client_hash TEXT NOT NULL,
+            user_agent TEXT,
+            referer TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_request_events_created
+        ON request_events(created_at);
+
+        CREATE INDEX IF NOT EXISTS idx_request_events_path_created
+        ON request_events(path, created_at);
         """
     )
     connection.commit()
+
+
+def fetch_cached_prediction(
+    connection: sqlite3.Connection,
+    url: str,
+    *,
+    ttl_seconds: int,
+) -> dict | None:
+    row = connection.execute(
+        """
+        SELECT created_at, prediction_json
+        FROM prediction_cache
+        WHERE url = ?
+        """,
+        (url,),
+    ).fetchone()
+    if not row:
+        return None
+
+    try:
+        created_at = datetime.fromisoformat(
+            str(row["created_at"]).replace("Z", "+00:00")
+        )
+    except ValueError:
+        return None
+    if datetime.now(timezone.utc) - created_at > timedelta(seconds=ttl_seconds):
+        return None
+
+    try:
+        payload = json.loads(row["prediction_json"])
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def store_cached_prediction(
+    connection: sqlite3.Connection,
+    *,
+    url: str,
+    prediction: dict,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO prediction_cache (url, created_at, prediction_json)
+        VALUES (?, ?, ?)
+        ON CONFLICT(url) DO UPDATE SET
+            created_at = excluded.created_at,
+            prediction_json = excluded.prediction_json
+        """,
+        (url, utc_now(), json.dumps(prediction, ensure_ascii=False, sort_keys=True)),
+    )
+    connection.commit()
+
+
+def record_request_event(
+    connection: sqlite3.Connection,
+    *,
+    method: str,
+    path: str,
+    status_code: int,
+    duration_ms: float,
+    client_hash: str,
+    user_agent: str | None,
+    referer: str | None,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO request_events (
+            created_at, method, path, status_code, duration_ms,
+            client_hash, user_agent, referer
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            utc_now(),
+            method[:12],
+            path[:180],
+            status_code,
+            duration_ms,
+            client_hash[:32],
+            (user_agent or "")[:220],
+            (referer or "")[:220],
+        ),
+    )
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat(
+        timespec="seconds"
+    )
+    connection.execute("DELETE FROM request_events WHERE created_at < ?", (cutoff,))
+    connection.commit()
+
+
+def fetch_traffic_summary(
+    connection: sqlite3.Connection,
+    *,
+    limit: int = 30,
+) -> dict:
+    cutoff_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(
+        timespec="seconds"
+    )
+    cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat(
+        timespec="seconds"
+    )
+    totals = connection.execute(
+        """
+        SELECT
+            COUNT(*) AS requests_24h,
+            COUNT(DISTINCT client_hash) AS visitors_24h,
+            SUM(
+                CASE
+                    WHEN path IN ('/predict', '/predict-by-link', '/listing-details')
+                    THEN 1 ELSE 0
+                END
+            ) AS predictions_24h,
+            SUM(CASE WHEN status_code = 429 THEN 1 ELSE 0 END) AS rate_limited_24h,
+            AVG(duration_ms) AS avg_duration_ms_24h
+        FROM request_events
+        WHERE created_at >= ?
+        """,
+        (cutoff_24h,),
+    ).fetchone()
+    week = connection.execute(
+        """
+        SELECT
+            COUNT(*) AS requests_7d,
+            COUNT(DISTINCT client_hash) AS visitors_7d
+        FROM request_events
+        WHERE created_at >= ?
+        """,
+        (cutoff_7d,),
+    ).fetchone()
+    top_pages = connection.execute(
+        """
+        SELECT path, COUNT(*) AS requests, COUNT(DISTINCT client_hash) AS visitors
+        FROM request_events
+        WHERE created_at >= ?
+        GROUP BY path
+        ORDER BY requests DESC
+        LIMIT ?
+        """,
+        (cutoff_24h, limit),
+    ).fetchall()
+    recent = connection.execute(
+        """
+        SELECT created_at, method, path, status_code, duration_ms, client_hash
+        FROM request_events
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    slow = connection.execute(
+        """
+        SELECT created_at, method, path, status_code, duration_ms
+        FROM request_events
+        WHERE created_at >= ?
+        ORDER BY duration_ms DESC
+        LIMIT ?
+        """,
+        (cutoff_24h, min(limit, 10)),
+    ).fetchall()
+    return {
+        **dict(totals),
+        **dict(week),
+        "top_pages": [dict(row) for row in top_pages],
+        "recent_events": [dict(row) for row in recent],
+        "slow_requests": [dict(row) for row in slow],
+    }
 
 
 def start_refresh_run(

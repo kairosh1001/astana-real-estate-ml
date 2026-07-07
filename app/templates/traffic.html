@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}Трафик сайта{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Трафик сайта</h1>
+    <p>
+      Админская статистика без регистрации пользователей: сохраняются путь страницы,
+      статус ответа, длительность запроса и анонимный хэш посетителя. Сырые IP-адреса не сохраняются.
+    </p>
+  </div>
+  <div class="listing-actions-bar">
+    <a class="button secondary" href="/status-page">Статус сервиса</a>
+    <a class="button secondary" href="/model-monitoring-page">Мониторинг модели</a>
+  </div>
+</div>
+
+<section class="metric-grid">
+  <div class="metric">
+    <span>Запросов за 24 часа</span>
+    <strong>{{ traffic.requests_24h or 0 }}</strong>
+  </div>
+  <div class="metric">
+    <span>Посетителей за 24 часа</span>
+    <strong>{{ traffic.visitors_24h or 0 }}</strong>
+  </div>
+  <div class="metric">
+    <span>Оценок ссылок за 24 часа</span>
+    <strong>{{ traffic.predictions_24h or 0 }}</strong>
+  </div>
+  <div class="metric">
+    <span>Запросов за 7 дней</span>
+    <strong>{{ traffic.requests_7d or 0 }}</strong>
+  </div>
+  <div class="metric">
+    <span>Посетителей за 7 дней</span>
+    <strong>{{ traffic.visitors_7d or 0 }}</strong>
+  </div>
+  <div class="metric">
+    <span>Rate limit за 24 часа</span>
+    <strong>{{ traffic.rate_limited_24h or 0 }}</strong>
+  </div>
+</section>
+
+<section class="section panel">
+  <h2>Защита нагрузки</h2>
+  <dl class="detail-list">
+    <div class="detail-row">
+      <dt>Лимит оценки ссылок</dt>
+      <dd>{{ rate_limit_per_minute }}/мин, {{ rate_limit_per_hour }}/час на посетителя</dd>
+    </div>
+    <div class="detail-row">
+      <dt>Кэш прогноза</dt>
+      <dd>{{ "{:.0f}".format(cache_ttl_hours) }} ч</dd>
+    </div>
+    <div class="detail-row">
+      <dt>Средняя длительность за 24 часа</dt>
+      <dd>{{ "{:,.0f}".format(traffic.avg_duration_ms_24h or 0) }} мс</dd>
+    </div>
+  </dl>
+</section>
+
+<section class="section panel">
+  <h2>Популярные страницы за 24 часа</h2>
+  {% if not traffic.top_pages %}
+  <div class="empty-state">Данных пока нет.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>Страница</th>
+          <th>Запросы</th>
+          <th>Посетители</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in traffic.top_pages %}
+        <tr>
+          <td data-label="Страница">{{ item.path }}</td>
+          <td data-label="Запросы">{{ item.requests }}</td>
+          <td data-label="Посетители">{{ item.visitors }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="section panel">
+  <h2>Самые медленные запросы за 24 часа</h2>
+  {% if not traffic.slow_requests %}
+  <div class="empty-state">Данных пока нет.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>Время</th>
+          <th>Метод</th>
+          <th>Страница</th>
+          <th>Статус</th>
+          <th>Длительность</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in traffic.slow_requests %}
+        <tr>
+          <td data-label="Время">{{ item.created_at | astana_time }}</td>
+          <td data-label="Метод">{{ item.method }}</td>
+          <td data-label="Страница">{{ item.path }}</td>
+          <td data-label="Статус">{{ item.status_code }}</td>
+          <td data-label="Длительность">{{ "{:,.0f}".format(item.duration_ms or 0) }} мс</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+
+<section class="section panel">
+  <h2>Последние события</h2>
+  {% if not traffic.recent_events %}
+  <div class="empty-state">Данных пока нет.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>Время</th>
+          <th>Метод</th>
+          <th>Страница</th>
+          <th>Статус</th>
+          <th>Посетитель</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in traffic.recent_events %}
+        <tr>
+          <td data-label="Время">{{ item.created_at | astana_time }}</td>
+          <td data-label="Метод">{{ item.method }}</td>
+          <td data-label="Страница">{{ item.path }}</td>
+          <td data-label="Статус">{{ item.status_code }}</td>
+          <td data-label="Посетитель">{{ item.client_hash[:8] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
