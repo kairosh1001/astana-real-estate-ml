@@ -104,6 +104,31 @@ def assert_not_contains(text: str, needle: str) -> None:
         raise SystemExit(f"Expected page not to contain: {needle}")
 
 
+def check_complex_developer_parser() -> None:
+    from bs4 import BeautifulSoup
+    from scrape import ApartmentScraper
+
+    scraper = ApartmentScraper()
+    html = """
+    <div class="complex__sidebar-info">
+      <div>\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a</div>
+      <div class="complex__sidebar-info-text">Sensata Group</div>
+    </div>
+    """
+    developer = scraper.parse_complex_developer(BeautifulSoup(html, "html.parser"))
+    if developer != "Sensata Group":
+        raise SystemExit("Complex developer parser did not read the visible developer block")
+
+    meta_html = """
+    <html><head>
+      <meta name="description" content="\u041a\u0443\u043f\u0438\u0442\u044c \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0443 \u043e\u0442 \u0437\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a\u0430 Sensata Group - \u0430\u043a\u0442\u0443\u0430\u043b\u044c\u043d\u044b\u0435 \u0446\u0435\u043d\u044b">
+    </head></html>
+    """
+    developer = scraper.parse_complex_developer(BeautifulSoup(meta_html, "html.parser"))
+    if developer != "Sensata Group":
+        raise SystemExit("Complex developer parser did not read the meta fallback")
+
+
 def main() -> None:
     db_path = ROOT / "data" / "ui_check.sqlite3"
     db_path.parent.mkdir(exist_ok=True)
@@ -115,6 +140,7 @@ def main() -> None:
     os.environ["DB_PATH"] = str(db_path)
     os.environ["ADMIN_TOKEN"] = "test-token"
     seed_listing(db_path)
+    check_complex_developer_parser()
 
     from fastapi.testclient import TestClient
     import app.main as main

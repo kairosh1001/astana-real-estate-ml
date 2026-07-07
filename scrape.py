@@ -21,6 +21,7 @@ class ApartmentScraper:
         self.base_url = "https://krisha.kz"
         self.timeout = timeout
         self.session = self._create_session()
+        self.complex_developer_cache: Dict[str, str] = {}
     
     def _create_session(self) -> requests.Session:
         session = requests.Session()
@@ -96,10 +97,74 @@ class ApartmentScraper:
                     dt, dd = dl.select_one('dt'), dl.select_one('dd')
                     if dt and dd:
                         row_data[dt.text.strip()] = dd.text.strip()
+
+            if not row_data.get('\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a'):
+                complex_url = self.find_complex_url(soup)
+                if complex_url:
+                    developer = self.fetch_complex_developer(complex_url)
+                    if developer:
+                        row_data['\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a'] = developer
             
             return row_data
         except Exception:
             return None
+
+    def find_complex_url(self, soup) -> Optional[str]:
+        for link in soup.select('a[href*="/complex/show/"]'):
+            href = link.get('href')
+            if href:
+                return urljoin(self.base_url, href)
+        return None
+
+    def fetch_complex_developer(self, complex_url: str) -> Optional[str]:
+        if complex_url in self.complex_developer_cache:
+            return self.complex_developer_cache[complex_url] or None
+
+        html = self.fetch_page(complex_url)
+        developer = None
+        if html:
+            soup = BeautifulSoup(html, 'html.parser')
+            developer = self.parse_complex_developer(soup)
+
+        self.complex_developer_cache[complex_url] = developer or ""
+        return developer
+
+    def parse_complex_developer(self, soup) -> Optional[str]:
+        developer_label = '\u0437\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a'
+
+        for container in soup.select('.complex__sidebar-info'):
+            text = container.get_text(' ', strip=True)
+            if developer_label in text.casefold():
+                value = container.select_one('.complex__sidebar-info-text')
+                if value:
+                    return value.get_text(' ', strip=True) or None
+
+                cleaned = re.sub(
+                    r'^\s*\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a\s*',
+                    '',
+                    text,
+                    flags=re.IGNORECASE,
+                ).strip()
+                if cleaned:
+                    return cleaned
+
+        for meta in soup.find_all('meta'):
+            content = meta.get('content') or ''
+            match = re.search(
+                r'\u043e\u0442\s+\u0437\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a\u0430\s+(.+?)(?:\s+-|,|\.)',
+                content,
+                flags=re.IGNORECASE,
+            )
+            if match:
+                return match.group(1).strip()
+
+        if soup.title:
+            title = soup.title.get_text(' ', strip=True)
+            match = re.search(r'\|\s*(.+?)\s*-\s*\u041a\u0440\u044b\u0448\u0430', title)
+            if match:
+                return match.group(1).strip()
+
+        return None
 
     def find_developer_name(self, value) -> Optional[str]:
         if isinstance(value, dict):
