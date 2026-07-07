@@ -74,6 +74,8 @@ class ApartmentScraper:
                     row_data['lat'] = advert.get('map', {}).get('lat')
                     row_data['lon'] = advert.get('map', {}).get('lon')
                     developer = self.find_developer_name(advert)
+                    if not developer and advert.get('userType') == 'builder':
+                        developer = self.extract_name_from_value(advert.get('ownerName'))
                     if developer:
                         row_data['Застройщик'] = developer
 
@@ -103,7 +105,11 @@ class ApartmentScraper:
         if isinstance(value, dict):
             for key, item in value.items():
                 key_text = str(key).lower()
-                if any(marker in key_text for marker in ["застрой", "developer", "builder"]):
+                if any(marker in key_text for marker in ["застрой", "developer"]):
+                    cleaned = self.extract_name_from_value(item)
+                    if cleaned:
+                        return cleaned
+                if any(marker in key_text for marker in ["buildername", "builder_name"]):
                     cleaned = self.extract_name_from_value(item)
                     if cleaned:
                         return cleaned

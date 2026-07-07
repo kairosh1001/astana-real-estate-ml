@@ -287,6 +287,7 @@ def fetch_undervalued(
     min_year: int | None = None,
     max_year: int | None = None,
     residential_complex: str | None = None,
+    developer: str | None = None,
     min_area: float | None = None,
     max_area: float | None = None,
     polygon: list[tuple[float, float]] | None = None,
@@ -354,6 +355,13 @@ def fetch_undervalued(
             for item in items
             if complex_query in str(item.get("residential_complex") or "").casefold()
         ]
+    if developer:
+        developer_query = developer.casefold()
+        items = [
+            item
+            for item in items
+            if developer_query in str(item.get("developer") or "").casefold()
+        ]
     if min_area:
         items = [
             item
@@ -400,6 +408,7 @@ def count_undervalued(
     min_year: int | None = None,
     max_year: int | None = None,
     residential_complex: str | None = None,
+    developer: str | None = None,
     min_area: float | None = None,
     max_area: float | None = None,
     polygon: list[tuple[float, float]] | None = None,
@@ -419,6 +428,7 @@ def count_undervalued(
             min_year=min_year,
             max_year=max_year,
             residential_complex=residential_complex,
+            developer=developer,
             min_area=min_area,
             max_area=max_area,
             polygon=polygon,
