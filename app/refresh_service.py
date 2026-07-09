@@ -60,7 +60,9 @@ def run_refresh(
         start_page=start_page,
         end_page=end_page,
     )
-    mark_refresh_started(connection)
+    should_update_stale_status = kind == "weekly"
+    if should_update_stale_status:
+        mark_refresh_started(connection)
 
     scraper = ApartmentScraper()
     prediction_service = PredictionService(root_path)
@@ -124,7 +126,8 @@ def run_refresh(
         raise
     finally:
         scraper.session.close()
-        mark_stale_listings(connection, stale_after_missed=stale_after_missed)
+        if should_update_stale_status:
+            mark_stale_listings(connection, stale_after_missed=stale_after_missed)
         finish_refresh_run(
             connection,
             run_id,

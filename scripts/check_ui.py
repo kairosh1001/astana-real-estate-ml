@@ -167,9 +167,7 @@ def main() -> None:
     assert_contains(home.text, "3-комнатная квартира · 40 м²")
     assert_contains(home.text, "Есиль")
     assert_contains(home.text, "Жилой комплекс")
-    assert_contains(home.text, "Застройщик")
     assert_contains(home.text, "Test ЖК")
-    assert_contains(home.text, "Test Developer")
     assert_contains(home.text, "Сохранить")
     assert_contains(home.text, "Скрыть")
     assert_contains(home.text, "Сравнить")
@@ -263,8 +261,6 @@ def main() -> None:
     assert_contains(details_page.text, "На что обратить внимание")
     assert_contains(details_page.text, "Цена снижалась")
     assert_contains(details_page.text, "Жилой комплекс")
-    assert_contains(details_page.text, "Застройщик")
-    assert_contains(details_page.text, "Test Developer")
     assert_contains(details_page.text, "Активных объявлений в базе")
     assert_contains(details_page.text, "2026-06-30 05:00")
 
@@ -274,8 +270,6 @@ def main() -> None:
     assert_contains(compare_page.text, "Сравнение квартир")
     assert_contains(compare_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(compare_page.text, "Выгода q10")
-    assert_contains(compare_page.text, "Застройщик")
-    assert_contains(compare_page.text, "Test Developer")
 
     market_page = client.get("/market-page")
     if market_page.status_code != 200:
@@ -384,7 +378,6 @@ def main() -> None:
         "№",
         "Krisha",
         "Жилой комплекс",
-        "Застройщик",
         "Нижняя оценка",
         "Медианная оценка",
         "Выгода q10",
@@ -409,7 +402,6 @@ def main() -> None:
         "leaflet",
         "Есиль",
         "Test ЖК",
-        "Test Developer",
         "3-комнатная квартира · 40 м²",
         "Подробнее",
         "/listing-details?url=",
@@ -468,19 +460,12 @@ def main() -> None:
         raise SystemExit(f"Blank room/price API returned {api_blank_filters.status_code}")
 
     advanced_filter_page = client.get(
-        "/undervalued-page?min_year=2019&max_year=2021&residential_complex=Test&developer=Developer&min_area=39&max_area=41"
+        "/undervalued-page?min_year=2019&max_year=2021&residential_complex=Test&min_area=39&max_area=41"
     )
     if advanced_filter_page.status_code != 200:
         raise SystemExit(f"Advanced filter returned {advanced_filter_page.status_code}")
     assert_contains(advanced_filter_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(advanced_filter_page.text, "Test")
-    assert_contains(advanced_filter_page.text, "Developer")
-
-    api_developer_filter = client.get("/undervalued?developer=Developer")
-    if api_developer_filter.status_code != 200:
-        raise SystemExit(f"Developer filter API returned {api_developer_filter.status_code}")
-    if api_developer_filter.json()["total"] != 1:
-        raise SystemExit("Developer filter API did not return the seeded listing")
 
     fresh_strong_page = client.get("/undervalued-page?new_since_hours=24&min_discount_pct=10")
     if fresh_strong_page.status_code != 200:

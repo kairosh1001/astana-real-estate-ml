@@ -31,12 +31,6 @@
         <dt>Цена объявления за м²</dt>
         <dd>{{ "{:,.0f}".format(prediction.listed_price_per_m2) }} тг</dd>
       </div>
-      {% if listing and listing.developer %}
-      <div class="detail-row">
-        <dt>Застройщик</dt>
-        <dd>{{ listing.developer }}</dd>
-      </div>
-      {% endif %}
     </dl>
   </div>
 

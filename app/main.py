@@ -475,7 +475,6 @@ def undervalued_page(
     min_year: str | None = None,
     max_year: str | None = None,
     residential_complex: str | None = None,
-    developer: str | None = None,
     min_area: str | None = None,
     max_area: str | None = None,
     map_polygon: str | None = None,
@@ -490,7 +489,6 @@ def undervalued_page(
     selected_min_year = _parse_optional_int(min_year)
     selected_max_year = _parse_optional_int(max_year)
     selected_complex = _parse_optional_text(residential_complex)
-    selected_developer = _parse_optional_text(developer)
     selected_min_area = _parse_optional_positive_float(min_area)
     selected_max_area = _parse_optional_positive_float(max_area)
     selected_polygon = _parse_polygon(map_polygon)
@@ -510,7 +508,6 @@ def undervalued_page(
             min_year=selected_min_year,
             max_year=selected_max_year,
             residential_complex=selected_complex,
-            developer=selected_developer,
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
@@ -527,7 +524,6 @@ def undervalued_page(
             min_year=selected_min_year,
             max_year=selected_max_year,
             residential_complex=selected_complex,
-            developer=selected_developer,
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
@@ -550,7 +546,6 @@ def undervalued_page(
             "selected_min_year": selected_min_year,
             "selected_max_year": selected_max_year,
             "selected_complex": selected_complex,
-            "selected_developer": selected_developer,
             "selected_min_area": selected_min_area,
             "selected_max_area": selected_max_area,
             "selected_polygon": map_polygon or "",
@@ -564,7 +559,6 @@ def undervalued_page(
                 min_year=selected_min_year,
                 max_year=selected_max_year,
                 residential_complex=selected_complex,
-                developer=selected_developer,
                 min_area=selected_min_area,
                 max_area=selected_max_area,
                 map_polygon=map_polygon,
