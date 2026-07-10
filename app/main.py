@@ -65,6 +65,10 @@ ROOT = Path(os.getenv("APP_ROOT", Path(__file__).resolve().parents[1]))
 ASTANA_TZ = timezone(timedelta(hours=5), name="Asia/Astana")
 templates = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 templates.env.filters["astana_time"] = lambda value: format_astana_time(value)
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+templates.env.globals["telegram_bot_url"] = (
+    f"https://t.me/{TELEGRAM_BOT_USERNAME}" if TELEGRAM_BOT_USERNAME else ""
+)
 ADMIN_SESSION_COOKIE = "krisha_admin_session"
 ADMIN_SESSION_TTL_SECONDS = 60 * 60 * 12
 HOME_UNDERVALUED_LIMIT = 10

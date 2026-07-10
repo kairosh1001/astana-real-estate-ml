@@ -18,6 +18,7 @@ REQUIRED_PATHS = [
     "model_metadata.json",
     "df_check.csv",
     "scrape.py",
+    "scripts/telegram_bot.py",
     "models/catboost_q10_price_per_m2_log.cbm",
     "models/catboost_q50_price_per_m2_log.cbm",
     "models/catboost_q90_price_per_m2_log.cbm",

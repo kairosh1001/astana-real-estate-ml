@@ -201,6 +201,36 @@ Then restart:
 docker compose --profile https up -d app caddy
 ```
 
+## Telegram Bot
+
+Create a bot in Telegram via `@BotFather`. It will give you:
+
+- `TELEGRAM_BOT_TOKEN`, a secret token;
+- `TELEGRAM_BOT_USERNAME`, the bot username without `@`.
+
+Add them to `.env`:
+
+```text
+APP_PUBLIC_URL=https://your-domain.kz
+TELEGRAM_BOT_TOKEN=123456:bot-token-from-botfather
+TELEGRAM_BOT_USERNAME=your_bot_username
+TELEGRAM_DIGEST_HOUR_ASTANA=9
+```
+
+Start the website, HTTPS proxy, and bot:
+
+```bash
+docker compose --profile https --profile bot up -d --build
+```
+
+Check logs:
+
+```bash
+docker compose logs --tail=100 telegram_bot
+```
+
+If you do not want the bot running, omit `--profile bot`.
+
 ## Runtime Data
 
 SQLite data is stored in:

@@ -167,6 +167,33 @@ Typical scheduled refreshes:
 
 The deployed VPS uses cron and Docker Compose; see [`deploy/README.md`](deploy/README.md).
 
+## Telegram Bot
+
+The Telegram bot runs as a separate Docker Compose profile and shares the same
+SQLite database and CatBoost models as the website.
+
+Create a bot with Telegram `@BotFather`, then set these values in `.env`:
+
+```text
+TELEGRAM_BOT_TOKEN=123456:bot-token-from-botfather
+TELEGRAM_BOT_USERNAME=your_bot_username
+APP_PUBLIC_URL=https://kvartiry-ai.kz
+TELEGRAM_DIGEST_HOUR_ASTANA=9
+```
+
+Start it on the VPS:
+
+```bash
+docker compose --profile https --profile bot up -d --build
+```
+
+The bot supports:
+
+- Krisha listing link evaluation;
+- `/on` to enable daily "Новые выгодные за 24 часа";
+- `/off` to disable daily notifications;
+- `/help` for a short command list.
+
 ## Retraining
 
 The retraining script trains candidate q10/q50/q90 CatBoost models into a timestamped directory under `models_candidate/`:

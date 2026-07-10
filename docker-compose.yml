@@ -8,6 +8,7 @@ services:
       DB_PATH: ${DB_PATH:-/app/data/krisha.sqlite3}
       SQLITE_JOURNAL_MODE: ${SQLITE_JOURNAL_MODE:-WAL}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups
@@ -56,6 +57,24 @@ services:
         "--max-delay",
         "0"
       ]
+
+  telegram_bot:
+    build: .
+    profiles:
+      - bot
+    environment:
+      APP_ROOT: /app
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://kvartiry-ai.kz}
+      DB_PATH: ${DB_PATH:-/app/data/krisha.sqlite3}
+      SQLITE_JOURNAL_MODE: ${SQLITE_JOURNAL_MODE:-WAL}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_DIGEST_HOUR_ASTANA: ${TELEGRAM_DIGEST_HOUR_ASTANA:-9}
+      PREDICTION_CACHE_TTL_SECONDS: ${PREDICTION_CACHE_TTL_SECONDS:-21600}
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    command: ["python", "scripts/telegram_bot.py"]
+    restart: unless-stopped
 
 volumes:
   caddy_data:

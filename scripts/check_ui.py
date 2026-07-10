@@ -139,6 +139,7 @@ def main() -> None:
 
     os.environ["DB_PATH"] = str(db_path)
     os.environ["ADMIN_TOKEN"] = "test-token"
+    os.environ["TELEGRAM_BOT_USERNAME"] = "krisha_test_bot"
     seed_listing(db_path)
     check_complex_developer_parser()
 
@@ -176,6 +177,8 @@ def main() -> None:
     assert_contains(home.text, "/model-page")
     assert_contains(home.text, "/market-page")
     assert_contains(home.text, "/about-page")
+    assert_contains(home.text, "https://t.me/krisha_test_bot")
+    assert_contains(home.text, "Telegram бот")
     assert_not_contains(home.text, "Статус сервиса")
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")

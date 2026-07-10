@@ -159,6 +159,14 @@ def init_db(connection: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_feedback_messages_created
         ON feedback_messages(created_at);
+
+        CREATE TABLE IF NOT EXISTS telegram_subscribers (
+            chat_id INTEGER PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            notifications_enabled INTEGER NOT NULL DEFAULT 1,
+            last_digest_date TEXT
+        );
         """
     )
     connection.commit()
@@ -372,6 +380,80 @@ def delete_feedback_message(connection: sqlite3.Connection, feedback_id: int) ->
     )
     connection.commit()
     return cursor.rowcount > 0
+
+
+def upsert_telegram_subscriber(
+    connection: sqlite3.Connection,
+    *,
+    chat_id: int,
+    notifications_enabled: bool = True,
+) -> None:
+    now = utc_now()
+    connection.execute(
+        """
+        INSERT INTO telegram_subscribers (
+            chat_id, created_at, updated_at, notifications_enabled
+        )
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(chat_id) DO UPDATE SET
+            updated_at = excluded.updated_at,
+            notifications_enabled = excluded.notifications_enabled
+        """,
+        (chat_id, now, now, int(notifications_enabled)),
+    )
+    connection.commit()
+
+
+def set_telegram_notifications(
+    connection: sqlite3.Connection,
+    *,
+    chat_id: int,
+    enabled: bool,
+) -> None:
+    connection.execute(
+        """
+        UPDATE telegram_subscribers
+        SET updated_at = ?, notifications_enabled = ?
+        WHERE chat_id = ?
+        """,
+        (utc_now(), int(enabled), chat_id),
+    )
+    connection.commit()
+
+
+def fetch_telegram_subscribers_for_digest(
+    connection: sqlite3.Connection,
+    *,
+    digest_date: str,
+) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT chat_id, last_digest_date
+        FROM telegram_subscribers
+        WHERE notifications_enabled = 1
+          AND (last_digest_date IS NULL OR last_digest_date != ?)
+        ORDER BY created_at ASC
+        """,
+        (digest_date,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def mark_telegram_digest_sent(
+    connection: sqlite3.Connection,
+    *,
+    chat_id: int,
+    digest_date: str,
+) -> None:
+    connection.execute(
+        """
+        UPDATE telegram_subscribers
+        SET updated_at = ?, last_digest_date = ?
+        WHERE chat_id = ?
+        """,
+        (utc_now(), digest_date, chat_id),
+    )
+    connection.commit()
 
 
 def start_refresh_run(
