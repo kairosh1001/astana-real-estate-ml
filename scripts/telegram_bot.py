@@ -314,8 +314,14 @@ def format_digest(listings: list[dict], public_url: str) -> str:
             if public_url
             else item["url"]
         )
+        listing_title = (
+            item.get("listing_summary")
+            or item.get("short_title")
+            or item.get("title")
+            or "Объявление"
+        )
         lines.append(
-            f"{index}. <b>{html.escape(item.get('short_title') or item.get('title') or 'Объявление')}</b>\n"
+            f"{index}. <b>{html.escape(listing_title)}</b>\n"
             f"   {item.get('listed_price') or 0:,.0f} тг · "
             f"{item.get('listed_price_per_m2') or 0:,.0f} тг/м² · "
             f"q10 выгода {item.get('discount_vs_asking_pct_conservative') or 0:.1%}\n"

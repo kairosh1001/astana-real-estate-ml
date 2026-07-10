@@ -52,7 +52,7 @@ def seed_listing(db_path: Path) -> None:
             (
                 "https://krisha.kz/a/show/123",
                 "3-комнатная квартира, 80 м², 7/12 этаж, рядом с парком",
-                '{"Город": "Астана, Есиль р-н", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "Застройщик": "Test Developer", "lat": 51.13, "lon": 71.43}',
+                '{"Город": "Астана, Есиль р-н", "Адрес": "Кабанбай батыра 48", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "Застройщик": "Test Developer", "lat": 51.13, "lon": 71.43}',
                 first_seen_at,
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
@@ -129,6 +129,24 @@ def check_complex_developer_parser() -> None:
         raise SystemExit("Complex developer parser did not read the meta fallback")
 
 
+def check_telegram_digest_format() -> None:
+    from scripts.telegram_bot import format_digest
+
+    text = format_digest(
+        [
+            {
+                "url": "https://krisha.kz/a/show/123",
+                "listing_summary": "2-комнатная квартира · 55 м², есиль",
+                "listed_price": 30000000,
+                "listed_price_per_m2": 545455,
+                "discount_vs_asking_pct_conservative": 0.12,
+            }
+        ],
+        "https://kvartiry-ai.kz",
+    )
+    assert_contains(text, "2-комнатная квартира · 55 м², есиль")
+
+
 def main() -> None:
     db_path = ROOT / "data" / "ui_check.sqlite3"
     db_path.parent.mkdir(exist_ok=True)
@@ -142,6 +160,7 @@ def main() -> None:
     os.environ["TELEGRAM_BOT_USERNAME"] = "krisha_test_bot"
     seed_listing(db_path)
     check_complex_developer_parser()
+    check_telegram_digest_format()
 
     from fastapi.testclient import TestClient
     import app.main as main
@@ -264,6 +283,11 @@ def main() -> None:
     assert_contains(details_page.text, "На что обратить внимание")
     assert_contains(details_page.text, "Цена снижалась")
     assert_contains(details_page.text, "Жилой комплекс")
+    assert_contains(details_page.text, "Район")
+    assert_contains(details_page.text, "Есиль")
+    assert_contains(details_page.text, "Улица")
+    assert_contains(details_page.text, "Кабанбай батыра 48")
+    assert_contains(details_page.text, "Test ЖК")
     assert_contains(details_page.text, "Активных объявлений в базе")
     assert_contains(details_page.text, "2026-06-30 05:00")
 

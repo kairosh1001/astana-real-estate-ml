@@ -1089,11 +1089,36 @@ def _prepare_undervalued_item(row: dict) -> dict:
     row["construction_year"] = _extract_int(raw_listing.get("Год постройки"))
     row["residential_complex"] = _clean_text(raw_listing.get("Жилой комплекс"))
     row["developer"] = _extract_developer(raw_listing)
+    row["address"] = _extract_address(raw_listing)
     row["lat"] = _extract_float(raw_listing.get("lat"))
     row["lon"] = _extract_float(raw_listing.get("lon"))
     row["short_title"] = _short_listing_title(row.get("title"), row.get("area_m2"))
+    row["listing_summary"] = _listing_summary_with_district(
+        row["short_title"],
+        district_label,
+    )
     row.pop("raw_json", None)
     return row
+
+
+def _extract_address(raw_listing: dict) -> str:
+    for key in [
+        "Адрес",
+        "Улица",
+        "Местоположение",
+        "address",
+        "addressTitle",
+    ]:
+        cleaned = _clean_text(raw_listing.get(key))
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _listing_summary_with_district(short_title: str, district_label: str) -> str:
+    if not district_label or "не указан" in district_label.casefold():
+        return short_title
+    return f"{short_title}, {district_label.casefold()}"
 
 
 def _extract_developer(raw_listing: dict) -> str:

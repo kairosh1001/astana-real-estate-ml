@@ -31,6 +31,24 @@
         <dt>Цена объявления за м²</dt>
         <dd>{{ "{:,.0f}".format(prediction.listed_price_per_m2) }} тг</dd>
       </div>
+      {% if listing and listing.district_label %}
+      <div class="detail-row">
+        <dt>Район</dt>
+        <dd>{{ listing.district_label }}</dd>
+      </div>
+      {% endif %}
+      {% if listing and listing.address %}
+      <div class="detail-row">
+        <dt>Улица</dt>
+        <dd>{{ listing.address }}</dd>
+      </div>
+      {% endif %}
+      {% if listing and listing.residential_complex %}
+      <div class="detail-row">
+        <dt>Жилой комплекс</dt>
+        <dd>{{ listing.residential_complex }}</dd>
+      </div>
+      {% endif %}
     </dl>
   </div>
 
