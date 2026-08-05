@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-08-05T17:04:14+00:00",
+  "created_at": "2026-08-05T17:11:45+00:00",
   "period": "daily",
   "rows": 635,
   "unique_listings": 596,
@@ -7,12 +7,20 @@
   "validation_rows": 131,
   "split_strategy": "group_shuffle_holdout",
   "rmse_log": 0.15500447412993149,
-  "multiplicative_rmse": 0.1676631853702456,
+  "rmse_log_ci95": [
+    0.13357950356177348,
+    0.175684801686488
+  ],
+  "multiplicative_rmse": 0.16766318537024563,
   "rmse_kzt": 3242.0296067229715,
   "mae_kzt": 2336.333864786073,
+  "mae_kzt_ci95": [
+    1970.754116470513,
+    2722.321537816645
+  ],
   "median_ape": 0.09726713393746131,
   "baseline_rmse_log": 0.19009318154341323,
-  "baseline_multiplicative_rmse": 0.20936228265113227,
+  "baseline_multiplicative_rmse": 0.2093622826511323,
   "baseline_rmse_kzt": 3799.638896060784,
   "baseline_mae_kzt": 2633.5267175572512,
   "q10_q90_coverage": 0.7862595419847328,

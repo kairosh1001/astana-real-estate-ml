@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-08-05T17:04:03+00:00",
+  "created_at": "2026-08-05T17:09:29+00:00",
   "period": "monthly",
   "rows": 602,
   "unique_listings": 556,
@@ -7,9 +7,17 @@
   "validation_rows": 120,
   "split_strategy": "group_shuffle_holdout",
   "rmse_log": 0.24122631387053253,
+  "rmse_log_ci95": [
+    0.19632793706975837,
+    0.2861830509554723
+  ],
   "multiplicative_rmse": 0.2728090570594931,
   "rmse_kzt": 176674.2545555894,
   "mae_kzt": 80413.35998779029,
+  "mae_kzt_ci95": [
+    55712.667161387406,
+    110943.46984929146
+  ],
   "median_ape": 0.09963387879551688,
   "baseline_rmse_log": 0.3621152081762189,
   "baseline_multiplicative_rmse": 0.4363644133527883,

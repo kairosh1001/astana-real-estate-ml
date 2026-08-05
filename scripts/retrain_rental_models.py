@@ -5,6 +5,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 import sys
+from typing import Callable
 
 import numpy as np
 import pandas as pd
@@ -26,6 +27,21 @@ MODEL_NAMES = {
     "q50": ("Quantile:alpha=0.5", "catboost_q50_rent_total_log.cbm"),
     "q90": ("Quantile:alpha=0.9", "catboost_q90_rent_total_log.cbm"),
 }
+
+
+def bootstrap_ci(
+    values: np.ndarray,
+    reducer: Callable[[np.ndarray], float],
+    seed: int,
+    samples: int = 2_000,
+) -> list[float]:
+    rng = np.random.default_rng(seed)
+    estimates = np.fromiter(
+        (reducer(values[rng.integers(0, len(values), len(values))]) for _ in range(samples)),
+        dtype=float,
+        count=samples,
+    )
+    return [float(bound) for bound in np.quantile(estimates, [0.025, 0.975])]
 
 
 def parse_args() -> argparse.Namespace:
@@ -129,9 +145,21 @@ def main() -> None:
     baseline_log = np.log(baseline)
     rmse_log = float(np.sqrt(np.mean(np.square(q50_log - actual_log))))
     baseline_rmse_log = float(np.sqrt(np.mean(np.square(baseline_log - actual_log))))
+    rmse_log_ci95 = bootstrap_ci(
+        np.square(q50_log - actual_log),
+        lambda sample: float(np.sqrt(np.mean(sample))),
+        args.random_seed,
+    )
+    mae_kzt_ci95 = bootstrap_ci(
+        np.abs(q50 - actual),
+        lambda sample: float(np.mean(sample)),
+        args.random_seed,
+    )
     unique_listings = int(raw["listing_id"].astype(str).nunique())
     production_ready = bool(
-        unique_listings >= 500 and strategy == "chronological_group_holdout"
+        unique_listings >= 500
+        and len(valid_idx) >= 100
+        and strategy == "chronological_group_holdout"
     )
     readiness_notes: list[str] = []
     if unique_listings < 500:
@@ -142,6 +170,10 @@ def main() -> None:
         readiness_notes.append(
             "Collect a fresh snapshot on a later UTC date for an independent chronological holdout."
         )
+    if len(valid_idx) < 100:
+        readiness_notes.append(
+            f"Use at least 100 validation rows; this evaluation has {len(valid_idx)}."
+        )
     metrics = {
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "period": args.period,
@@ -151,9 +183,11 @@ def main() -> None:
         "validation_rows": len(valid_idx),
         "split_strategy": strategy,
         "rmse_log": rmse_log,
+        "rmse_log_ci95": rmse_log_ci95,
         "multiplicative_rmse": float(np.expm1(rmse_log)),
         "rmse_kzt": float(np.sqrt(np.mean(np.square(q50 - actual)))),
         "mae_kzt": float(np.mean(np.abs(q50 - actual))),
+        "mae_kzt_ci95": mae_kzt_ci95,
         "median_ape": float(np.median(np.abs(q50 - actual) / actual)),
         "baseline_rmse_log": baseline_rmse_log,
         "baseline_multiplicative_rmse": float(np.expm1(baseline_rmse_log)),
