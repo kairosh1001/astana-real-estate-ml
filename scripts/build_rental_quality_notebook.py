@@ -64,6 +64,7 @@ def main() -> None:
                     "snapshots": len(frames[period]),
                     "unique_listings": frames[period]["listing_id"].astype(str).nunique(),
                     "validation_rows": evaluations[period]["validation_rows"],
+                    "target_mode": evaluations[period].get("selected_target_mode", "total"),
                     "log_rmse": evaluations[period]["rmse_log"],
                     "baseline_log_rmse": evaluations[period]["baseline_rmse_log"],
                     "production_ready": evaluations[period]["production_ready"],
@@ -71,10 +72,15 @@ def main() -> None:
                 for period in periods
             ]).set_index("period")
             display(summary.round(4))
+            all_ready = all(evaluations[period]["production_ready"] for period in periods)
+            readiness = (
+                "Both models passed their chronological readiness gates."
+                if all_ready
+                else "At least one model remains a **candidate model** because an independent later-date holdout is not yet available."
+            )
             display(Markdown(
-                "Both datasets exceed 500 unique listings and both CatBoost median models beat the room-median "
-                "baseline on grouped holdout data. They remain **candidate models**, because every snapshot was "
-                "collected on one UTC date and therefore no independent future-date holdout is available yet."
+                "Both datasets exceed 500 unique listings and both point models are evaluated against a room-median "
+                f"baseline. {readiness}"
             ))
             """
         ),
@@ -82,8 +88,8 @@ def main() -> None:
             """
             ## Context & Methods
 
-            The intended grain is one listing snapshot per `(url, scraped_at)` pair. Repeated listing IDs across
-            different scrape batches are expected, but must remain in only one side of a model split.
+            The intended grain is one listing snapshot per `(listing_id, UTC scrape day)` pair. Repeated listing IDs
+            across different days are expected, but must remain in only one side of a model split.
 
             ### Key Assumptions
 
@@ -98,13 +104,14 @@ def main() -> None:
             grain_rows = []
             for period, frame in frames.items():
                 scraped = pd.to_datetime(frame["scraped_at"], errors="coerce", utc=True)
+                listing_day = frame["listing_id"].astype("string") + "|" + scraped.dt.strftime("%Y-%m-%d")
                 grain_rows.append({
                     "period": period,
                     "rows": len(frame),
                     "columns": len(frame.columns),
                     "unique_listings": frame["listing_id"].astype(str).nunique(),
                     "repeated_snapshot_rows": len(frame) - frame["listing_id"].astype(str).nunique(),
-                    "duplicate_url_timestamp": int(frame.duplicated(["url", "scraped_at"]).sum()),
+                    "duplicate_listing_day": int(listing_day.duplicated().sum()),
                     "scrape_batches": int(scraped.nunique()),
                     "scrape_days_utc": int(scraped.dt.floor("D").nunique()),
                     "latest_scrape_utc": scraped.max(),
@@ -118,10 +125,13 @@ def main() -> None:
             important_columns = [
                 "listing_id", "url", "price", "rooms_structured", "area_m2_structured",
                 "lat", "lon", "Квартира меблирована", "Состояние квартиры", "Жилой комплекс",
+                "description", "seller_type",
             ]
             completeness = []
             for period, frame in frames.items():
                 for column in important_columns:
+                    if column not in frame:
+                        continue
                     values = frame[column]
                     missing = values.isna()
                     if values.dtype == object:
@@ -147,11 +157,15 @@ def main() -> None:
             price_limits = {"monthly": (20_000, 10_000_000), "daily": (1_000, 1_000_000)}
             for period, frame in frames.items():
                 low_price, high_price = price_limits[period]
+                scraped = pd.to_datetime(frame["scraped_at"], errors="coerce", utc=True)
+                duplicate_listing_day = (
+                    frame["listing_id"].astype("string") + "|" + scraped.dt.strftime("%Y-%m-%d")
+                ).duplicated()
                 checks = {
                     "wrong rental period": frame["rental_period"].ne(period),
                     "missing listing id": frame["listing_id"].isna(),
                     "missing URL": frame["url"].isna() | frame["url"].astype("string").str.strip().eq(""),
-                    "duplicate snapshot grain": frame.duplicated(["url", "scraped_at"]),
+                    "duplicate listing/day grain": duplicate_listing_day,
                     "implausible price": ~frame["price"].between(low_price, high_price),
                     "implausible room count": ~frame["rooms_structured"].between(1, 20),
                     "implausible area": ~frame["area_m2_structured"].between(10, 1_000),
@@ -210,6 +224,7 @@ def main() -> None:
                     "period": period,
                     "validation_rows": metrics["validation_rows"],
                     "split": metrics["split_strategy"],
+                    "target_mode": metrics.get("selected_target_mode", "total"),
                     "log_rmse": metrics["rmse_log"],
                     "log_rmse_ci_low": metrics["rmse_log_ci95"][0],
                     "log_rmse_ci_high": metrics["rmse_log_ci95"][1],
@@ -239,13 +254,21 @@ def main() -> None:
                 notes.append(
                     f"- **{label}:** {metrics['unique_listings']} unique listings; log RMSE "
                     f"{metrics['rmse_log']:.3f} (95% CI {metrics['rmse_log_ci95'][0]:.3f}–"
-                    f"{metrics['rmse_log_ci95'][1]:.3f}), {improvement:.1%} below its baseline."
+                    f"{metrics['rmse_log_ci95'][1]:.3f}), {improvement:.1%} below its baseline; "
+                    f"selected target `{metrics.get('selected_target_mode', 'total')}`."
                 )
-            notes.extend([
-                "- **No snapshot-grain leakage:** duplicate `(url, scraped_at)` rows are zero and listing IDs are grouped during splitting.",
-                "- **Main remaining blocker:** all data is from one UTC date, so performance on a later market snapshot is still unverified.",
-                "- **Decision:** suitable for an expanded website pilot with a visible caveat; not yet suitable for high-stakes investment decisions.",
-            ])
+            notes.append(
+                "- **No snapshot-grain leakage:** duplicate `(listing_id, UTC scrape day)` rows are zero and listing IDs are grouped during splitting."
+            )
+            if all(evaluations[period]["split_strategy"] == "chronological_group_holdout" for period in periods):
+                notes.append("- **Chronological validation:** both models were tested on the latest independent UTC scrape day.")
+            else:
+                notes.append(
+                    "- **Main remaining blocker:** at least one dataset lacks an independent later UTC date, so future-market performance remains unverified."
+                )
+            notes.append(
+                "- **Decision:** use `production_ready` in each evaluation file as the deployment gate and retain visible uncertainty intervals."
+            )
             display(Markdown("\\n".join(notes)))
             """
         ),

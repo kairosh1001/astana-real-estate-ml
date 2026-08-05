@@ -37,13 +37,36 @@ class ApartmentScraper:
         
         return session
     
-    def fetch_page(self, url: str) -> Optional[str]:
-        try:
-            response = self.session.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            return response.text
-        except requests.exceptions.RequestException:
-            return None
+    def fetch_page(self, url: str, attempts: int = 4) -> Optional[str]:
+        """Fetch a page with bounded, server-friendly retries.
+
+        A full rental inventory crawl makes thousands of requests.  A single
+        transient 429/5xx response should not silently truncate that crawl, but
+        permanent failures should still be surfaced after a small retry budget.
+        """
+        for attempt in range(1, attempts + 1):
+            try:
+                response = self.session.get(url, timeout=self.timeout)
+                if response.status_code == 404:
+                    return None
+                response.raise_for_status()
+                return response.text
+            except requests.exceptions.RequestException as exc:
+                if attempt == attempts:
+                    print(f"[WARN] Fetch failed after {attempts} attempts: {url} ({exc})")
+                    return None
+                retry_after = None
+                response = getattr(exc, "response", None)
+                if response is not None:
+                    retry_after = response.headers.get("Retry-After")
+                try:
+                    wait_seconds = float(retry_after) if retry_after else 2 ** (attempt - 1)
+                except (TypeError, ValueError):
+                    wait_seconds = 2 ** (attempt - 1)
+                wait_seconds = min(30.0, wait_seconds + random.uniform(0.25, 0.75))
+                print(f"[WARN] Fetch retry {attempt}/{attempts}: {url}; waiting {wait_seconds:.1f}s")
+                time.sleep(wait_seconds)
+        return None
     
     def safe_get_text(self, soup, selector: str, default: str = "N/A") -> str:
         try:
@@ -93,7 +116,11 @@ class ApartmentScraper:
             row_data['photo_count'] = len(advert.get('photos') or [])
             row_data['is_estate_verified'] = bool(advert.get('isEstateVerified'))
             row_data['is_booking_enabled'] = bool(advert.get('isBookingEnabled'))
+            row_data['seller_type'] = advert.get('userType')
             row_data['rental_period'] = self.rental_period_from_advert(advert)
+            row_data['description'] = self.normalize_listing_text(
+                self.safe_get_text(soup, '.offer__description', default='')
+            )
             developer = self.find_developer_name(advert)
             if not developer and advert.get('userType') == 'builder':
                 developer = self.extract_name_from_value(advert.get('ownerName'))
@@ -135,7 +162,10 @@ class ApartmentScraper:
             # so downstream filtering never has to guess from construction year.
             row_data['Новостройка'] = self.is_new_build_listing(soup, advert)
 
-            if not row_data.get('\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a'):
+            if (
+                not row_data.get('\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a')
+                and row_data.get('rental_period') is None
+            ):
                 complex_url = self.find_complex_url(soup)
                 if complex_url:
                     developer = self.fetch_complex_developer(complex_url)
@@ -288,10 +318,11 @@ class ApartmentScraper:
                     return item.strip()
         return None
     
-    def get_listing_urls(self, page_url: str) -> List[str]:
+    def get_listing_page(self, page_url: str) -> tuple[List[str], Optional[int]]:
+        """Return canonical listing URLs and the largest advertised page number."""
         html = self.fetch_page(page_url)
         if not html:
-            return []
+            raise RuntimeError(f"Could not fetch category page: {page_url}")
         
         try:
             soup = BeautifulSoup(html, 'html.parser')
@@ -308,8 +339,28 @@ class ApartmentScraper:
                         seen.add(full_url)
                         urls.append(full_url)
             
+            page_numbers = []
+            category_path = urlparse(page_url).path.rstrip('/')
+            for link in soup.select('a[href]'):
+                parsed_link = urlparse(urljoin(self.base_url, link.get('href') or ''))
+                if parsed_link.path.rstrip('/') != category_path:
+                    continue
+                query = parse_qs(parsed_link.query)
+                for raw_page in query.get('page', []):
+                    try:
+                        page_numbers.append(int(raw_page))
+                    except (TypeError, ValueError):
+                        continue
+
+            return urls, max(page_numbers, default=None)
+        except Exception as exc:
+            raise RuntimeError(f"Could not parse category page: {page_url}") from exc
+
+    def get_listing_urls(self, page_url: str) -> List[str]:
+        try:
+            urls, _ = self.get_listing_page(page_url)
             return urls
-        except Exception:
+        except RuntimeError:
             return []
     
     def save_to_csv(self, data_list: List[Dict], filename: str = "krisha_data_raw.csv"):

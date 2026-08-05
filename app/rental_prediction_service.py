@@ -63,10 +63,16 @@ class RentalPredictionService:
         for column in self.metadata["feature_columns"]:
             if column not in categorical:
                 features[column] = pd.to_numeric(features[column], errors="coerce").astype(float)
-        raw_predictions = {
-            quantile: float(np.exp(model.predict(features)[0]))
-            for quantile, model in self.models.items()
-        }
+        target_mode = str(self.metadata.get("target_mode") or "total")
+        area_m2 = float(features.iloc[0]["area_m2"])
+        if target_mode == "per_m2" and (not np.isfinite(area_m2) or area_m2 <= 0):
+            raise ValueError("A positive apartment area is required by the rental model")
+        raw_predictions = {}
+        for quantile, model in self.models.items():
+            prediction_log = float(model.predict(features)[0])
+            if target_mode == "per_m2":
+                prediction_log += float(np.log(area_m2))
+            raw_predictions[quantile] = float(np.exp(prediction_log))
         # Independently trained quantiles can cross on small or unusual samples.
         # Sort them before serving so the displayed interval is always coherent.
         ordered = sorted(raw_predictions.values())

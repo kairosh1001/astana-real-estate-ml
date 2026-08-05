@@ -1,0 +1,101 @@
+name: Full rental inventory refresh
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/rental-full-refresh.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rental-full-inventory-refresh
+  cancel-in-progress: false
+
+jobs:
+  collect-train-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Crawl all monthly rental pages
+        run: >-
+          python scripts/scrape_rentals.py
+          --period monthly
+          --pages 0
+          --min-delay 1.0
+          --max-delay 1.6
+          --failure-retry-passes 2
+          --min-success-rate 0.94
+          --append
+
+      - name: Crawl all daily rental pages
+        run: >-
+          python scripts/scrape_rentals.py
+          --period daily
+          --pages 0
+          --min-delay 1.0
+          --max-delay 1.6
+          --failure-retry-passes 2
+          --min-success-rate 0.94
+          --append
+
+      - name: Summarize collection quality
+        run: python scripts/summarize_rental_collection.py
+
+      - name: Select and train monthly rental models
+        run: >-
+          python scripts/retrain_rental_models.py
+          --period monthly
+          --min-rows 500
+          --iterations 1000
+          --candidate-iterations 450
+          --selection-splits 3
+
+      - name: Select and train daily rental models
+        run: >-
+          python scripts/retrain_rental_models.py
+          --period daily
+          --min-rows 500
+          --iterations 1000
+          --candidate-iterations 450
+          --selection-splits 3
+
+      - name: Rebuild reproducible quality notebook
+        run: python scripts/build_rental_quality_notebook.py
+
+      - name: Validate saved rental models and serving path
+        run: python scripts/validate_rental_models.py
+
+      - name: Run deployment checks
+        run: |
+          python -m compileall -q app scripts
+          python scripts/check_deployment.py
+          python scripts/check_ui.py
+
+      - name: Commit refreshed datasets, models, and validation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/rent_monthly_raw.csv data/rent_daily_raw.csv
+          git add data/rent_monthly_scrape_status.json data/rent_daily_scrape_status.json
+          git add data/rental_collection_status.json
+          git add models/rent_monthly models/rent_daily notebooks/rental_data_quality.ipynb
+          git commit -m "Refresh full rental inventory and models"
+          git push origin HEAD:main

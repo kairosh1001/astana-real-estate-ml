@@ -44,6 +44,19 @@ RENTAL_FEATURE_COLUMNS = SHARED_FEATURE_COLUMNS + [
     "photo_count",
     "is_estate_verified",
     "is_booking_enabled",
+    "is_new_build",
+    "description_length_log",
+    "has_description",
+    "description_has_premium",
+    "description_has_new_furniture",
+    "description_has_view",
+    "description_has_deposit",
+    "utilities_included",
+    "allows_pets",
+    "allows_children",
+    "has_self_checkin",
+    "description_has_documents",
+    "seller_type",
     "guest_capacity",
     "bed_count",
     "sofa_count",
@@ -63,6 +76,7 @@ CATEGORICAL_FEATURES = [
     "h3_res_7",
     "h3_res_8",
     "h3_res_9",
+    "seller_type",
 ]
 
 
@@ -88,10 +102,58 @@ def build_rental_features(
     )
 
     result = base.copy()
+    result["area_m2"] = result["area_m2"].fillna(
+        pd.to_numeric(_series(raw, "area_m2_structured"), errors="coerce")
+    )
+    result["rooms"] = result["rooms"].fillna(
+        pd.to_numeric(_series(raw, "rooms_structured"), errors="coerce")
+    )
     result["furnished_missing"] = furnished_source.map(_is_missing_text).astype(int)
     result["photo_count"] = pd.to_numeric(_series(raw, "photo_count"), errors="coerce").fillna(0)
     result["is_estate_verified"] = _series(raw, "is_estate_verified").map(_as_bool).astype(int)
     result["is_booking_enabled"] = _series(raw, "is_booking_enabled").map(_as_bool).astype(int)
+    result["is_new_build"] = _series(raw, "\u041d\u043e\u0432\u043e\u0441\u0442\u0440\u043e\u0439\u043a\u0430").map(_as_bool).astype(int)
+    result["seller_type"] = (
+        _series(raw, "seller_type").astype("string").fillna("missing").str.strip().replace("", "missing")
+    )
+
+    description = _series(raw, "description").fillna("").astype(str).str.casefold()
+    suitable_for = _series(raw, "\u041a\u043e\u043c\u0443 \u043f\u043e\u0434\u043e\u0439\u0434\u0435\u0442 \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0430").fillna("").astype(str).str.casefold()
+    result["description_length_log"] = np.log1p(description.str.len())
+    result["has_description"] = description.str.strip().ne("").astype(int)
+    result["description_has_premium"] = _contains_any(
+        description,
+        r"\u0434\u0438\u0437\u0430\u0439\u043d\u0435\u0440\u0441\u043a|\u043f\u0440\u0435\u043c\u0438\u0443\u043c|\u044d\u043b\u0438\u0442\u043d|\u0431\u0438\u0437\u043d\u0435\u0441.?\u043a\u043b\u0430\u0441\u0441|\blux\b|\bvip\b",
+    )
+    result["description_has_new_furniture"] = _contains_any(
+        description,
+        r"\u043d\u043e\u0432(?:\u0430\u044f|\u043e\u0439|\u044b\u0435|\u0443\u044e)\s+\u043c\u0435\u0431\u0435\u043b|\u043c\u0435\u0431\u0435\u043b\w*\s+\u043d\u043e\u0432",
+    )
+    result["description_has_view"] = _contains_any(
+        description,
+        r"\u0432\u0438\u0434\u043e\u0432|\u043f\u0430\u043d\u043e\u0440\u0430\u043c\u043d|\u0432\u0438\u0434\s+\u043d\u0430",
+    )
+    result["description_has_deposit"] = _contains_any(description, r"\u0434\u0435\u043f\u043e\u0437\u0438\u0442")
+    result["utilities_included"] = _contains_any(
+        description,
+        r"\u043a\u043e\u043c\u043c\u0443\u043d\w*\s+\u0432\u043a\u043b\u044e\u0447|\u043a\u043e\u043c\u0443\u0441\u043b\u0443\u0433\w*\s+\u0432\u043a\u043b\u044e\u0447",
+    )
+    result["allows_pets"] = _contains_any(
+        suitable_for + " " + description,
+        r"\u043c\u043e\u0436\u043d\u043e\s+\u0441\s+(?:\u0436\u0438\u0432\u043e\u0442\u043d|\u043f\u0438\u0442\u043e\u043c)|\u0441\s+\u0436\u0438\u0432\u043e\u0442\u043d\w*\s+\u043c\u043e\u0436\u043d\u043e",
+    )
+    result["allows_children"] = _contains_any(
+        suitable_for + " " + description,
+        r"\u043c\u043e\u0436\u043d\u043e\s+\u0441\s+\u0434\u0435\u0442|\u0441\s+\u0434\u0435\u0442\w*\s+\u043c\u043e\u0436\u043d\u043e",
+    )
+    result["has_self_checkin"] = _contains_any(
+        description,
+        r"\u0431\u0435\u0441\u043a\u043e\u043d\u0442\u0430\u043a\u0442\u043d|\u0441\u0430\u043c\u043e\u0441\u0442\u043e\u044f\u0442\w*\s+\u0437\u0430\u0441\u0435\u043b\u0435\u043d|\u0441\u043c\u0430\u0440\u0442.?\u0437\u0430\u043c\u043e\u043a|\bkeybox\b",
+    )
+    result["description_has_documents"] = _contains_any(
+        description,
+        r"\u043e\u0442\u0447\u0435\u0442\u043d\w*\s+\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442|\u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\w*\s+\u043a\u043e\u043c\u0430\u043d\u0434\u0438\u0440\u043e\u0432",
+    )
 
     placement = _series(raw, "Возможности размещения").fillna("").astype(str)
     amenities = _series(raw, "Удобства").fillna("").astype(str).str.casefold()
@@ -157,3 +219,7 @@ def _number_before(value: object, stems: tuple[str, ...]) -> float:
         if match:
             return float(match.group(1))
     return np.nan
+
+
+def _contains_any(series: pd.Series, pattern: str) -> pd.Series:
+    return series.str.contains(pattern, regex=True, na=False).astype(int)
