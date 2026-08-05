@@ -123,10 +123,15 @@ def main() -> None:
     global_median = float(np.median(np.exp(train_y.to_numpy())))
     baseline = raw.iloc[valid_idx]["rooms_structured"].map(median_by_rooms).fillna(global_median).to_numpy()
     q50 = predictions["q50"]
+    unique_listings = int(raw["listing_id"].astype(str).nunique())
+    production_ready = bool(
+        unique_listings >= 500 and strategy == "chronological_group_holdout"
+    )
     metrics = {
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "period": args.period,
         "rows": len(raw),
+        "unique_listings": unique_listings,
         "train_rows": len(train_idx),
         "validation_rows": len(valid_idx),
         "split_strategy": strategy,
@@ -134,10 +139,10 @@ def main() -> None:
         "median_ape": float(np.median(np.abs(q50 - actual) / actual)),
         "baseline_mae_kzt": float(np.mean(np.abs(baseline - actual))),
         "q10_q90_coverage": float(np.mean((actual >= predictions["q10"]) & (actual <= predictions["q90"]))),
-        "production_ready": bool(len(raw) >= 500 and strategy == "chronological_group_holdout"),
+        "production_ready": production_ready,
         "readiness_notes": (
             []
-            if len(raw) >= 500 and strategy == "chronological_group_holdout"
+            if production_ready
             else [
                 "Pilot only: fewer than 500 unique listings or no chronological holdout.",
                 "Collect repeated snapshots before using the model for investment decisions.",
