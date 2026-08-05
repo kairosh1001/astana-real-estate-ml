@@ -21,6 +21,17 @@ DISTRICT_OPTIONS = [
     {"slug": "baikonyr", "label": "Байконур"},
     {"slug": "saraishyk", "label": "Сарайшык"},
 ]
+APARTMENT_CONDITION_OPTIONS = [
+    {"slug": "fresh_repair", "label": "Свежий ремонт", "value": "свежий ремонт"},
+    {
+        "slug": "tidy_repair",
+        "label": "Не новый, но аккуратный ремонт",
+        "value": "не новый, но аккуратный ремонт",
+    },
+    {"slug": "rough_finish", "label": "Черновая отделка", "value": "черновая отделка"},
+    {"slug": "needs_repair", "label": "Требует ремонта", "value": "требует ремонта"},
+    {"slug": "open_plan", "label": "Свободная планировка", "value": "свободная планировка"},
+]
 
 _DISTRICT_ALIASES = {
     "yesil": {"есиль", "есильский"},
@@ -619,6 +630,8 @@ def fetch_undervalued(
     max_year: int | None = None,
     residential_complex: str | None = None,
     developer: str | None = None,
+    apartment_condition: str | None = None,
+    new_build: bool = False,
     min_area: float | None = None,
     max_area: float | None = None,
     polygon: list[tuple[float, float]] | None = None,
@@ -693,6 +706,14 @@ def fetch_undervalued(
             for item in items
             if developer_query in str(item.get("developer") or "").casefold()
         ]
+    if apartment_condition:
+        items = [
+            item
+            for item in items
+            if item.get("apartment_condition_slug") == apartment_condition
+        ]
+    if new_build:
+        items = [item for item in items if item.get("is_new_build") is True]
     if min_area:
         items = [
             item
@@ -740,6 +761,8 @@ def count_undervalued(
     max_year: int | None = None,
     residential_complex: str | None = None,
     developer: str | None = None,
+    apartment_condition: str | None = None,
+    new_build: bool = False,
     min_area: float | None = None,
     max_area: float | None = None,
     polygon: list[tuple[float, float]] | None = None,
@@ -760,6 +783,8 @@ def count_undervalued(
             max_year=max_year,
             residential_complex=residential_complex,
             developer=developer,
+            apartment_condition=apartment_condition,
+            new_build=new_build,
             min_area=min_area,
             max_area=max_area,
             polygon=polygon,
@@ -1089,6 +1114,13 @@ def _prepare_undervalued_item(row: dict) -> dict:
     row["construction_year"] = _extract_int(raw_listing.get("Год постройки"))
     row["residential_complex"] = _clean_text(raw_listing.get("Жилой комплекс"))
     row["developer"] = _extract_developer(raw_listing)
+    row["apartment_condition"] = _clean_text(
+        raw_listing.get("Состояние квартиры")
+    )
+    row["apartment_condition_slug"] = normalize_apartment_condition(
+        row["apartment_condition"]
+    )
+    row["is_new_build"] = _extract_new_build_flag(raw_listing)
     row["address"] = _extract_address(raw_listing)
     row["lat"] = _extract_float(raw_listing.get("lat"))
     row["lon"] = _extract_float(raw_listing.get("lon"))
@@ -1258,6 +1290,34 @@ def valid_district_slugs(values: list[str] | None) -> list[str]:
         if value in slugs and value not in result:
             result.append(value)
     return result
+
+
+def valid_apartment_condition_slug(value: str | None) -> str | None:
+    if not value:
+        return None
+    slugs = {option["slug"] for option in APARTMENT_CONDITION_OPTIONS}
+    return value if value in slugs else None
+
+
+def normalize_apartment_condition(value: object) -> str | None:
+    cleaned = re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+    for option in APARTMENT_CONDITION_OPTIONS:
+        if cleaned == option["value"]:
+            return option["slug"]
+    return None
+
+
+def _extract_new_build_flag(raw_listing: dict) -> bool:
+    value = raw_listing.get("Новостройка")
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "да",
+        "новостройка",
+    }
 
 
 def _short_listing_title(title: object, area_m2: object) -> str:

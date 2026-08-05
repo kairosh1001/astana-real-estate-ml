@@ -52,7 +52,7 @@ def seed_listing(db_path: Path) -> None:
             (
                 "https://krisha.kz/a/show/123",
                 "3-комнатная квартира, 80 м², 7/12 этаж, рядом с парком",
-                '{"Город": "Астана, Есиль р-н", "Адрес": "Кабанбай батыра 48", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "Застройщик": "Test Developer", "lat": 51.13, "lon": 71.43}',
+                '{"Город": "Астана, Есиль р-н", "Адрес": "Кабанбай батыра 48", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "Застройщик": "Test Developer", "Состояние квартиры": "свежий ремонт", "Новостройка": true, "lat": 51.13, "lon": 71.43}',
                 first_seen_at,
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
@@ -129,6 +129,60 @@ def check_complex_developer_parser() -> None:
         raise SystemExit("Complex developer parser did not read the meta fallback")
 
 
+def check_listing_field_parser() -> None:
+    from scrape import ApartmentScraper
+
+    scraper = ApartmentScraper()
+    try:
+        new_build_html = """
+        <div class="offer__advert-title"><h1>2-комнатная квартира · 60 м²</h1></div>
+        <div class="offer__price">30 000 000 ₸</div>
+        <script id="jsdata">
+          window.data = {"advert": {"map": {"lat": 51.1, "lon": 71.4},
+          "userType": "builder", "ownerName": "Test Builder"}};
+          window.afterData = true;
+        </script>
+        <a href="/prodazha/kvartiry/astana/?das%5Bnovostroiki%5D=1">Продажа квартир</a>
+        <div class="offer__parameters">
+          <dl><dt>Состояние квартиры</dt><dd>  черновая\nотделка  </dd></dl>
+        </div>
+        """
+        parsed = scraper.parse_apartment_html(
+            "https://krisha.kz/a/show/456",
+            new_build_html,
+        )
+        if not parsed:
+            raise SystemExit("Listing parser returned no data")
+        if parsed.get("Состояние квартиры") != "черновая отделка":
+            raise SystemExit("Listing parser did not normalize apartment condition")
+        if parsed.get("Новостройка") is not True:
+            raise SystemExit("Listing parser did not detect a new-build offer")
+        if parsed.get("Застройщик") != "Test Builder":
+            raise SystemExit("Listing parser did not retain builder identity")
+
+        resale_html = """
+        <div class="offer__advert-title"><h1>2-комнатная квартира · 60 м²</h1></div>
+        <div class="offer__price">30 000 000 ₸</div>
+        <script id="jsdata">window.data = {"advert": {"userType": "specialist"}};</script>
+        <div class="offer__advert-info">
+          <div class="offer__info-item">
+            <span class="offer__info-title">Состояние квартиры</span>
+            <span class="offer__advert-short-info">свежий ремонт</span>
+          </div>
+        </div>
+        """
+        parsed_resale = scraper.parse_apartment_html(
+            "https://krisha.kz/a/show/789",
+            resale_html,
+        )
+        if not parsed_resale or parsed_resale.get("Новостройка") is not False:
+            raise SystemExit("Listing parser incorrectly marked a resale offer as new-build")
+        if parsed_resale.get("Состояние квартиры") != "свежий ремонт":
+            raise SystemExit("Listing parser did not read condition from summary fields")
+    finally:
+        scraper.session.close()
+
+
 def check_telegram_digest_format() -> None:
     from scripts.telegram_bot import format_digest
 
@@ -160,6 +214,7 @@ def main() -> None:
     os.environ["TELEGRAM_BOT_USERNAME"] = "krisha_test_bot"
     seed_listing(db_path)
     check_complex_developer_parser()
+    check_listing_field_parser()
     check_telegram_digest_format()
 
     from fastapi.testclient import TestClient
@@ -414,6 +469,11 @@ def main() -> None:
         "Год постройки от",
         "Год постройки до",
         "Жилой комплекс",
+        "Состояние квартиры",
+        "Свежий ремонт",
+        "Черновая отделка",
+        "Новостройка",
+        "Только новостройки",
         "Площадь от",
         "Площадь до",
         "Новые за 24 часа",
@@ -493,6 +553,31 @@ def main() -> None:
         raise SystemExit(f"Advanced filter returned {advanced_filter_page.status_code}")
     assert_contains(advanced_filter_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(advanced_filter_page.text, "Test")
+
+    listing_fields_page = client.get(
+        "/undervalued-page?condition=fresh_repair&new_build=1"
+    )
+    if listing_fields_page.status_code != 200:
+        raise SystemExit(f"Listing field filters returned {listing_fields_page.status_code}")
+    assert_contains(listing_fields_page.text, "3-комнатная квартира · 40 м²")
+    assert_contains(listing_fields_page.text, 'value="fresh_repair" selected')
+    assert_contains(listing_fields_page.text, 'value="1" selected')
+
+    wrong_condition_page = client.get("/undervalued-page?condition=rough_finish")
+    if wrong_condition_page.status_code != 200:
+        raise SystemExit(f"Condition filter returned {wrong_condition_page.status_code}")
+    assert_contains(wrong_condition_page.text, "Показано 0 из 0")
+
+    api_listing_fields = client.get("/undervalued?condition=fresh_repair&new_build=1")
+    if api_listing_fields.status_code != 200:
+        raise SystemExit(f"Listing field API returned {api_listing_fields.status_code}")
+    api_listing_fields_payload = api_listing_fields.json()
+    if api_listing_fields_payload["total"] != 1:
+        raise SystemExit("Listing field API did not return the seeded listing")
+    if api_listing_fields_payload["items"][0]["apartment_condition_slug"] != "fresh_repair":
+        raise SystemExit("Listing field API did not expose normalized condition")
+    if api_listing_fields_payload["items"][0]["is_new_build"] is not True:
+        raise SystemExit("Listing field API did not expose new-build status")
 
     fresh_strong_page = client.get("/undervalued-page?new_since_hours=24&min_discount_pct=10")
     if fresh_strong_page.status_code != 200:

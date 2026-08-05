@@ -29,6 +29,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from app.database import (
+    APARTMENT_CONDITION_OPTIONS,
     DISTRICT_OPTIONS,
     connect,
     count_undervalued,
@@ -50,6 +51,7 @@ from app.database import (
     init_db,
     record_request_event,
     store_cached_prediction,
+    valid_apartment_condition_slug,
     valid_district_slugs,
 )
 from app.model_service import MODEL_FILENAMES
@@ -387,6 +389,8 @@ def undervalued(
     max_year: str | None = None,
     residential_complex: str | None = None,
     developer: str | None = None,
+    condition: str | None = None,
+    new_build: str | None = None,
     min_area: str | None = None,
     max_area: str | None = None,
     map_polygon: str | None = None,
@@ -402,6 +406,8 @@ def undervalued(
     selected_max_year = _parse_optional_int(max_year)
     selected_complex = _parse_optional_text(residential_complex)
     selected_developer = _parse_optional_text(developer)
+    selected_condition = valid_apartment_condition_slug(condition)
+    selected_new_build = _parse_checkbox_bool(new_build)
     selected_min_area = _parse_optional_positive_float(min_area)
     selected_max_area = _parse_optional_positive_float(max_area)
     selected_polygon = _parse_polygon(map_polygon)
@@ -423,6 +429,8 @@ def undervalued(
             max_year=selected_max_year,
             residential_complex=selected_complex,
             developer=selected_developer,
+            apartment_condition=selected_condition,
+            new_build=selected_new_build,
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
@@ -440,6 +448,8 @@ def undervalued(
             max_year=selected_max_year,
             residential_complex=selected_complex,
             developer=selected_developer,
+            apartment_condition=selected_condition,
+            new_build=selected_new_build,
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
@@ -460,6 +470,8 @@ def undervalued(
         "max_year": selected_max_year,
         "residential_complex": selected_complex,
         "developer": selected_developer,
+        "condition": selected_condition,
+        "new_build": selected_new_build,
         "min_area": selected_min_area,
         "max_area": selected_max_area,
         "map_polygon": selected_polygon,
@@ -479,6 +491,8 @@ def undervalued_page(
     min_year: str | None = None,
     max_year: str | None = None,
     residential_complex: str | None = None,
+    condition: str | None = None,
+    new_build: str | None = None,
     min_area: str | None = None,
     max_area: str | None = None,
     map_polygon: str | None = None,
@@ -493,6 +507,8 @@ def undervalued_page(
     selected_min_year = _parse_optional_int(min_year)
     selected_max_year = _parse_optional_int(max_year)
     selected_complex = _parse_optional_text(residential_complex)
+    selected_condition = valid_apartment_condition_slug(condition)
+    selected_new_build = _parse_checkbox_bool(new_build)
     selected_min_area = _parse_optional_positive_float(min_area)
     selected_max_area = _parse_optional_positive_float(max_area)
     selected_polygon = _parse_polygon(map_polygon)
@@ -512,6 +528,8 @@ def undervalued_page(
             min_year=selected_min_year,
             max_year=selected_max_year,
             residential_complex=selected_complex,
+            apartment_condition=selected_condition,
+            new_build=selected_new_build,
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
@@ -528,6 +546,8 @@ def undervalued_page(
             min_year=selected_min_year,
             max_year=selected_max_year,
             residential_complex=selected_complex,
+            apartment_condition=selected_condition,
+            new_build=selected_new_build,
             min_area=selected_min_area,
             max_area=selected_max_area,
             polygon=selected_polygon,
@@ -550,6 +570,9 @@ def undervalued_page(
             "selected_min_year": selected_min_year,
             "selected_max_year": selected_max_year,
             "selected_complex": selected_complex,
+            "condition_options": APARTMENT_CONDITION_OPTIONS,
+            "selected_condition": selected_condition,
+            "selected_new_build": selected_new_build,
             "selected_min_area": selected_min_area,
             "selected_max_area": selected_max_area,
             "selected_polygon": map_polygon or "",
@@ -563,6 +586,8 @@ def undervalued_page(
                 min_year=selected_min_year,
                 max_year=selected_max_year,
                 residential_complex=selected_complex,
+                apartment_condition=selected_condition,
+                new_build=selected_new_build,
                 min_area=selected_min_area,
                 max_area=selected_max_area,
                 map_polygon=map_polygon,
@@ -1297,6 +1322,10 @@ def _parse_optional_text(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _parse_checkbox_bool(value: str | None) -> bool:
+    return str(value or "").strip().casefold() in {"1", "true", "yes", "on", "да"}
+
+
 def _parse_optional_email(value: str | None) -> str | None:
     cleaned = (value or "").strip()
     return cleaned or None
@@ -1356,6 +1385,8 @@ def _build_filter_query(
     max_year: int | None = None,
     residential_complex: str | None = None,
     developer: str | None = None,
+    apartment_condition: str | None = None,
+    new_build: bool = False,
     min_area: float | None = None,
     max_area: float | None = None,
     map_polygon: str | None = None,
@@ -1372,6 +1403,8 @@ def _build_filter_query(
         max_year=max_year,
         residential_complex=residential_complex,
         developer=developer,
+        apartment_condition=apartment_condition,
+        new_build=new_build,
         min_area=min_area,
         max_area=max_area,
         map_polygon=map_polygon,
@@ -1392,6 +1425,8 @@ def _filter_params(
     max_year: int | None = None,
     residential_complex: str | None = None,
     developer: str | None = None,
+    apartment_condition: str | None = None,
+    new_build: bool = False,
     min_area: float | None = None,
     max_area: float | None = None,
     map_polygon: str | None = None,
@@ -1417,6 +1452,10 @@ def _filter_params(
         params.append(("residential_complex", residential_complex))
     if developer:
         params.append(("developer", developer))
+    if apartment_condition:
+        params.append(("condition", apartment_condition))
+    if new_build:
+        params.append(("new_build", "1"))
     if min_area:
         params.append(("min_area", _format_filter_number(min_area)))
     if max_area:

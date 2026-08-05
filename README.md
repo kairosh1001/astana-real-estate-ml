@@ -71,7 +71,7 @@ The current feature contract is stored in [`model_metadata.json`](model_metadata
 ## User-Facing Features
 
 - Ranking of active below-market listings.
-- District, room count, price, construction year, residential complex, area, recency, and minimum-upside filters.
+- District, room count, price, construction year, residential complex, apartment condition, new-build, area, recency, and minimum-upside filters.
 - Multi-district filtering.
 - Map polygon search with Leaflet.
 - Listing details page with q10/q50/q90 estimates and price history.

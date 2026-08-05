@@ -119,6 +119,22 @@
       >
     </label>
     <label>
+      Состояние квартиры
+      <select name="condition">
+        <option value="">Любое состояние</option>
+        {% for option in condition_options %}
+        <option value="{{ option.slug }}" {% if selected_condition == option.slug %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Новостройка
+      <select name="new_build">
+        <option value="">Любой тип жилья</option>
+        <option value="1" {% if selected_new_build %}selected{% endif %}>Только новостройки</option>
+      </select>
+    </label>
+    <label>
       Площадь от, м²
       <input
         name="min_area"

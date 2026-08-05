@@ -4,7 +4,7 @@ import random
 import time
 import sys
 from typing import Optional, List, Dict
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urljoin, urlparse
 from bs4 import BeautifulSoup
 import json
 import re
@@ -50,7 +50,10 @@ class ApartmentScraper:
         html = self.fetch_page(url)
         if not html:
             return None
-        
+
+        return self.parse_apartment_html(url, html)
+
+    def parse_apartment_html(self, url: str, html: str) -> Optional[Dict]:
         try:
             soup = BeautifulSoup(html, 'html.parser')
             row_data = {'url': url}
@@ -65,20 +68,20 @@ class ApartmentScraper:
                 if price_text != "N/A" else "N/A"
             )
             
-            #Addition! To get latitude and longitude:
-            script_tag = soup.find('script', {'id': 'jsdata'})
-            if script_tag:
-                match = re.search(r'window\.data\s*=\s*(\{.+\});', script_tag.string, re.DOTALL)
-                if match:
-                    data = json.loads(match.group(1))
-                    advert = data.get('advert', {})
-                    row_data['lat'] = advert.get('map', {}).get('lat')
-                    row_data['lon'] = advert.get('map', {}).get('lon')
-                    developer = self.find_developer_name(advert)
-                    if not developer and advert.get('userType') == 'builder':
-                        developer = self.extract_name_from_value(advert.get('ownerName'))
-                    if developer:
-                        row_data['Застройщик'] = developer
+            # Structured page data is more stable than presentation selectors for
+            # coordinates and seller type. JSONDecoder avoids a greedy regex over
+            # any JavaScript that Krisha may append after window.data.
+            data = self.extract_page_data(soup)
+            advert_value = data.get('advert') if isinstance(data, dict) else None
+            advert = advert_value if isinstance(advert_value, dict) else {}
+            advert_map = advert.get('map', {}) if isinstance(advert, dict) else {}
+            row_data['lat'] = advert_map.get('lat')
+            row_data['lon'] = advert_map.get('lon')
+            developer = self.find_developer_name(advert)
+            if not developer and advert.get('userType') == 'builder':
+                developer = self.extract_name_from_value(advert.get('ownerName'))
+            if developer:
+                row_data['Застройщик'] = developer
 
             # 3. Apartment Info
             info_container = soup.select_one('.offer__advert-info')
@@ -87,8 +90,17 @@ class ApartmentScraper:
                     key_elem = item.select_one('.offer__info-title')
                     val_elem = item.select_one('.offer__advert-short-info')
                     if key_elem and val_elem:
-                        val = val_elem.get_text(separator=" ", strip=True).replace('показать на карте', '').strip()
-                        row_data[key_elem.text.strip()] = val
+                        key = self.normalize_listing_text(
+                            key_elem.get_text(' ', strip=True)
+                        )
+                        value = self.normalize_listing_text(
+                            val_elem.get_text(' ', strip=True).replace(
+                                'показать на карте',
+                                '',
+                            )
+                        )
+                        if key and value:
+                            row_data[key] = value
             
             # 4. Parameters
             params_container = soup.select_one('.offer__parameters')
@@ -96,7 +108,15 @@ class ApartmentScraper:
                 for dl in params_container.select('dl'):
                     dt, dd = dl.select_one('dt'), dl.select_one('dd')
                     if dt and dd:
-                        row_data[dt.text.strip()] = dd.text.strip()
+                        key = self.normalize_listing_text(dt.get_text(' ', strip=True))
+                        value = self.normalize_listing_text(dd.get_text(' ', strip=True))
+                        if key and value:
+                            row_data[key] = value
+
+            # Krisha identifies primary-market offers with a builder seller and
+            # with its canonical das[novostroiki]=1 links. Store an explicit flag
+            # so downstream filtering never has to guess from construction year.
+            row_data['Новостройка'] = self.is_new_build_listing(soup, advert)
 
             if not row_data.get('\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a'):
                 complex_url = self.find_complex_url(soup)
@@ -108,6 +128,37 @@ class ApartmentScraper:
             return row_data
         except Exception:
             return None
+
+    @staticmethod
+    def normalize_listing_text(value: object) -> str:
+        return re.sub(r'\s+', ' ', str(value or '')).strip()
+
+    @staticmethod
+    def extract_page_data(soup) -> Dict:
+        script_tag = soup.find('script', {'id': 'jsdata'})
+        if not script_tag:
+            return {}
+        script_text = script_tag.string or script_tag.get_text() or ''
+        match = re.search(r'window\.data\s*=\s*', script_text)
+        if not match:
+            return {}
+        try:
+            data, _ = json.JSONDecoder().raw_decode(script_text[match.end():].lstrip())
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def is_new_build_listing(self, soup, advert: Dict | None = None) -> bool:
+        advert = advert if isinstance(advert, dict) else {}
+        if str(advert.get('userType') or '').casefold() == 'builder':
+            return True
+
+        for link in soup.select('a[href]'):
+            href = link.get('href') or ''
+            query = parse_qs(urlparse(urljoin(self.base_url, href)).query)
+            if '1' in query.get('das[novostroiki]', []):
+                return True
+        return False
 
     def find_complex_url(self, soup) -> Optional[str]:
         for link in soup.select('a[href*="/complex/show/"]'):
