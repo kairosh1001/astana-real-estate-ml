@@ -60,11 +60,12 @@ def prepare_features(frame: pd.DataFrame, metadata: dict) -> pd.DataFrame:
 
 def split_rows(raw: pd.DataFrame, test_size: float, seed: int) -> tuple[np.ndarray, np.ndarray, str]:
     scraped = pd.to_datetime(raw.get("scraped_at"), errors="coerce", utc=True)
-    if scraped.notna().any() and scraped.nunique() > 1:
-        cutoff = scraped.quantile(1 - test_size)
-        valid_mask = scraped >= cutoff
+    scrape_day = scraped.dt.floor("D")
+    if scrape_day.notna().any() and scrape_day.nunique() > 1:
+        latest_day = scrape_day.max()
+        valid_mask = scrape_day == latest_day
         valid_groups = set(raw.loc[valid_mask, "listing_id"].astype(str))
-        train_mask = ~raw["listing_id"].astype(str).isin(valid_groups)
+        train_mask = (scrape_day < latest_day) & ~raw["listing_id"].astype(str).isin(valid_groups)
         if train_mask.sum() >= 50 and valid_mask.sum() >= 20:
             return np.flatnonzero(train_mask), np.flatnonzero(valid_mask), "chronological_group_holdout"
 
@@ -123,10 +124,24 @@ def main() -> None:
     global_median = float(np.median(np.exp(train_y.to_numpy())))
     baseline = raw.iloc[valid_idx]["rooms_structured"].map(median_by_rooms).fillna(global_median).to_numpy()
     q50 = predictions["q50"]
+    actual_log = valid_y.to_numpy()
+    q50_log = np.log(q50)
+    baseline_log = np.log(baseline)
+    rmse_log = float(np.sqrt(np.mean(np.square(q50_log - actual_log))))
+    baseline_rmse_log = float(np.sqrt(np.mean(np.square(baseline_log - actual_log))))
     unique_listings = int(raw["listing_id"].astype(str).nunique())
     production_ready = bool(
         unique_listings >= 500 and strategy == "chronological_group_holdout"
     )
+    readiness_notes: list[str] = []
+    if unique_listings < 500:
+        readiness_notes.append(
+            f"Collect at least 500 unique listings; this dataset has {unique_listings}."
+        )
+    if strategy != "chronological_group_holdout":
+        readiness_notes.append(
+            "Collect a fresh snapshot on a later UTC date for an independent chronological holdout."
+        )
     metrics = {
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "period": args.period,
@@ -135,19 +150,18 @@ def main() -> None:
         "train_rows": len(train_idx),
         "validation_rows": len(valid_idx),
         "split_strategy": strategy,
+        "rmse_log": rmse_log,
+        "multiplicative_rmse": float(np.expm1(rmse_log)),
+        "rmse_kzt": float(np.sqrt(np.mean(np.square(q50 - actual)))),
         "mae_kzt": float(np.mean(np.abs(q50 - actual))),
         "median_ape": float(np.median(np.abs(q50 - actual) / actual)),
+        "baseline_rmse_log": baseline_rmse_log,
+        "baseline_multiplicative_rmse": float(np.expm1(baseline_rmse_log)),
+        "baseline_rmse_kzt": float(np.sqrt(np.mean(np.square(baseline - actual)))),
         "baseline_mae_kzt": float(np.mean(np.abs(baseline - actual))),
         "q10_q90_coverage": float(np.mean((actual >= predictions["q10"]) & (actual <= predictions["q90"]))),
         "production_ready": production_ready,
-        "readiness_notes": (
-            []
-            if production_ready
-            else [
-                "Pilot only: fewer than 500 unique listings or no chronological holdout.",
-                "Collect repeated snapshots before using the model for investment decisions.",
-            ]
-        ),
+        "readiness_notes": readiness_notes,
     }
     metadata["feature_config"] = {
         "building_type_fill": config.building_type_fill,

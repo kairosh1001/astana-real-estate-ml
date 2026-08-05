@@ -37,9 +37,9 @@ jobs:
         run: >-
           python scripts/scrape_rentals.py
           --period monthly
-          --start-page 1
-          --pages 25
-          --max-listings 500
+          --start-page 26
+          --pages 5
+          --max-listings 100
           --min-delay 0.8
           --max-delay 1.4
           --append
@@ -49,9 +49,9 @@ jobs:
         run: >-
           python scripts/scrape_rentals.py
           --period daily
-          --start-page 1
-          --pages 25
-          --max-listings 500
+          --start-page 26
+          --pages 5
+          --max-listings 100
           --min-delay 0.8
           --max-delay 1.4
           --append
