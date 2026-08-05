@@ -1,0 +1,12 @@
+{
+  "monthly": {
+    "snapshots": 505,
+    "unique_listings": 465,
+    "latest_scrape": "2026-08-05T16:23:00+00:00"
+  },
+  "daily": {
+    "snapshots": 535,
+    "unique_listings": 498,
+    "latest_scrape": "2026-08-05T16:37:35+00:00"
+  }
+}
