@@ -111,6 +111,35 @@ def init_db(connection: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_price_history_url_observed
         ON listing_price_history(url, observed_at);
 
+        CREATE TABLE IF NOT EXISTS rental_listings (
+            url TEXT PRIMARY KEY,
+            title TEXT,
+            period TEXT NOT NULL,
+            raw_json TEXT NOT NULL,
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            listed_rent REAL NOT NULL,
+            pred_rent_q10 REAL,
+            pred_rent_q50 REAL,
+            pred_rent_q90 REAL,
+            discount_vs_asking_pct_conservative REAL,
+            discount_vs_asking_pct_median REAL,
+            interval_width_pct REAL,
+            production_ready INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_rental_period_status
+        ON rental_listings(period, status);
+
+        CREATE TABLE IF NOT EXISTS rental_price_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            listed_rent REAL NOT NULL,
+            FOREIGN KEY(url) REFERENCES rental_listings(url) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS model_monitoring_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TEXT NOT NULL,
@@ -181,6 +210,90 @@ def init_db(connection: sqlite3.Connection) -> None:
         """
     )
     connection.commit()
+
+
+def upsert_rental_prediction(
+    connection: sqlite3.Connection,
+    *,
+    raw_listing: dict,
+    prediction: object,
+) -> None:
+    now = utc_now()
+    raw_json = json.dumps(raw_listing, ensure_ascii=False, sort_keys=True)
+    values = asdict(prediction)
+    connection.execute(
+        """
+        INSERT INTO rental_listings (
+            url, title, period, raw_json, first_seen_at, last_seen_at, status,
+            listed_rent, pred_rent_q10, pred_rent_q50, pred_rent_q90,
+            discount_vs_asking_pct_conservative, discount_vs_asking_pct_median,
+            interval_width_pct, production_ready
+        ) VALUES (
+            :url, :title, :period, :raw_json, :now, :now, 'active',
+            :listed_rent, :pred_rent_q10, :pred_rent_q50, :pred_rent_q90,
+            :discount_vs_asking_pct_conservative, :discount_vs_asking_pct_median,
+            :interval_width_pct, :production_ready
+        )
+        ON CONFLICT(url) DO UPDATE SET
+            title=excluded.title,
+            period=excluded.period,
+            raw_json=excluded.raw_json,
+            last_seen_at=excluded.last_seen_at,
+            status='active',
+            listed_rent=excluded.listed_rent,
+            pred_rent_q10=excluded.pred_rent_q10,
+            pred_rent_q50=excluded.pred_rent_q50,
+            pred_rent_q90=excluded.pred_rent_q90,
+            discount_vs_asking_pct_conservative=excluded.discount_vs_asking_pct_conservative,
+            discount_vs_asking_pct_median=excluded.discount_vs_asking_pct_median,
+            interval_width_pct=excluded.interval_width_pct,
+            production_ready=excluded.production_ready
+        """,
+        {**values, "raw_json": raw_json, "now": now, "production_ready": int(values["production_ready"])},
+    )
+    connection.execute(
+        "INSERT INTO rental_price_history (url, observed_at, listed_rent) VALUES (?, ?, ?)",
+        (values["url"], now, values["listed_rent"]),
+    )
+    connection.commit()
+
+
+def fetch_rentals(
+    connection: sqlite3.Connection,
+    *,
+    period: str,
+    rooms: int | None = None,
+    max_rent: float | None = None,
+    furnished: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT * FROM rental_listings
+        WHERE period = ? AND status = 'active'
+        ORDER BY discount_vs_asking_pct_conservative DESC
+        """,
+        (period,),
+    ).fetchall()
+    items: list[dict] = []
+    for row in rows:
+        item = dict(row)
+        raw = _load_raw_listing(item.get("raw_json"))
+        item["rooms"] = _extract_rooms(raw.get("title"))
+        item["area_m2"] = _extract_float(raw.get("Площадь"))
+        item["district"] = _clean_text(raw.get("Город"))
+        item["residential_complex"] = _clean_text(raw.get("Жилой комплекс"))
+        item["furnished"] = _clean_text(raw.get("Квартира меблирована")) or "не указано"
+        item["condition"] = _clean_text(raw.get("Состояние квартиры")) or "не указано"
+        item["unit_label"] = "₸/месяц" if period == "monthly" else "₸/сутки"
+        if rooms and item["rooms"] != rooms:
+            continue
+        if max_rent and item["listed_rent"] > max_rent:
+            continue
+        if furnished and item["furnished"].casefold() != furnished.casefold():
+            continue
+        items.append(item)
+    return items[:limit]
 
 
 def fetch_cached_prediction(

@@ -94,6 +94,37 @@ def seed_listing(db_path: Path) -> None:
         create_monitoring_snapshot(connection, run_id=run_id)
 
 
+def seed_rental(db_path: Path) -> None:
+    from app.database import connect, init_db, upsert_rental_prediction
+    from app.rental_prediction_service import RentalPrediction
+
+    raw = {
+        "url": "https://krisha.kz/a/show/456",
+        "title": "2-комнатная квартира · 55 м² · 7/12 этаж",
+        "Город": "Астана, Нура р-н",
+        "Жилой комплекс": "Rental Test ЖК",
+        "Площадь": "55 м²",
+        "Состояние квартиры": "свежий ремонт",
+        "Квартира меблирована": "полностью",
+    }
+    prediction = RentalPrediction(
+        url=raw["url"],
+        title=raw["title"],
+        period="monthly",
+        listed_rent=300000,
+        pred_rent_q10=330000,
+        pred_rent_q50=360000,
+        pred_rent_q90=400000,
+        discount_vs_asking_pct_conservative=0.10,
+        discount_vs_asking_pct_median=0.20,
+        interval_width_pct=0.19,
+        production_ready=False,
+    )
+    with connect(db_path) as connection:
+        init_db(connection)
+        upsert_rental_prediction(connection, raw_listing=raw, prediction=prediction)
+
+
 def assert_contains(text: str, needle: str) -> None:
     if needle not in text:
         raise SystemExit(f"Expected page to contain: {needle}")
@@ -213,6 +244,7 @@ def main() -> None:
     os.environ["ADMIN_TOKEN"] = "test-token"
     os.environ["TELEGRAM_BOT_USERNAME"] = "krisha_test_bot"
     seed_listing(db_path)
+    seed_rental(db_path)
     check_complex_developer_parser()
     check_listing_field_parser()
     check_telegram_digest_format()
@@ -250,12 +282,26 @@ def main() -> None:
     assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
     assert_contains(home.text, "/model-page")
     assert_contains(home.text, "/market-page")
+    assert_contains(home.text, "/rentals-page")
     assert_contains(home.text, "/about-page")
     assert_contains(home.text, "https://t.me/krisha_test_bot")
     assert_contains(home.text, "Telegram бот")
     assert_not_contains(home.text, "Статус сервиса")
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")
+
+    rentals = client.get("/rentals-page?period=monthly&rooms=2&furnished=полностью")
+    if rentals.status_code != 200:
+        raise SystemExit(f"Rentals page returned {rentals.status_code}")
+    for needle in [
+        "Аренда квартир",
+        "Помесячно",
+        "Посуточно",
+        "Исследовательский режим",
+        "Rental Test ЖК",
+        "Квартира меблирована",
+    ]:
+        assert_contains(rentals.text, needle)
 
     predict_entry = client.get("/predict-page")
     if predict_entry.status_code != 200:

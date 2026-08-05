@@ -110,6 +110,19 @@ docker compose --profile tools run --rm refresh \
   python scripts/refresh_listings.py --kind weekly --pages 200
 ```
 
+Rental refreshes:
+
+```bash
+docker compose --profile tools run --rm refresh \
+  python scripts/refresh_rentals.py --period monthly --pages 10
+
+docker compose --profile tools run --rm refresh \
+  python scripts/refresh_rentals.py --period daily --pages 10
+```
+
+Check `/rentals-page` after both commands. The page intentionally shows a pilot
+warning while `models/rent_*/evaluation.json` has `production_ready: false`.
+
 Small smoke test:
 
 ```bash
@@ -142,6 +155,10 @@ Example entries:
 
 # Weekly deeper refresh on Sunday at 04:00.
 0 4 * * 0 cd /opt/krisha && docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind weekly --pages 200 >> logs/weekly-refresh.log 2>&1
+
+# Monthly rentals at 05:00 and daily rentals at 06:00.
+0 5 * * * cd /opt/krisha && docker compose --profile tools run --rm refresh python scripts/refresh_rentals.py --period monthly --pages 10 >> logs/rent-monthly-refresh.log 2>&1
+0 6 * * * cd /opt/krisha && docker compose --profile tools run --rm refresh python scripts/refresh_rentals.py --period daily --pages 10 >> logs/rent-daily-refresh.log 2>&1
 ```
 
 Replace `/opt/krisha` with the actual repository path.

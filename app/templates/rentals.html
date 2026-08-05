@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Аренда квартир в Астане{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Аренда квартир</h1>
+    <p>Сравнение цены объявления с отдельными CatBoost-моделями для помесячной и посуточной аренды.</p>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="listing-actions-bar">
+    <a class="button {% if selected_period != 'monthly' %}secondary{% endif %}" href="/rentals-page?period=monthly">Помесячно</a>
+    <a class="button {% if selected_period != 'daily' %}secondary{% endif %}" href="/rentals-page?period=daily">Посуточно</a>
+  </div>
+  {% if not evaluation.production_ready %}
+  <div class="notice warning">
+    <strong>Исследовательский режим.</strong>
+    Модель обучена на {{ evaluation.rows or 0 }} объявлениях и пока не прошла временную проверку.
+    Оценки нельзя считать готовой инвестиционной рекомендацией.
+  </div>
+  {% endif %}
+  <form method="get" action="/rentals-page" class="filter-form">
+    <input type="hidden" name="period" value="{{ selected_period }}">
+    <label>
+      Количество комнат
+      <select name="rooms">
+        <option value="">Любое</option>
+        {% for value in [1, 2, 3, 4, 5] %}
+        <option value="{{ value }}" {% if selected_rooms == value %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Максимальная цена, ₸
+      <input name="max_rent" type="number" min="0" step="1000" value="{% if selected_max_rent %}{{ selected_max_rent|int }}{% endif %}">
+    </label>
+    {% if selected_period == "monthly" %}
+    <label>
+      Квартира меблирована
+      <select name="furnished">
+        <option value="">Любая</option>
+        {% for value in ["полностью", "частично", "без мебели", "не указано"] %}
+        <option value="{{ value }}" {% if selected_furnished == value %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
+    <button type="submit">Применить</button>
+    <a class="button secondary" href="/rentals-page?period={{ selected_period }}">Сбросить</a>
+  </form>
+</section>
+
+<section class="section panel">
+  <div class="toolbar">
+    <div>
+      <h2>{% if selected_period == "monthly" %}Помесячная{% else %}Посуточная{% endif %} аренда</h2>
+      <p class="muted">Найдено объявлений: {{ items|length }}. Сортировка по консервативной оценке q10.</p>
+    </div>
+  </div>
+  {% if items %}
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>Квартира</th>
+          <th>Цена</th>
+          <th>Оценка q10 / q50 / q90</th>
+          <th>Разница q10</th>
+          <th>Состояние и мебель</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>
+            <a href="{{ item.url }}" target="_blank" rel="noreferrer"><strong>{{ item.title }}</strong></a>
+            <div class="subtle">{{ item.district }}{% if item.residential_complex %} · ЖК {{ item.residential_complex }}{% endif %}</div>
+          </td>
+          <td><strong>{{ "{:,.0f}".format(item.listed_rent).replace(",", " ") }} ₸</strong><div class="subtle">{{ item.unit_label }}</div></td>
+          <td>
+            {{ "{:,.0f}".format(item.pred_rent_q10).replace(",", " ") }} /
+            {{ "{:,.0f}".format(item.pred_rent_q50).replace(",", " ") }} /
+            {{ "{:,.0f}".format(item.pred_rent_q90).replace(",", " ") }} ₸
+          </td>
+          <td>{{ "{:+.1f}%".format(item.discount_vs_asking_pct_conservative * 100) }}</td>
+          <td>{{ item.condition }}<div class="subtle">Мебель: {{ item.furnished }}</div></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <h3>Данные аренды ещё не загружены</h3>
+    <p>После первого запуска <code>scripts/refresh_rentals.py</code> объявления появятся здесь.</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

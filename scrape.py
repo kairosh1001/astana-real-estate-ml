@@ -15,6 +15,12 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
 ]
 
+LISTING_CATEGORY_PATHS = {
+    "sale": "/prodazha/kvartiry/astana/",
+    "rent_monthly": "/arenda/kvartiry/astana/",
+    "rent_daily": "/arenda/kvartiry-posutochno/astana/",
+}
+
 
 class ApartmentScraper:
     def __init__(self, timeout: int = 10):
@@ -77,6 +83,17 @@ class ApartmentScraper:
             advert_map = advert.get('map', {}) if isinstance(advert, dict) else {}
             row_data['lat'] = advert_map.get('lat')
             row_data['lon'] = advert_map.get('lon')
+            if isinstance(advert.get('price'), (int, float)):
+                row_data['price'] = advert['price']
+            row_data['listing_id'] = advert.get('id')
+            row_data['section_alias'] = advert.get('sectionAlias')
+            row_data['category_alias'] = advert.get('categoryAlias')
+            row_data['rooms_structured'] = advert.get('rooms')
+            row_data['area_m2_structured'] = advert.get('square')
+            row_data['photo_count'] = len(advert.get('photos') or [])
+            row_data['is_estate_verified'] = bool(advert.get('isEstateVerified'))
+            row_data['is_booking_enabled'] = bool(advert.get('isBookingEnabled'))
+            row_data['rental_period'] = self.rental_period_from_advert(advert)
             developer = self.find_developer_name(advert)
             if not developer and advert.get('userType') == 'builder':
                 developer = self.extract_name_from_value(advert.get('ownerName'))
@@ -166,6 +183,26 @@ class ApartmentScraper:
             if href:
                 return urljoin(self.base_url, href)
         return None
+
+    @staticmethod
+    def rental_period_from_advert(advert: Dict | None) -> Optional[str]:
+        advert = advert if isinstance(advert, dict) else {}
+        if str(advert.get('sectionAlias') or '').casefold() != 'arenda':
+            return None
+        category = str(advert.get('categoryAlias') or '').casefold()
+        if category == 'kvartiry':
+            return 'monthly'
+        if category == 'kvartiry-posutochno':
+            return 'daily'
+        return None
+
+    def category_page_url(self, category: str, page: int) -> str:
+        try:
+            path = LISTING_CATEGORY_PATHS[category]
+        except KeyError as exc:
+            choices = ', '.join(sorted(LISTING_CATEGORY_PATHS))
+            raise ValueError(f"Unknown category {category!r}; expected one of: {choices}") from exc
+        return f"{self.base_url}{path}?page={page}"
 
     def fetch_complex_developer(self, complex_url: str) -> Optional[str]:
         if complex_url in self.complex_developer_cache:
@@ -260,12 +297,16 @@ class ApartmentScraper:
             soup = BeautifulSoup(html, 'html.parser')
             card_links = soup.select('.a-card__title[href]')
             urls = []
+            seen = set()
             
             for link in card_links:
                 href = link.get('href')
                 if href:
-                    full_url = urljoin(self.base_url, href)
-                    urls.append(full_url)
+                    parsed = urlparse(urljoin(self.base_url, href))
+                    full_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                    if full_url not in seen:
+                        seen.add(full_url)
+                        urls.append(full_url)
             
             return urls
         except Exception:

@@ -43,6 +43,7 @@ from app.database import (
     fetch_market_dashboard,
     fetch_monitoring_snapshots,
     fetch_price_history,
+    fetch_rentals,
     fetch_refresh_runs,
     fetch_running_refresh,
     fetch_status_summary,
@@ -173,6 +174,48 @@ def home(request: Request) -> HTMLResponse:
             "district_options": DISTRICT_OPTIONS,
             "start_rank": 1,
             "is_preview": True,
+        },
+    )
+
+
+@app.get("/rentals-page", response_class=HTMLResponse)
+def rentals_page(
+    request: Request,
+    period: str = "monthly",
+    rooms: str | None = None,
+    max_rent: str | None = None,
+    furnished: str | None = None,
+) -> HTMLResponse:
+    selected_period = period if period in {"monthly", "daily"} else "monthly"
+    selected_rooms = _parse_optional_int(rooms, allowed={1, 2, 3, 4, 5})
+    selected_max_rent = _parse_optional_positive_float(max_rent)
+    selected_furnished = _parse_optional_text(furnished)
+    with connect(DB_PATH) as db_connection:
+        items = fetch_rentals(
+            db_connection,
+            period=selected_period,
+            rooms=selected_rooms,
+            max_rent=selected_max_rent,
+            furnished=selected_furnished,
+            limit=200,
+        )
+    evaluation_path = ROOT / "models" / f"rent_{selected_period}" / "evaluation.json"
+    evaluation = (
+        json.loads(evaluation_path.read_text(encoding="utf-8"))
+        if evaluation_path.exists()
+        else {"production_ready": False, "rows": 0}
+    )
+    return templates.TemplateResponse(
+        request,
+        "rentals.html",
+        {
+            "request": request,
+            "items": items,
+            "selected_period": selected_period,
+            "selected_rooms": selected_rooms,
+            "selected_max_rent": selected_max_rent,
+            "selected_furnished": selected_furnished,
+            "evaluation": evaluation,
         },
     )
 
