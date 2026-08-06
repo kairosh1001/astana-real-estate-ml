@@ -303,13 +303,13 @@ html[data-theme="light"] .theme-icon-sun {
 main {
   width: min(1500px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 64px 0 92px;
+  padding: 30px 0 72px;
 }
 
 .hero {
   position: relative;
-  min-height: min(690px, 74vh);
-  padding: clamp(42px, 7vw, 92px);
+  min-height: min(570px, 66vh);
+  padding: clamp(36px, 5vw, 68px);
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 32px;
@@ -361,11 +361,11 @@ main {
 
 .hero h1 {
   max-width: 800px;
-  margin: 18px 0 24px;
+  margin: 15px 0 20px;
   background: linear-gradient(110deg, #ffffff 20%, #bdeeff 63%, #a99eff);
   background-clip: text;
   color: transparent;
-  font-size: clamp(3rem, 8.2vw, 7rem);
+  font-size: clamp(2.8rem, 7vw, 5.9rem);
 }
 
 .hero p {
@@ -409,7 +409,7 @@ main {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   max-width: 660px;
-  margin-top: 52px;
+  margin-top: 38px;
 }
 
 .hero-stat {
@@ -475,6 +475,13 @@ button.button.secondary {
   color: var(--text);
 }
 
+.button.secondary:hover,
+button.button.secondary:hover {
+  border-color: var(--line-strong);
+  background: color-mix(in srgb, var(--surface-strong) 76%, var(--accent-soft));
+  color: var(--strong);
+}
+
 .hero-actions .button.secondary,
 .hero-actions .button.secondary:hover {
   border-color: rgba(160, 221, 255, 0.35);
@@ -483,7 +490,7 @@ button.button.secondary {
 }
 
 .section {
-  margin-top: 28px;
+  margin-top: 22px;
 }
 
 .panel,
@@ -506,7 +513,7 @@ button.button.secondary {
 
 .panel,
 .filter-panel {
-  padding: clamp(22px, 3vw, 34px);
+  padding: clamp(20px, 2.5vw, 30px);
 }
 
 [data-spotlight] {
@@ -600,8 +607,8 @@ button.button.secondary {
 
 .page-head {
   gap: 26px;
-  margin-bottom: 28px;
-  padding: clamp(26px, 4vw, 48px);
+  margin-bottom: 22px;
+  padding: clamp(24px, 3vw, 38px);
   border: 1px solid var(--line);
   border-radius: 24px;
   background: linear-gradient(135deg, var(--surface), var(--accent-soft));
@@ -741,6 +748,26 @@ tbody tr {
 
 tbody tr:hover {
   background: var(--soft);
+}
+
+html[data-theme="dark"] tbody tr:hover > td {
+  background: rgba(49, 216, 255, 0.07);
+  color: var(--text);
+}
+
+html[data-theme="light"] tbody tr:hover > td {
+  background: rgba(0, 127, 169, 0.06);
+}
+
+#filter-form button[type="submit"] {
+  border: 1px solid rgba(90, 194, 255, 0.38);
+  background: linear-gradient(135deg, #12789f, #5147cf);
+  box-shadow: 0 9px 24px rgba(18, 94, 159, 0.2);
+}
+
+#filter-form button[type="submit"]:hover {
+  border-color: rgba(155, 226, 255, 0.6);
+  background: linear-gradient(135deg, #0e6689, #4439b7);
 }
 
 .listing-title,
@@ -911,12 +938,12 @@ html[data-theme="light"] .site-footer {
   }
 
   main {
-    padding: 28px 0 64px;
+    padding: 18px 0 54px;
   }
 
   .hero {
     min-height: auto;
-    padding: 34px 22px 28px;
+    padding: 28px 22px 24px;
     border-radius: 23px;
     background:
       linear-gradient(90deg, rgba(3, 8, 23, 0.97), rgba(5, 13, 34, 0.73)),
@@ -924,13 +951,13 @@ html[data-theme="light"] .site-footer {
   }
 
   .hero h1 {
-    margin-top: 16px;
-    font-size: clamp(2.7rem, 15vw, 4.2rem);
+    margin-top: 14px;
+    font-size: clamp(2.45rem, 13.5vw, 3.7rem);
   }
 
   .hero-stats {
     grid-template-columns: 1fr;
-    margin-top: 34px;
+    margin-top: 28px;
   }
 
   .hero-stat {

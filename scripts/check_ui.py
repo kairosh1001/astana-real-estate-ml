@@ -232,7 +232,7 @@ def main() -> None:
     if home.status_code != 200:
         raise SystemExit(f"Home page returned {home.status_code}")
     assert_contains(home.text, "Kvartiry-ai.kz")
-    assert_contains(home.text, "Оценка объявлений Krisha с помощью искусственного интеллекта")
+    assert_contains(home.text, "Оценка объявлений Krisha с помощью ИИ")
     assert_contains(home.text, "Как работает ИИ модель")
     assert_contains(home.text, "Модель машинного обучения оценивает цену за м²")
     assert_contains(home.text, "Светлая тема")
