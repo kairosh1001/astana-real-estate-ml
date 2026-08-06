@@ -8,7 +8,7 @@
       (function () {
         document.documentElement.classList.add("js");
         const savedTheme = localStorage.getItem("kvartiry_theme");
-        document.documentElement.dataset.theme = savedTheme === "light" ? "light" : "dark";
+        document.documentElement.dataset.theme = savedTheme === "dark" ? "dark" : "light";
       })();
     </script>
     {% block head_extra %}{% endblock %}
@@ -786,10 +786,10 @@
           </span>
         </a>
         <div class="header-actions">
-          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Включить светлую тему" aria-pressed="false">
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Включить тёмную тему" aria-pressed="true">
             <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
             <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
-            <span data-theme-label>Светлая тема</span>
+            <span data-theme-label>Тёмная тема</span>
           </button>
           <button class="nav-toggle" type="button" data-nav-toggle aria-label="Открыть меню" aria-expanded="false">
             <span></span><span></span><span></span>

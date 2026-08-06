@@ -321,6 +321,12 @@ main {
   isolation: isolate;
 }
 
+body:has(main > .hero) main > .hero {
+  width: min(1780px, calc(100vw - 24px));
+  margin-left: 50%;
+  translate: -50% 0;
+}
+
 .hero::before {
   position: absolute;
   top: 13%;
@@ -491,6 +497,12 @@ button.button.secondary:hover {
 
 .section {
   margin-top: 22px;
+}
+
+.ranking-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
 }
 
 .panel,
