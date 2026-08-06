@@ -3,7 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Квартиры ниже рынка{% endblock %}</title>
+    <title>{% block title %}Kvartiry-ai.kz{% endblock %}</title>
+    <script>
+      (function () {
+        document.documentElement.classList.add("js");
+        const savedTheme = localStorage.getItem("kvartiry_theme");
+        document.documentElement.dataset.theme = savedTheme === "light" ? "light" : "dark";
+      })();
+    </script>
     {% block head_extra %}{% endblock %}
     <style>
       :root {
@@ -763,21 +770,37 @@
         }
       }
     </style>
+    <link rel="stylesheet" href="/static/site.css">
   </head>
   <body>
+    <div class="scroll-progress" aria-hidden="true"><span data-scroll-progress></span></div>
     <header class="site-header">
       <div class="site-header-inner">
         <a class="brand" href="/">
-          <strong>Квартиры ниже рынка в Астане</strong>
-          <span>Оценка объявлений Krisha по модели CatBoost</span>
+          <span class="brand-mark" aria-hidden="true">AI</span>
+          <span class="brand-copy">
+            <strong>Kvartiry-ai.kz</strong>
+            {% if request.url.path == "/" %}
+            <span>Оценка объявлений Krisha с помощью искусственного интеллекта</span>
+            {% endif %}
+          </span>
         </a>
-        <nav aria-label="Основная навигация">
+        <div class="header-actions">
+          <button class="theme-toggle" type="button" data-theme-toggle aria-label="Включить светлую тему" aria-pressed="false">
+            <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
+            <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
+            <span data-theme-label>Светлая тема</span>
+          </button>
+          <button class="nav-toggle" type="button" data-nav-toggle aria-label="Открыть меню" aria-expanded="false">
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+        <nav class="site-nav" data-site-nav aria-label="Основная навигация">
           {% if request.url.path != "/" %}
           <a class="primary-nav" href="/">Вернуться на главную</a>
           {% endif %}
           <a href="/predict-page">Оценить ссылку</a>
           <a href="/undervalued-page">Ниже рынка</a>
-          <a href="/rentals-page">Аренда</a>
           <a href="/market-page">Рынок</a>
           <a href="/model-page">О модели</a>
           <a href="/about-page">О проекте</a>
@@ -964,6 +987,91 @@
         }
 
         applyState();
+      })();
+    </script>
+    <script>
+      (function () {
+        const root = document.documentElement;
+        const themeToggle = document.querySelector("[data-theme-toggle]");
+        const themeLabel = document.querySelector("[data-theme-label]");
+        const navToggle = document.querySelector("[data-nav-toggle]");
+        const navigation = document.querySelector("[data-site-nav]");
+        const progress = document.querySelector("[data-scroll-progress]");
+
+        function renderTheme() {
+          const isLight = root.dataset.theme === "light";
+          if (themeToggle) {
+            themeToggle.setAttribute("aria-pressed", String(isLight));
+            themeToggle.setAttribute("aria-label", isLight ? "Включить тёмную тему" : "Включить светлую тему");
+          }
+          if (themeLabel) themeLabel.textContent = isLight ? "Тёмная тема" : "Светлая тема";
+        }
+
+        if (themeToggle) {
+          themeToggle.addEventListener("click", function () {
+            root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
+            localStorage.setItem("kvartiry_theme", root.dataset.theme);
+            renderTheme();
+          });
+        }
+
+        if (navToggle && navigation) {
+          navToggle.addEventListener("click", function () {
+            const open = navigation.classList.toggle("is-open");
+            navToggle.setAttribute("aria-expanded", String(open));
+            navToggle.setAttribute("aria-label", open ? "Закрыть меню" : "Открыть меню");
+          });
+          navigation.addEventListener("click", function (event) {
+            if (event.target.closest("a")) {
+              navigation.classList.remove("is-open");
+              navToggle.setAttribute("aria-expanded", "false");
+            }
+          });
+        }
+
+        function updateProgress() {
+          if (!progress) return;
+          const max = document.documentElement.scrollHeight - window.innerHeight;
+          progress.style.transform = `scaleX(${max > 0 ? window.scrollY / max : 0})`;
+        }
+        window.addEventListener("scroll", updateProgress, { passive: true });
+        updateProgress();
+
+        document.querySelectorAll("[data-spotlight]").forEach(function (element) {
+          element.addEventListener("pointermove", function (event) {
+            const rect = element.getBoundingClientRect();
+            element.style.setProperty("--spot-x", `${event.clientX - rect.left}px`);
+            element.style.setProperty("--spot-y", `${event.clientY - rect.top}px`);
+          });
+        });
+
+        const quantileCopy = document.querySelector("[data-quantile-copy]");
+        document.querySelectorAll("[data-quantile]").forEach(function (button) {
+          button.addEventListener("click", function () {
+            document.querySelectorAll("[data-quantile]").forEach(function (item) {
+              item.classList.toggle("is-active", item === button);
+              item.setAttribute("aria-pressed", String(item === button));
+            });
+            if (quantileCopy) quantileCopy.textContent = button.dataset.copy || "";
+          });
+        });
+
+        if ("IntersectionObserver" in window) {
+          const observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting) {
+                entry.target.classList.add("is-visible");
+                observer.unobserve(entry.target);
+              }
+            });
+          }, { threshold: 0.08 });
+          document.querySelectorAll("main > section, main > .page-head").forEach(function (element) {
+            element.classList.add("reveal");
+            observer.observe(element);
+          });
+        }
+
+        renderTheme();
       })();
     </script>
     {% block scripts %}{% endblock %}

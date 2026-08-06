@@ -141,14 +141,8 @@ def build_model_features(
     *,
     include_target: bool = False,
     filter_training_rows: bool = False,
-    deduplicate: bool = True,
 ) -> pd.DataFrame:
-    frame = _prepare_base_frame(
-        raw_df,
-        config,
-        build_mapping=True,
-        deduplicate=deduplicate,
-    )
+    frame = _prepare_base_frame(raw_df, config, build_mapping=True)
     frame = _add_spatial_features(frame)
     frame["floor_ratio"] = frame["current_floor"] / frame["total_floors"]
 
@@ -200,13 +194,8 @@ def _prepare_base_frame(
     config: FeatureConfig,
     *,
     build_mapping: bool,
-    deduplicate: bool = True,
 ) -> pd.DataFrame:
-    frame = (
-        raw_df.drop_duplicates(subset="url").copy()
-        if deduplicate
-        else raw_df.copy()
-    )
+    frame = raw_df.drop_duplicates(subset="url").copy()
     frame = _ensure_raw_columns(frame)
     frame["lat"] = pd.to_numeric(frame["lat"], errors="coerce")
     frame["lon"] = pd.to_numeric(frame["lon"], errors="coerce")

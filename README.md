@@ -15,7 +15,6 @@ The goal is not to replace human due diligence. The app is an analytical screeni
 ## What It Does
 
 - Scrapes apartment listings for Astana from Krisha.kz.
-- Scrapes sale, monthly-rental, and daily-rental apartment categories while excluding hourly rentals.
 - Cleans and normalizes listing attributes such as price, area, rooms, district, floor, construction year, and residential complex.
 - Builds geospatial features, including H3 cells and distances to selected city landmarks.
 - Trains three CatBoost quantile models: q10, q50, and q90.
@@ -165,35 +164,6 @@ Typical scheduled refreshes:
 .\.venv\Scripts\python.exe scripts\refresh_listings.py --kind daily --pages 50
 .\.venv\Scripts\python.exe scripts\refresh_listings.py --kind weekly --pages 200
 ```
-
-Rental refreshes use separate models and tables:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\refresh_rentals.py --period monthly --pages 10
-.\.venv\Scripts\python.exe scripts\refresh_rentals.py --period daily --pages 10
-```
-
-Rental models in `models/rent_monthly/` and `models/rent_daily/` share the sale
-model's H3 and landmark-distance features, including distance to Baiterek. They
-also use rental-specific furniture, amenities, seller, and description signals.
-The rental page displays a research-mode warning until a model has at least 500
-unique listings and passes a chronological grouped validation split.
-
-Collect a reproducible rental snapshot and retrain with:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\scrape_rentals.py --period monthly --pages 0 --append
-.\.venv\Scripts\python.exe scripts\scrape_rentals.py --period daily --pages 0 --append
-.\.venv\Scripts\python.exe scripts\retrain_rental_models.py --period monthly
-.\.venv\Scripts\python.exe scripts\retrain_rental_models.py --period daily
-.\.venv\Scripts\python.exe scripts\validate_rental_models.py
-```
-
-`--pages 0` follows Krisha pagination to the final advertised page. The
-`Full rental inventory refresh` GitHub Actions workflow runs both crawls,
-selects the target and CatBoost settings on grouped inner splits, validates the
-untouched holdout and serving path, and commits refreshed datasets and model
-artifacts back to `main`.
 
 The deployed VPS uses cron and Docker Compose; see [`deploy/README.md`](deploy/README.md).
 

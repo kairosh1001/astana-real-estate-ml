@@ -12,7 +12,6 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.model_service import PriceModelService
-from app.rental_prediction_service import RentalPredictionService
 
 
 REQUIRED_PATHS = [
@@ -28,22 +27,6 @@ REQUIRED_PATHS = [
     "app/templates/feedback.html",
     "app/templates/feedback_admin.html",
     "app/templates/traffic.html",
-    "app/templates/rentals.html",
-    "app/rental_feature_pipeline.py",
-    "app/rental_prediction_service.py",
-    "scripts/scrape_rentals.py",
-    "scripts/refresh_rentals.py",
-    "scripts/retrain_rental_models.py",
-    "models/rent_monthly/model_metadata.json",
-    "models/rent_monthly/evaluation.json",
-    "models/rent_monthly/catboost_q10_rent_total_log.cbm",
-    "models/rent_monthly/catboost_q50_rent_total_log.cbm",
-    "models/rent_monthly/catboost_q90_rent_total_log.cbm",
-    "models/rent_daily/model_metadata.json",
-    "models/rent_daily/evaluation.json",
-    "models/rent_daily/catboost_q10_rent_total_log.cbm",
-    "models/rent_daily/catboost_q50_rent_total_log.cbm",
-    "models/rent_daily/catboost_q90_rent_total_log.cbm",
 ]
 
 HOST_REQUIRED_PATHS = [
@@ -103,26 +86,6 @@ def run_command(args: list[str]) -> None:
     subprocess.run(args, cwd=ROOT, check=True)
 
 
-def check_rental_predictions() -> None:
-    for period in ("monthly", "daily"):
-        dataset = ROOT / "data" / f"rent_{period}_raw.csv"
-        if not dataset.exists():
-            raise SystemExit(f"Missing rental validation dataset: {dataset}")
-        raw = pd.read_csv(dataset, nrows=1).iloc[0].to_dict()
-        prediction = RentalPredictionService(ROOT, period).predict_raw_listing(raw)
-        if not (0 < prediction.pred_rent_q10 <= prediction.pred_rent_q90):
-            raise SystemExit(
-                f"Rental prediction sanity check failed for {period}: {prediction}"
-            )
-        print(
-            f"[OK] {period} rental sample: "
-            f"q10={prediction.pred_rent_q10:,.0f}, "
-            f"q50={prediction.pred_rent_q50:,.0f}, "
-            f"q90={prediction.pred_rent_q90:,.0f} KZT",
-            flush=True,
-        )
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run deployment readiness checks.")
     parser.add_argument(
@@ -143,7 +106,6 @@ def main() -> None:
     args = parse_args()
     check_required_paths()
     check_model_prediction()
-    check_rental_predictions()
 
     if args.full:
         run_command([sys.executable, "scripts/validate_feature_pipeline.py"])
