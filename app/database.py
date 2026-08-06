@@ -898,68 +898,464 @@ def fetch_complex_stats(
 def fetch_market_dashboard(connection: sqlite3.Connection) -> dict:
     rows = connection.execute(
         """
-        SELECT raw_json, listed_price_per_m2, discount_vs_asking_pct_conservative
+        SELECT url, title, raw_json, first_seen_at, last_seen_at, status,
+               listed_price, area_m2, listed_price_per_m2,
+               pred_price_per_m2_q50,
+               discount_vs_asking_pct_conservative
+        FROM listings
+        """
+    ).fetchall()
+    now = datetime.now(timezone.utc)
+    active_items = []
+    stale_count = 0
+
+    for source_row in rows:
+        row = dict(source_row)
+        if row.get("status") != "active":
+            stale_count += 1
+            continue
+        if row.get("listed_price_per_m2") is None:
+            continue
+        raw_listing = _load_raw_listing(row["raw_json"])
+        district_slug = normalize_district(raw_listing.get("Город"))
+        district_label = district_label_for_slug(district_slug)
+        complex_name = _clean_text(raw_listing.get("Жилой комплекс"))
+        condition_slug = normalize_apartment_condition(
+            raw_listing.get("Состояние квартиры")
+        )
+        condition_label = next(
+            (
+                option["label"]
+                for option in APARTMENT_CONDITION_OPTIONS
+                if option["slug"] == condition_slug
+            ),
+            "Состояние не указано",
+        )
+        first_seen = _parse_iso_datetime(row.get("first_seen_at"))
+        age_days = max((now - first_seen).days, 0) if first_seen else None
+        active_items.append(
+            {
+                "url": row.get("url"),
+                "district_slug": district_slug,
+                "district_label": district_label,
+                "complex_name": complex_name,
+                "condition_label": condition_label,
+                "rooms": _extract_rooms(row.get("title")),
+                "is_new_build": _extract_new_build_flag(raw_listing),
+                "listed_price": _extract_float(row.get("listed_price")),
+                "area_m2": _extract_float(row.get("area_m2")),
+                "price_per_m2": float(row["listed_price_per_m2"]),
+                "pred_q50_per_m2": _extract_float(row.get("pred_price_per_m2_q50")),
+                "q10_upside": _extract_float(
+                    row.get("discount_vs_asking_pct_conservative")
+                ),
+                "age_days": age_days,
+                "first_seen_at": row.get("first_seen_at"),
+                "last_seen_at": row.get("last_seen_at"),
+            }
+        )
+
+    city = _market_segment("Астана", active_items)
+    city_median = city.get("median_price_per_m2") or 0
+
+    district_groups: dict[str, list[dict]] = {}
+    complex_groups: dict[str, list[dict]] = {}
+    room_groups: dict[str, list[dict]] = {}
+    condition_groups: dict[str, list[dict]] = {}
+    property_type_groups: dict[str, list[dict]] = {}
+    for item in active_items:
+        district_groups.setdefault(item["district_label"], []).append(item)
+        if item["complex_name"]:
+            complex_groups.setdefault(item["complex_name"], []).append(item)
+        room_label = f"{item['rooms']}-комн." if item["rooms"] else "Не указано"
+        room_groups.setdefault(room_label, []).append(item)
+        condition_groups.setdefault(item["condition_label"], []).append(item)
+        property_label = "Новостройки" if item["is_new_build"] else "Вторичный рынок"
+        property_type_groups.setdefault(property_label, []).append(item)
+
+    districts = [_market_segment(name, items) for name, items in district_groups.items()]
+    districts.sort(key=lambda item: item["median_price_per_m2"], reverse=True)
+    max_district_price = max(
+        (item["median_price_per_m2"] for item in districts),
+        default=1,
+    )
+    max_district_count = max((item["count"] for item in districts), default=1)
+    for item in districts:
+        item["slug"] = next(
+            (
+                option["slug"]
+                for option in DISTRICT_OPTIONS
+                if option["label"] == item["name"]
+            ),
+            "",
+        )
+        item["price_index"] = (
+            item["median_price_per_m2"] / city_median * 100 if city_median else 0
+        )
+        item["price_bar_pct"] = item["median_price_per_m2"] / max_district_price * 100
+        item["inventory_bar_pct"] = item["count"] / max_district_count * 100
+
+    complexes = [_market_segment(name, items) for name, items in complex_groups.items()]
+    complexes.sort(
+        key=lambda item: (item["below_market_share"], item["count"]),
+        reverse=True,
+    )
+
+    rooms = [_market_segment(name, items) for name, items in room_groups.items()]
+    rooms.sort(key=lambda item: _room_sort_key(item["name"]))
+    max_room_count = max((item["count"] for item in rooms), default=1)
+    for item in rooms:
+        item["bar_pct"] = item["count"] / max_room_count * 100
+
+    conditions = [
+        _market_segment(name, items) for name, items in condition_groups.items()
+    ]
+    conditions.sort(key=lambda item: item["count"], reverse=True)
+    max_condition_price = max(
+        (item["median_price_per_m2"] for item in conditions),
+        default=1,
+    )
+    for item in conditions:
+        item["bar_pct"] = item["median_price_per_m2"] / max_condition_price * 100
+
+    property_types = [
+        _market_segment(name, items) for name, items in property_type_groups.items()
+    ]
+    property_types.sort(key=lambda item: item["count"], reverse=True)
+
+    price_buckets = _market_price_buckets(active_items)
+    max_bucket_count = max((item["count"] for item in price_buckets), default=1)
+    for item in price_buckets:
+        item["bar_pct"] = item["count"] / max_bucket_count * 100
+
+    recent_7d = sum(
+        1
+        for item in active_items
+        if _datetime_within_days(item.get("first_seen_at"), now, 7)
+    )
+    recent_30d = sum(
+        1
+        for item in active_items
+        if _datetime_within_days(item.get("first_seen_at"), now, 30)
+    )
+    last_seen_values = [
+        item["last_seen_at"] for item in active_items if item.get("last_seen_at")
+    ]
+
+    historical = _market_history(connection, now=now)
+    insights = _market_insights(districts)
+
+    return {
+        "city": city,
+        "districts": districts,
+        "complexes": complexes[:20],
+        "rooms": rooms,
+        "conditions": conditions,
+        "property_types": property_types,
+        "price_buckets": price_buckets,
+        "historical": historical,
+        "insights": insights,
+        "coverage": {
+            "total_listings": len(rows),
+            "active_listings": len(active_items),
+            "stale_listings": stale_count,
+            "known_district_share": _share(
+                sum(1 for item in active_items if item["district_slug"]),
+                len(active_items),
+            ),
+            "recent_7d": recent_7d,
+            "recent_30d": recent_30d,
+            "as_of": max(last_seen_values) if last_seen_values else None,
+        },
+    }
+
+
+def fetch_market_brief(connection: sqlite3.Connection) -> dict:
+    rows = connection.execute(
+        """
+        SELECT raw_json, listed_price, area_m2, listed_price_per_m2,
+               discount_vs_asking_pct_conservative, last_seen_at
         FROM listings
         WHERE status = 'active'
           AND listed_price_per_m2 IS NOT NULL
         """
     ).fetchall()
-    district_prices: dict[str, list[float]] = {}
-    district_below_market: dict[str, int] = {}
-    complex_prices: dict[str, list[float]] = {}
-    complex_below_market: dict[str, int] = {}
-
-    for row in rows:
+    items = []
+    district_groups: dict[str, list[dict]] = {}
+    last_seen_values = []
+    for source_row in rows:
+        row = dict(source_row)
         raw_listing = _load_raw_listing(row["raw_json"])
-        price = float(row["listed_price_per_m2"])
-        is_below_market = (row["discount_vs_asking_pct_conservative"] or 0) > 0
-
         district_slug = normalize_district(raw_listing.get("Город"))
-        district_label = district_label_for_slug(district_slug)
-        district_prices.setdefault(district_label, []).append(price)
-        if is_below_market:
-            district_below_market[district_label] = (
-                district_below_market.get(district_label, 0) + 1
-            )
-
-        complex_name = _clean_text(raw_listing.get("Жилой комплекс"))
-        if complex_name:
-            complex_prices.setdefault(complex_name, []).append(price)
-            if is_below_market:
-                complex_below_market[complex_name] = (
-                    complex_below_market.get(complex_name, 0) + 1
-                )
-
-    districts = [
-        {
-            "name": name,
-            "count": len(prices),
-            "below_market": district_below_market.get(name, 0),
-            "median_price_per_m2": _median(prices),
-            "min_price_per_m2": min(prices),
-            "max_price_per_m2": max(prices),
+        item = {
+            "price_per_m2": float(row["listed_price_per_m2"]),
+            "listed_price": _extract_float(row.get("listed_price")),
+            "area_m2": _extract_float(row.get("area_m2")),
+            "q10_upside": _extract_float(
+                row.get("discount_vs_asking_pct_conservative")
+            ),
+            "age_days": None,
         }
-        for name, prices in district_prices.items()
+        items.append(item)
+        if district_slug:
+            district_groups.setdefault(
+                district_label_for_slug(district_slug), []
+            ).append(item)
+        if row.get("last_seen_at"):
+            last_seen_values.append(row["last_seen_at"])
+    districts = [
+        _market_segment(name, group) for name, group in district_groups.items()
     ]
     districts.sort(key=lambda item: item["median_price_per_m2"], reverse=True)
-
-    complexes = [
-        {
-            "name": name,
-            "count": len(prices),
-            "below_market": complex_below_market.get(name, 0),
-            "median_price_per_m2": _median(prices),
-            "min_price_per_m2": min(prices),
-            "max_price_per_m2": max(prices),
-        }
-        for name, prices in complex_prices.items()
-    ]
-    complexes.sort(key=lambda item: (item["below_market"], item["count"]), reverse=True)
-
     return {
-        "districts": districts,
-        "complexes": complexes[:20],
+        "city": _market_segment("Астана", items),
+        "district_count": len(districts),
+        "highest_district": districts[0] if districts else None,
+        "lowest_district": districts[-1] if districts else None,
+        "as_of": max(last_seen_values) if last_seen_values else None,
     }
+
+
+def _market_segment(name: str, items: list[dict]) -> dict:
+    prices = [item["price_per_m2"] for item in items if item.get("price_per_m2")]
+    total_prices = [item["listed_price"] for item in items if item.get("listed_price")]
+    areas = [item["area_m2"] for item in items if item.get("area_m2")]
+    ages = [float(item["age_days"]) for item in items if item.get("age_days") is not None]
+    q10_upside = [
+        item["q10_upside"]
+        for item in items
+        if item.get("q10_upside") is not None
+    ]
+    below_market = sum(1 for value in q10_upside if value > 0)
+    if not prices:
+        return {
+            "name": name,
+            "count": 0,
+            "below_market": 0,
+            "below_market_share": 0.0,
+            "median_price_per_m2": 0.0,
+            "q25_price_per_m2": 0.0,
+            "q75_price_per_m2": 0.0,
+            "p10_price_per_m2": 0.0,
+            "p90_price_per_m2": 0.0,
+            "min_price_per_m2": 0.0,
+            "max_price_per_m2": 0.0,
+            "median_total_price": None,
+            "median_area_m2": None,
+            "median_age_days": None,
+            "median_q10_upside": None,
+        }
+    return {
+        "name": name,
+        "count": len(items),
+        "below_market": below_market,
+        "below_market_share": _share(below_market, len(items)),
+        "median_price_per_m2": _median(prices),
+        "q25_price_per_m2": _quantile(prices, 0.25),
+        "q75_price_per_m2": _quantile(prices, 0.75),
+        "p10_price_per_m2": _quantile(prices, 0.10),
+        "p90_price_per_m2": _quantile(prices, 0.90),
+        "min_price_per_m2": min(prices),
+        "max_price_per_m2": max(prices),
+        "median_total_price": _median(total_prices) if total_prices else None,
+        "median_area_m2": _median(areas) if areas else None,
+        "median_age_days": _median(ages) if ages else None,
+        "median_q10_upside": _median(q10_upside) if q10_upside else None,
+    }
+
+
+def _market_price_buckets(items: list[dict]) -> list[dict]:
+    buckets = [
+        ("до 300 тыс.", 0, 300_000),
+        ("300–400 тыс.", 300_000, 400_000),
+        ("400–500 тыс.", 400_000, 500_000),
+        ("500–600 тыс.", 500_000, 600_000),
+        ("600–800 тыс.", 600_000, 800_000),
+        ("от 800 тыс.", 800_000, float("inf")),
+    ]
+    result = []
+    for label, lower, upper in buckets:
+        count = sum(
+            1
+            for item in items
+            if lower <= item["price_per_m2"] < upper
+        )
+        result.append({"label": label, "count": count})
+    return result
+
+
+def _market_history(connection: sqlite3.Connection, *, now: datetime) -> dict:
+    cutoff = (now - timedelta(days=180)).isoformat(timespec="seconds")
+    rows = connection.execute(
+        """
+        SELECT url, observed_at, listed_price, listed_price_per_m2
+        FROM listing_price_history
+        WHERE observed_at >= ?
+          AND listed_price_per_m2 IS NOT NULL
+        ORDER BY observed_at ASC, id ASC
+        """,
+        (cutoff,),
+    ).fetchall()
+    daily_latest: dict[tuple[str, str], dict] = {}
+    by_url: dict[str, list[dict]] = {}
+    for source_row in rows:
+        row = dict(source_row)
+        observed = _parse_iso_datetime(row.get("observed_at"))
+        if not observed:
+            continue
+        astana_day = (observed + timedelta(hours=5)).date().isoformat()
+        daily_latest[(astana_day, row["url"])] = row
+        by_url.setdefault(row["url"], []).append(row)
+
+    daily_prices: dict[str, list[float]] = {}
+    for (day, _url), row in daily_latest.items():
+        daily_prices.setdefault(day, []).append(float(row["listed_price_per_m2"]))
+    daily = [
+        {
+            "date": day,
+            "label": datetime.fromisoformat(day).strftime("%d.%m"),
+            "median_price_per_m2": _median(prices),
+            "listing_count": len(prices),
+        }
+        for day, prices in sorted(daily_prices.items())
+    ]
+
+    available = len(daily) >= 8
+    chart_points = []
+    if available:
+        values = [item["median_price_per_m2"] for item in daily]
+        low = min(values)
+        high = max(values)
+        spread = high - low or 1
+        for index, item in enumerate(daily):
+            chart_points.append(
+                {
+                    **item,
+                    "x": 55 + (890 * index / max(len(daily) - 1, 1)),
+                    "y": 215 - ((item["median_price_per_m2"] - low) / spread * 175),
+                }
+            )
+    else:
+        low = min((item["median_price_per_m2"] for item in daily), default=None)
+        high = max((item["median_price_per_m2"] for item in daily), default=None)
+
+    eligible_urls = 0
+    reductions = []
+    increases = []
+    for observations in by_url.values():
+        priced = [item for item in observations if item.get("listed_price")]
+        if len(priced) < 2:
+            continue
+        eligible_urls += 1
+        first_price = float(priced[0]["listed_price"])
+        last_price = float(priced[-1]["listed_price"])
+        if first_price <= 0:
+            continue
+        change = (last_price - first_price) / first_price
+        if change < 0:
+            reductions.append(abs(change))
+        elif change > 0:
+            increases.append(change)
+
+    change_pct = None
+    if len(daily) >= 2 and daily[0]["median_price_per_m2"]:
+        change_pct = (
+            daily[-1]["median_price_per_m2"] / daily[0]["median_price_per_m2"] - 1
+        )
+    return {
+        "available": available,
+        "daily": daily,
+        "chart_points": chart_points,
+        "polyline": " ".join(
+            f"{point['x']:.1f},{point['y']:.1f}" for point in chart_points
+        ),
+        "low": low,
+        "high": high,
+        "change_pct": change_pct,
+        "observation_count": len(rows),
+        "listing_count": len(by_url),
+        "day_count": len(daily),
+        "start_date": daily[0]["date"] if daily else None,
+        "end_date": daily[-1]["date"] if daily else None,
+        "eligible_price_change_count": eligible_urls,
+        "price_cut_count": len(reductions),
+        "price_cut_share": _share(len(reductions), eligible_urls),
+        "median_price_cut": _median(reductions) if reductions else None,
+        "price_increase_count": len(increases),
+    }
+
+
+def _market_insights(districts: list[dict]) -> list[dict]:
+    reliable = [item for item in districts if item["count"] >= 3]
+    candidates = reliable or districts
+    if not candidates:
+        return []
+    premium = max(candidates, key=lambda item: item["median_price_per_m2"])
+    opportunity = max(candidates, key=lambda item: item["below_market_share"])
+    spread = max(
+        candidates,
+        key=lambda item: (
+            (item["q75_price_per_m2"] - item["q25_price_per_m2"])
+            / item["median_price_per_m2"]
+        ),
+    )
+    return [
+        {
+            "label": "Самая высокая медиана",
+            "name": premium["name"],
+            "value": premium["median_price_per_m2"],
+            "kind": "price",
+            "sample": premium["count"],
+        },
+        {
+            "label": "Больше вариантов ниже рынка",
+            "name": opportunity["name"],
+            "value": opportunity["below_market_share"],
+            "kind": "percent",
+            "sample": opportunity["count"],
+        },
+        {
+            "label": "Самый широкий разброс",
+            "name": spread["name"],
+            "value": (
+                (spread["q75_price_per_m2"] - spread["q25_price_per_m2"])
+                / spread["median_price_per_m2"]
+            ),
+            "kind": "percent",
+            "sample": spread["count"],
+        },
+    ]
+
+
+def _quantile(values: list[float], fraction: float) -> float:
+    ordered = sorted(values)
+    if not ordered:
+        return 0.0
+    position = (len(ordered) - 1) * fraction
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    weight = position - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
+
+
+def _parse_iso_datetime(value: object) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _datetime_within_days(value: object, now: datetime, days: int) -> bool:
+    parsed = _parse_iso_datetime(value)
+    return bool(parsed and now - timedelta(days=days) <= parsed <= now)
+
+
+def _room_sort_key(label: str) -> tuple[int, str]:
+    match = re.match(r"(\d+)", label)
+    return (int(match.group(1)), label) if match else (999, label)
 
 
 def create_monitoring_snapshot(

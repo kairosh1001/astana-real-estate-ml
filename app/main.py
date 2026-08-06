@@ -40,6 +40,7 @@ from app.database import (
     fetch_feedback_messages,
     fetch_listing_by_url,
     fetch_listings_by_urls,
+    fetch_market_brief,
     fetch_market_dashboard,
     fetch_monitoring_snapshots,
     fetch_price_history,
@@ -157,6 +158,7 @@ def home(request: Request) -> HTMLResponse:
         )
         total_undervalued = count_undervalued(db_connection, include_stale=False)
         status_summary = fetch_status_summary(db_connection)
+        market_brief = fetch_market_brief(db_connection)
 
     return templates.TemplateResponse(
         request,
@@ -170,6 +172,7 @@ def home(request: Request) -> HTMLResponse:
             "total_undervalued": total_undervalued,
             "active_listings": status_summary.get("active_listings") or 0,
             "latest_refresh": status_summary.get("latest_refresh"),
+            "market_brief": market_brief,
             "district_options": DISTRICT_OPTIONS,
             "start_rank": 1,
             "is_preview": True,

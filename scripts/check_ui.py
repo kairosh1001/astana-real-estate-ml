@@ -201,6 +201,58 @@ def check_telegram_digest_format() -> None:
     assert_contains(text, "2-комнатная квартира · 55 м², есиль")
 
 
+def check_market_dashboard_calculations(db_path: Path) -> None:
+    from app.database import connect, fetch_market_dashboard
+
+    with connect(db_path) as connection:
+        dashboard = fetch_market_dashboard(connection)
+    if dashboard["city"]["count"] != 1:
+        raise SystemExit("Market dashboard active listing count is incorrect")
+    if dashboard["city"]["median_price_per_m2"] != 500000:
+        raise SystemExit("Market dashboard city median is incorrect")
+    if dashboard["districts"][0]["name"] != "Есиль":
+        raise SystemExit("Market dashboard district normalization is incorrect")
+    history = dashboard["historical"]
+    if history["available"]:
+        raise SystemExit("Market history should require at least eight daily points")
+    if history["observation_count"] != 2 or history["day_count"] != 2:
+        raise SystemExit("Market history observation coverage is incorrect")
+    if history["eligible_price_change_count"] != 1 or history["price_cut_count"] != 1:
+        raise SystemExit("Market price-cut calculation is incorrect")
+    if not 0.047 < history["median_price_cut"] < 0.048:
+        raise SystemExit("Market median price-cut percentage is incorrect")
+
+    with connect(db_path) as connection:
+        for day in range(1, 7):
+            connection.execute(
+                """
+                INSERT INTO listing_price_history (
+                    url, observed_at, listed_price, listed_price_per_m2, status
+                )
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    "https://krisha.kz/a/show/123",
+                    f"2026-07-{day:02d}T00:00:00+00:00",
+                    20000000 - day * 100000,
+                    500000 - day * 2500,
+                    "active",
+                ),
+            )
+        connection.commit()
+        trend_dashboard = fetch_market_dashboard(connection)
+        connection.execute(
+            "DELETE FROM listing_price_history WHERE observed_at >= ?",
+            ("2026-07-01T00:00:00+00:00",),
+        )
+        connection.commit()
+    trend = trend_dashboard["historical"]
+    if not trend["available"] or trend["day_count"] != 8:
+        raise SystemExit("Market history did not enable the trend after eight days")
+    if len(trend["chart_points"]) != 8 or not trend["polyline"]:
+        raise SystemExit("Market history chart coordinates are incomplete")
+
+
 def main() -> None:
     db_path = ROOT / "data" / "ui_check.sqlite3"
     db_path.parent.mkdir(exist_ok=True)
@@ -213,6 +265,7 @@ def main() -> None:
     os.environ["ADMIN_TOKEN"] = "test-token"
     os.environ["TELEGRAM_BOT_USERNAME"] = "krisha_test_bot"
     seed_listing(db_path)
+    check_market_dashboard_calculations(db_path)
     check_complex_developer_parser()
     check_listing_field_parser()
     check_telegram_digest_format()
@@ -237,6 +290,9 @@ def main() -> None:
     assert_contains(home.text, "Модель машинного обучения оценивает цену за м²")
     assert_contains(home.text, "Тёмная тема")
     assert_contains(home.text, "Смотреть весь рейтинг")
+    assert_contains(home.text, "Астана в цифрах")
+    assert_contains(home.text, "Открыть аналитику рынка")
+    assert_contains(home.text, "медианная цена за м²")
     assert_not_contains(home.text, "CatBoost")
     assert_contains(home.text, "Топ-10 квартир ниже рынка")
     assert_contains(home.text, "Новые выгодные за 24 часа")
@@ -367,9 +423,17 @@ def main() -> None:
         raise SystemExit(f"Market page returned {market_page.status_code}")
     for needle in [
         "Рынок квартир в Астане",
-        "Районы",
+        "Районы: цена, разброс и возможности",
         "Жилые комплексы",
-        "Медиана цены/м²",
+        "Медианная цена за м²",
+        "Структура предложения",
+        "Ценовые диапазоны",
+        "Предложение по комнатности",
+        "Цена по состоянию квартиры",
+        "Тип предложения",
+        "История медианной цены за м²",
+        "Истории пока недостаточно для честного графика",
+        "Объектов со снижением цены",
         "Test ЖК",
         "Есиль",
     ]:

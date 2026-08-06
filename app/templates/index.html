@@ -69,15 +69,48 @@
     <a class="button secondary" href="/model-page">Подробнее об ИИ модели</a>
   </section>
 
-  <section class="panel" data-spotlight>
-    <span class="hero-eyebrow">Проверка за минуту</span>
-    <h2>Уже нашли квартиру?</h2>
-    <p class="muted">
-      Вставьте ссылку на объявление Krisha и получите диапазон рыночной оценки,
-      медианный ориентир и расчёт потенциальной выгоды.
-    </p>
-    <a class="button" href="/predict-page">Оценить объявление</a>
-  </section>
+  <div class="home-side-stack">
+    <section class="panel" data-spotlight>
+      <span class="hero-eyebrow">Проверка за минуту</span>
+      <h2>Уже нашли квартиру?</h2>
+      <p class="muted">
+        Вставьте ссылку на объявление Krisha и получите диапазон рыночной оценки,
+        медианный ориентир и расчёт потенциальной выгоды.
+      </p>
+      <a class="button" href="/predict-page">Оценить объявление</a>
+    </section>
+
+    <section class="panel market-mini" data-spotlight>
+      <div class="market-mini-head">
+        <div>
+          <span class="hero-eyebrow">Рынок квартир</span>
+          <h2>Астана в цифрах</h2>
+        </div>
+        <span class="market-live-dot">{{ market_brief.city.count }} объектов</span>
+      </div>
+      <div class="market-mini-value">
+        <strong>{{ "{:,.0f}".format(market_brief.city.median_price_per_m2) }} тг</strong>
+        <span>медианная цена за м²</span>
+      </div>
+      <div class="market-mini-range">
+        {% if market_brief.lowest_district %}
+        <div>
+          <span>Ниже</span>
+          <strong>{{ market_brief.lowest_district.name }}</strong>
+          <small>{{ "{:,.0f}".format(market_brief.lowest_district.median_price_per_m2) }} тг/м²</small>
+        </div>
+        {% endif %}
+        {% if market_brief.highest_district %}
+        <div>
+          <span>Выше</span>
+          <strong>{{ market_brief.highest_district.name }}</strong>
+          <small>{{ "{:,.0f}".format(market_brief.highest_district.median_price_per_m2) }} тг/м²</small>
+        </div>
+        {% endif %}
+      </div>
+      <a class="button secondary" href="/market-page">Открыть аналитику рынка</a>
+    </section>
+  </div>
 </section>
 
 <section class="section panel" data-spotlight>
