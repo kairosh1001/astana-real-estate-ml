@@ -2082,6 +2082,11 @@ html[data-theme="light"] .site-footer {
   align-items: center;
 }
 
+.finder-results.reveal {
+  opacity: 1;
+  transform: none;
+}
+
 .finder-data-note {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

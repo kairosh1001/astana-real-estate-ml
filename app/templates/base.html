@@ -1066,7 +1066,7 @@
                 observer.unobserve(entry.target);
               }
             });
-          }, { threshold: 0.08 });
+          }, { threshold: 0, rootMargin: "0px 0px -24px 0px" });
           document.querySelectorAll("main > section, main > .page-head").forEach(function (element) {
             element.classList.add("reveal");
             observer.observe(element);

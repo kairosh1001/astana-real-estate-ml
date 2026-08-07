@@ -425,6 +425,7 @@ def main() -> None:
         "Текущая стратегия",
         "Цена важнее всего",
         "Выбран",
+        'action="/find-home-page#finder-results"',
     ]:
         assert_contains(home_finder.text, needle)
 
