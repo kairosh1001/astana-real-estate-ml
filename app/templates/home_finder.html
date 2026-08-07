@@ -183,16 +183,35 @@
   </div>
 
   <div class="finder-data-note">
-    <strong>Как считаются расстояния</strong>
+    <strong>Откуда берутся расстояния</strong>
     <span>
-      По прямой от координат объявления до ближайшего объекта
-      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© участников OpenStreetMap</a>:
+      Расстояние по прямой от точки объявления до ближайшего объекта соответствующей категории
+      в локальном снимке карты:
       парков — {{ catalog.counts.get("park", 0) }}, школ и детсадов — {{ catalog.counts.get("education", 0) }},
       остановок — {{ catalog.counts.get("transit", 0) }}, магазинов — {{ catalog.counts.get("grocery", 0) }}.
-      Это ориентир, а не длина пешего маршрута. Процент совпадения — сравнительный балл по выбранным
-      приоритетам, а не вероятность того, что квартира вам понравится.
+      Координата объявления может быть приблизительной, поэтому это ориентир, а не длина пешего маршрута.
+      Данные инфраструктуры —
+      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© участники OpenStreetMap</a>.
     </span>
   </div>
+
+  <details class="finder-method-note">
+    <summary>Как рассчитывается процент совпадения?</summary>
+    <p>
+      Каждый выбранный приоритет получает вес: «Неважно» — 0, «Важно» — 1,
+      «Очень важно» — 2. Сервис выставляет квартире от 0 до 100 баллов по каждому
+      приоритету и показывает их средневзвешенное значение. Это сравнительный балл,
+      а не вероятность того, что квартира вам понравится.
+    </p>
+    <p>
+      Для расстояний максимальный балл даётся примерно до 300 м от парка, 450 м от
+      школы или детсада, 250 м от остановки и 350 м от магазина; затем балл плавно
+      снижается. Цена сравнивается с оценкой q10, готовность к заселению — с состоянием
+      и мебелью, современность дома — с годом постройки. Если нужных данных нет,
+      используется нейтральный балл 40, а индикатор «данные» в карточке показывает
+      долю приоритетов, рассчитанных по известным значениям.
+    </p>
+  </details>
 
   {% if not items %}
   <div class="panel empty-state">По выбранным обязательным условиям квартир не найдено. Попробуйте расширить бюджет, районы или площадь.</div>
@@ -220,14 +239,26 @@
           {% if item.construction_year %}<span>{{ item.construction_year }} год</span>{% endif %}
           {% if item.is_new_build %}<span>Новостройка</span>{% endif %}
           {% if item.apartment_condition %}<span>{{ item.apartment_condition }}</span>{% endif %}
-          {% if item.furnished %}<span>{{ item.furnished }}</span>{% endif %}
+          {% if item.furnished_label %}<span>{{ item.furnished_label }}</span>{% endif %}
         </div>
 
         <div class="distance-grid">
-          <div><span>Парк</span><strong>{{ item.lifestyle_distances.park | distance }}</strong></div>
-          <div><span>Школа / детсад</span><strong>{{ item.lifestyle_distances.education | distance }}</strong></div>
-          <div><span>Остановка</span><strong>{{ item.lifestyle_distances.transit | distance }}</strong></div>
-          <div><span>Продукты</span><strong>{{ item.lifestyle_distances.grocery | distance }}</strong></div>
+          {% for key, label in [("park", "Парк"), ("education", "Школа / детсад"), ("transit", "Остановка"), ("grocery", "Продукты")] %}
+          {% set poi = item.lifestyle_pois[key] %}
+          <div>
+            <span>{{ label }}</span>
+            <strong>{{ item.lifestyle_distances[key] | distance }}</strong>
+            {% if poi and poi.url %}
+            <a class="nearest-poi-link" href="{{ poi.url }}" target="_blank" rel="noreferrer" title="Открыть ближайший объект на OpenStreetMap">
+              {{ poi.name or "Показать точку на карте" }}
+            </a>
+            {% elif poi and poi.name %}
+            <small>{{ poi.name }}</small>
+            {% else %}
+            <small>Название не указано</small>
+            {% endif %}
+          </div>
+          {% endfor %}
         </div>
 
         <div class="finder-explanation-grid">

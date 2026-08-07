@@ -1823,6 +1823,7 @@ def _prepare_undervalued_item(row: dict) -> dict:
     row["is_new_build"] = _extract_new_build_flag(raw_listing)
     row["furnished"] = _clean_text(raw_listing.get("Квартира меблирована"))
     row["is_furnished"] = _extract_furnished_flag(row["furnished"])
+    row["furnished_label"] = _format_furnished_label(row["furnished"])
     row["building_type"] = _clean_text(raw_listing.get("Тип дома"))
     row["address"] = _extract_address(raw_listing)
     row["lat"] = _extract_float(raw_listing.get("lat"))
@@ -2033,6 +2034,20 @@ def _extract_furnished_flag(value: object) -> bool | None:
         marker in cleaned
         for marker in ("полностью", "частично", "меблирован", "с мебелью")
     )
+
+
+def _format_furnished_label(value: object) -> str:
+    cleaned = _clean_text(value)
+    normalized = cleaned.casefold()
+    if not normalized:
+        return ""
+    if "без мебели" in normalized or "не меблирован" in normalized:
+        return "Без мебели"
+    if "полностью" in normalized:
+        return "Мебель: полностью меблирована"
+    if "частично" in normalized:
+        return "Мебель: частично меблирована"
+    return f"Мебель: {cleaned}"
 
 
 def _short_listing_title(title: object, area_m2: object) -> str:

@@ -114,7 +114,11 @@ def rank_home_candidates(
         dict(item) for item in candidates if _passes_hard_filters(item, preferences)
     ]
     groups, catalog_meta = _load_poi_groups(str(catalog_path), _mtime(catalog_path))
-    distances = _nearest_distances(filtered, groups)
+    nearest_pois = _nearest_pois(filtered, groups)
+    distances = {
+        key: [poi["distance_km"] if poi else None for poi in values]
+        for key, values in nearest_pois.items()
+    }
     weights = {
         key: max(0, min(int(preferences.priorities.get(key, 0)), 2))
         for key in PRIORITY_LABELS
@@ -151,6 +155,10 @@ def rank_home_candidates(
         item["match_compromises"] = weak[:2]
         item["lifestyle_distances"] = {
             key: distances.get(key, [None] * len(filtered))[index]
+            for key in ("park", "education", "transit", "grocery")
+        }
+        item["lifestyle_pois"] = {
+            key: nearest_pois.get(key, [None] * len(filtered))[index]
             for key in ("park", "education", "transit", "grocery")
         }
         ranked.append(item)
@@ -285,7 +293,7 @@ def _ready_score(item: dict) -> tuple[float, str, bool]:
     furniture_score = 90 if furnished else 25 if furnished is False else 45
     score = condition_score * 0.72 + furniture_score * 0.28
     condition = item.get("apartment_condition") or "состояние не указано"
-    furniture = item.get("furnished") or "мебель не указана"
+    furniture = item.get("furnished_label") or "мебель не указана"
     return score, f"{condition}; {furniture}", condition_known or furniture_known
 
 
@@ -315,8 +323,13 @@ def format_distance(distance: float | None) -> str:
     return f"{distance:.1f} км"
 
 
-def _nearest_distances(items: list[dict], groups: dict[str, np.ndarray]) -> dict[str, list[float | None]]:
-    result = {key: [None] * len(items) for key in groups}
+def _nearest_pois(
+    items: list[dict],
+    groups: dict[str, dict],
+) -> dict[str, list[dict | None]]:
+    result: dict[str, list[dict | None]] = {
+        key: [None] * len(items) for key in groups
+    }
     valid_indices = [
         index
         for index, item in enumerate(items)
@@ -330,18 +343,34 @@ def _nearest_distances(items: list[dict], groups: dict[str, np.ndarray]) -> dict
             dtype=float,
         )
     )
-    for key, poi_coords in groups.items():
+    for key, group in groups.items():
+        poi_coords = group["coords"]
         if not len(poi_coords):
             continue
         tree = BallTree(np.radians(poi_coords), metric="haversine")
-        distance_radians, _ = tree.query(apartment_coords, k=1)
+        distance_radians, nearest_indices = tree.query(apartment_coords, k=1)
         for position, item_index in enumerate(valid_indices):
-            result[key][item_index] = float(distance_radians[position][0] * EARTH_RADIUS_KM)
+            poi = group["items"][int(nearest_indices[position][0])]
+            osm_id = str(poi.get("id") or "")
+            result[key][item_index] = {
+                "distance_km": float(
+                    distance_radians[position][0] * EARTH_RADIUS_KM
+                ),
+                "name": str(poi.get("name") or "").strip(),
+                "url": (
+                    f"https://www.openstreetmap.org/{osm_id}"
+                    if "/" in osm_id
+                    else ""
+                ),
+            }
     return result
 
 
 @lru_cache(maxsize=4)
-def _load_poi_groups(path_text: str, modified_at: float | None) -> tuple[dict[str, np.ndarray], dict]:
+def _load_poi_groups(
+    path_text: str,
+    modified_at: float | None,
+) -> tuple[dict[str, dict], dict]:
     del modified_at
     path = Path(path_text)
     if path.exists():
@@ -349,17 +378,26 @@ def _load_poi_groups(path_text: str, modified_at: float | None) -> tuple[dict[st
         items = data.get("items") or []
         groups = {}
         for key in ("park", "education", "transit", "grocery", "healthcare", "mall"):
-            groups[key] = np.array(
-                [[float(item["lat"]), float(item["lon"])] for item in items if item.get("category") == key],
-                dtype=float,
-            ).reshape((-1, 2))
+            category_items = [
+                item for item in items if item.get("category") == key
+            ]
+            groups[key] = {
+                "coords": np.array(
+                    [
+                        [float(item["lat"]), float(item["lon"])]
+                        for item in category_items
+                    ],
+                    dtype=float,
+                ).reshape((-1, 2)),
+                "items": category_items,
+            }
         return groups, {
             "source": data.get("source") or "OpenStreetMap contributors",
             "generated_at": data.get("generated_at"),
             "counts": data.get("counts") or {},
             "fallback": False,
         }
-    groups = {
+    fallback_coords = {
         "park": np.asarray(PARK_COORDS, dtype=float),
         "education": np.empty((0, 2)),
         "transit": np.asarray(LRT_COORDS, dtype=float),
@@ -367,10 +405,20 @@ def _load_poi_groups(path_text: str, modified_at: float | None) -> tuple[dict[st
         "healthcare": np.empty((0, 2)),
         "mall": np.asarray(MALL_COORDS, dtype=float),
     }
+    groups = {
+        key: {
+            "coords": coords,
+            "items": [
+                {"id": "", "name": "", "lat": lat, "lon": lon}
+                for lat, lon in coords
+            ],
+        }
+        for key, coords in fallback_coords.items()
+    }
     return groups, {
         "source": "Встроенный ограниченный список объектов",
         "generated_at": None,
-        "counts": {key: len(value) for key, value in groups.items()},
+        "counts": {key: len(value["coords"]) for key, value in groups.items()},
         "fallback": True,
     }
 
