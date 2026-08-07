@@ -201,13 +201,9 @@ def model_page(request: Request) -> HTMLResponse:
     )
 
 
-@app.get("/about-page", response_class=HTMLResponse)
-def about_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request,
-        "about.html",
-        {"request": request},
-    )
+@app.get("/about-page", include_in_schema=False)
+def legacy_about_page() -> RedirectResponse:
+    return RedirectResponse(url="/model-page", status_code=308)
 
 
 @app.get("/feedback-page", response_class=HTMLResponse)

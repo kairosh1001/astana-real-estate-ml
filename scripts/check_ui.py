@@ -395,7 +395,8 @@ def main() -> None:
     assert_contains(home.text, "/model-page")
     assert_contains(home.text, "/market-page")
     assert_contains(home.text, "Рынок Астаны")
-    assert_contains(home.text, "/about-page")
+    assert_not_contains(home.text, "/about-page")
+    assert_not_contains(home.text, ">О проекте<")
     assert_contains(home.text, "https://t.me/krisha_test_bot")
     assert_contains(home.text, "Telegram бот")
     assert_not_contains(home.text, "Статус сервиса")
@@ -470,6 +471,12 @@ def main() -> None:
         "q90",
         "квантили",
         "поделенная",
+        "О сервисе",
+        "Для кого",
+        "Источник данных",
+        "Данные получены из открытых объявлений на сайте krisha.kz",
+        "Как пользоваться",
+        "Что важно помнить",
     ]:
         assert_contains(model_page.text, needle)
     assert_not_contains(model_page.text, "Она не заменяет проверку документов")
@@ -572,16 +579,11 @@ def main() -> None:
             f"Missing district analytics returned {missing_district_page.status_code}"
         )
 
-    about_page = client.get("/about-page")
-    if about_page.status_code != 200:
-        raise SystemExit(f"About page returned {about_page.status_code}")
-    for needle in [
-        "О проекте",
-        "Для кого",
-        "Источник данных",
-        "Данные получены из открытых объявлений на сайте krisha.kz",
-    ]:
-        assert_contains(about_page.text, needle)
+    about_page = client.get("/about-page", follow_redirects=False)
+    if about_page.status_code != 308:
+        raise SystemExit(f"Legacy about page returned {about_page.status_code}")
+    if about_page.headers.get("location") != "/model-page":
+        raise SystemExit("Legacy about page does not redirect to /model-page")
 
     feedback_page = client.get("/feedback-page")
     if feedback_page.status_code != 200:
