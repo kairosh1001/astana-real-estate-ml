@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Подобрать квартиру для жизни в Астане{% endblock %}
+{% block content %}
+<section class="finder-intro" data-spotlight>
+  <div>
+    <span class="eyebrow">Персональный рейтинг · Астана</span>
+    <h1>Подобрать квартиру для жизни</h1>
+    <p>
+      Задайте обязательные условия и расставьте приоритеты. Сервис проверит активные
+      объявления в Астане и объяснит, почему каждый вариант подходит именно вам.
+    </p>
+  </div>
+  <div class="finder-steps" aria-label="Как работает подбор">
+    <span><b>1</b> Условия</span>
+    <span><b>2</b> Приоритеты</span>
+    <span><b>3</b> Совпадение</span>
+  </div>
+</section>
+
+<section class="section panel finder-panel">
+  <div class="toolbar finder-toolbar">
+    <div>
+      <span class="eyebrow">Быстрый старт</span>
+      <h2>Выберите сценарий или настройте свой</h2>
+    </div>
+    <div class="finder-presets">
+      <a class="chip" href="/find-home-page">Сбалансированный</a>
+      <a class="chip" href="/find-home-page?priority_park=2&priority_education=2&priority_transit=1&priority_grocery=2&priority_value=1&priority_ready=1&priority_modern=0">Для семьи</a>
+      <a class="chip" href="/find-home-page?priority_park=0&priority_education=0&priority_transit=1&priority_grocery=1&priority_value=1&priority_ready=2&priority_modern=1">Заехать сразу</a>
+      <a class="chip" href="/find-home-page?priority_park=0&priority_education=0&priority_transit=0&priority_grocery=0&priority_value=2&priority_ready=0&priority_modern=0">Максимум выгоды</a>
+    </div>
+  </div>
+
+  <form id="home-finder-form" method="get" action="/find-home-page">
+    <div class="finder-form-section">
+      <div class="finder-section-head">
+        <span class="finder-section-number">01</span>
+        <div>
+          <h3>Обязательные условия</h3>
+          <p class="muted">Квартиры, которые не проходят эти фильтры, не попадут в рейтинг.</p>
+        </div>
+      </div>
+
+      <fieldset class="finder-fieldset">
+        <legend>Районы Астаны</legend>
+        <div class="check-grid finder-check-grid">
+          {% for option in district_options %}
+          <label class="check-chip {% if option.slug in selected_districts %}active{% endif %}">
+            <input type="checkbox" name="district" value="{{ option.slug }}" {% if option.slug in selected_districts %}checked{% endif %}>
+            {{ option.label }}
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <fieldset class="finder-fieldset">
+        <legend>Количество комнат</legend>
+        <div class="check-grid finder-room-grid">
+          {% for value in [1, 2, 3, 4, 5] %}
+          <label class="check-chip {% if value in selected_rooms %}active{% endif %}">
+            <input type="checkbox" name="room" value="{{ value }}" {% if value in selected_rooms %}checked{% endif %}>
+            {{ value }}{% if value == 5 %}+{% endif %}
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <div class="finder-filter-grid">
+        <label>
+          Бюджет до, тг
+          <input name="max_price" type="number" min="0" step="1000000" value="{% if selected_max_price %}{{ selected_max_price|int }}{% endif %}" placeholder="Например, 45 000 000">
+        </label>
+        <label>
+          Площадь от, м²
+          <input name="min_area" type="number" min="1" step="0.1" value="{{ selected_min_area or '' }}" placeholder="45">
+        </label>
+        <label>
+          Площадь до, м²
+          <input name="max_area" type="number" min="1" step="0.1" value="{{ selected_max_area or '' }}" placeholder="90">
+        </label>
+        <label>
+          Год постройки от
+          <input name="min_year" type="number" min="1950" max="2030" value="{{ selected_min_year or '' }}" placeholder="2015">
+        </label>
+        <label>
+          Тип жилья
+          <select name="housing_type">
+            <option value="any" {% if selected_housing_type == "any" %}selected{% endif %}>Любой</option>
+            <option value="new" {% if selected_housing_type == "new" %}selected{% endif %}>Новостройка</option>
+            <option value="secondary" {% if selected_housing_type == "secondary" %}selected{% endif %}>Вторичное жильё</option>
+          </select>
+        </label>
+        <label class="finder-switch-field">
+          <span>Только с мебелью</span>
+          <span class="finder-switch">
+            <input type="checkbox" name="furnished_only" value="1" {% if selected_furnished_only %}checked{% endif %}>
+            <span aria-hidden="true"></span>
+          </span>
+        </label>
+      </div>
+
+      <fieldset class="finder-fieldset">
+        <legend>Состояние квартиры</legend>
+        <div class="check-grid finder-check-grid">
+          {% for option in condition_options %}
+          <label class="check-chip {% if option.slug in selected_conditions %}active{% endif %}">
+            <input type="checkbox" name="condition" value="{{ option.slug }}" {% if option.slug in selected_conditions %}checked{% endif %}>
+            {{ option.label }}
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="finder-form-section">
+      <div class="finder-section-head">
+        <span class="finder-section-number">02</span>
+        <div>
+          <h3>Личные приоритеты</h3>
+          <p class="muted">Они влияют на порядок вариантов, но ничего не исключают.</p>
+        </div>
+      </div>
+      <div class="priority-grid">
+        {% set priority_cards = [
+          ("park", "Парк рядом", "Больше веса квартире рядом с парком или зелёной зоной."),
+          ("education", "Школа или детсад", "Полезно семьям с детьми."),
+          ("transit", "Остановка рядом", "Быстрый доступ к общественному транспорту."),
+          ("grocery", "Продукты рядом", "Супермаркет или продуктовый магазин поблизости."),
+          ("value", "Выгодная цена", "Сравнение цены объявления с консервативной оценкой ИИ."),
+          ("ready", "Можно заехать", "Учитываются состояние квартиры и наличие мебели."),
+          ("modern", "Современный дом", "Больше веса новым годам постройки.")
+        ] %}
+        {% for key, label, description in priority_cards %}
+        <label class="priority-card">
+          <span class="priority-card-copy">
+            <strong>{{ label }}</strong>
+            <small>{{ description }}</small>
+          </span>
+          <select name="priority_{{ key }}" aria-label="Приоритет: {{ label }}">
+            {% for option in priority_options %}
+            <option value="{{ option.value }}" {% if selected_priorities[key] == option.value %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="finder-submit-row">
+      <button class="button" type="submit">Найти подходящие квартиры</button>
+      <a class="button secondary" href="/find-home-page">Сбросить настройки</a>
+      <span class="muted">Рейтинг строится по {{ candidate_count }} активным объявлениям в базе по Астане.</span>
+    </div>
+  </form>
+</section>
+
+<section class="section finder-results" id="finder-results">
+  <div class="page-head finder-results-head">
+    <div>
+      <span class="eyebrow">Персональный результат</span>
+      <h2>Лучшие совпадения в Астане</h2>
+      <p>Показано {{ items|length }} из {{ total }} квартир, прошедших обязательные условия.</p>
+    </div>
+    <button class="button secondary" type="button" data-copy-current-url>Скопировать подборку</button>
+  </div>
+
+  <div class="finder-data-note">
+    <strong>Как считаются расстояния</strong>
+    <span>
+      По прямой от координат объявления до ближайшего объекта
+      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© участников OpenStreetMap</a>:
+      парков — {{ catalog.counts.get("park", 0) }}, школ и детсадов — {{ catalog.counts.get("education", 0) }},
+      остановок — {{ catalog.counts.get("transit", 0) }}, магазинов — {{ catalog.counts.get("grocery", 0) }}.
+      Это ориентир, а не длина пешего маршрута. Процент совпадения — сравнительный балл по выбранным
+      приоритетам, а не вероятность того, что квартира вам понравится.
+    </span>
+  </div>
+
+  {% if not items %}
+  <div class="panel empty-state">По выбранным обязательным условиям квартир не найдено. Попробуйте расширить бюджет, районы или площадь.</div>
+  {% else %}
+  <div class="finder-list" data-listing-actions-bar>
+    {% for item in items %}
+    <article class="finder-card" data-listing-row data-url="{{ item.url }}">
+      <div class="finder-rank">{{ loop.index }}</div>
+      <div class="match-score" style="--match-score: {{ item.match_score }}%" aria-label="Совпадение {{ item.match_score }} процентов">
+        <strong>{{ item.match_score }}%</strong>
+        <span>совпадение</span>
+      </div>
+      <div class="finder-card-main">
+        <div class="finder-card-heading">
+          <div>
+            <h3><a href="/listing-details?url={{ item.url | urlencode }}">{{ item.short_title }}</a></h3>
+            <p class="finder-card-price">{{ "{:,.0f}".format(item.listed_price or 0) }} тг <span>· {{ "{:,.0f}".format(item.listed_price_per_m2 or 0) }} тг/м²</span></p>
+          </div>
+          <div class="finder-coverage" title="Доля выбранных приоритетов, для которых есть данные">данные {{ item.match_coverage }}%</div>
+        </div>
+
+        <div class="finder-entities">
+          {% if item.district_slug %}<a class="entity-link" href="/district/{{ item.district_slug }}">{{ item.district_label }}</a>{% endif %}
+          {% if item.residential_complex %}<a class="entity-link" href="/complex-page?name={{ item.residential_complex | urlencode }}">ЖК {{ item.residential_complex }}</a>{% endif %}
+          {% if item.construction_year %}<span>{{ item.construction_year }} год</span>{% endif %}
+          {% if item.is_new_build %}<span>Новостройка</span>{% endif %}
+          {% if item.apartment_condition %}<span>{{ item.apartment_condition }}</span>{% endif %}
+          {% if item.furnished %}<span>{{ item.furnished }}</span>{% endif %}
+        </div>
+
+        <div class="distance-grid">
+          <div><span>Парк</span><strong>{{ item.lifestyle_distances.park | distance }}</strong></div>
+          <div><span>Школа / детсад</span><strong>{{ item.lifestyle_distances.education | distance }}</strong></div>
+          <div><span>Остановка</span><strong>{{ item.lifestyle_distances.transit | distance }}</strong></div>
+          <div><span>Продукты</span><strong>{{ item.lifestyle_distances.grocery | distance }}</strong></div>
+        </div>
+
+        <div class="finder-explanation-grid">
+          <div class="finder-reasons">
+            <h4>Почему подходит</h4>
+            {% if item.match_reasons %}
+            <ul>{% for reason in item.match_reasons %}<li><strong>{{ reason.label }}:</strong> {{ reason.detail }}</li>{% endfor %}</ul>
+            {% else %}<p class="muted">Сильных совпадений по выбранным приоритетам не найдено.</p>{% endif %}
+          </div>
+          <div class="finder-compromises">
+            <h4>Компромиссы</h4>
+            {% if item.match_compromises %}
+            <ul>{% for compromise in item.match_compromises %}<li><strong>{{ compromise.label }}:</strong> {{ compromise.detail }}</li>{% endfor %}</ul>
+            {% else %}<p class="muted">Явных слабых мест по выбранным приоритетам нет.</p>{% endif %}
+          </div>
+        </div>
+
+        <div class="finder-card-actions">
+          <a class="button" href="/listing-details?url={{ item.url | urlencode }}">Подробнее</a>
+          <a class="button secondary" href="{{ item.url }}" target="_blank" rel="noreferrer">Открыть на Krisha</a>
+          <button class="inline-action" type="button" data-save-listing>Сохранить</button>
+          <button class="inline-action" type="button" data-compare-listing>Сравнить</button>
+          <button class="inline-action muted-action" type="button" data-hide-listing>Скрыть</button>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

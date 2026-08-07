@@ -39,6 +39,7 @@ from app.database import (
     fetch_complex_analytics,
     fetch_cached_prediction,
     fetch_feedback_messages,
+    fetch_home_match_candidates,
     fetch_listing_by_url,
     fetch_listings_by_urls,
     fetch_market_brief,
@@ -58,6 +59,13 @@ from app.database import (
     valid_district_slug,
     valid_district_slugs,
 )
+from app.home_matcher import (
+    DEFAULT_PRIORITIES,
+    PRIORITY_OPTIONS,
+    HomeSearchPreferences,
+    format_distance,
+    rank_home_candidates,
+)
 from app.model_service import MODEL_FILENAMES
 from app.prediction_service import (
     ListingPrediction,
@@ -68,9 +76,11 @@ from app.refresh_service import run_refresh
 
 
 ROOT = Path(os.getenv("APP_ROOT", Path(__file__).resolve().parents[1]))
+POI_CATALOG_PATH = ROOT / "app" / "data" / "astana_pois.json"
 ASTANA_TZ = timezone(timedelta(hours=5), name="Asia/Astana")
 templates = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
 templates.env.filters["astana_time"] = lambda value: format_astana_time(value)
+templates.env.filters["distance"] = format_distance
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
 templates.env.globals["telegram_bot_url"] = (
     f"https://t.me/{TELEGRAM_BOT_USERNAME}" if TELEGRAM_BOT_USERNAME else ""
@@ -660,6 +670,97 @@ def undervalued_page(
             "has_next": offset + UNDERVALUED_PAGE_SIZE < total,
             "start_rank": offset + 1,
             "is_preview": False,
+        },
+    )
+
+
+@app.get("/find-home-page", response_class=HTMLResponse)
+def find_home_page(
+    request: Request,
+    district: list[str] | None = Query(default=None),
+    room: list[str] | None = Query(default=None),
+    max_price: str | None = None,
+    min_area: str | None = None,
+    max_area: str | None = None,
+    min_year: str | None = None,
+    housing_type: str = "any",
+    condition: list[str] | None = Query(default=None),
+    furnished_only: str | None = None,
+    priority_park: str | None = None,
+    priority_education: str | None = None,
+    priority_transit: str | None = None,
+    priority_grocery: str | None = None,
+    priority_value: str | None = None,
+    priority_ready: str | None = None,
+    priority_modern: str | None = None,
+) -> HTMLResponse:
+    selected_districts = tuple(valid_district_slugs(district))
+    selected_rooms = tuple(
+        value
+        for value in (
+            _parse_optional_int(item, allowed={1, 2, 3, 4, 5})
+            for item in (room or [])
+        )
+        if value is not None
+    )
+    selected_conditions = tuple(
+        slug
+        for slug in (valid_apartment_condition_slug(item) for item in (condition or []))
+        if slug is not None
+    )
+    selected_housing_type = (
+        housing_type if housing_type in {"any", "new", "secondary"} else "any"
+    )
+    selected_priorities = {
+        "park": _parse_priority(priority_park, "park"),
+        "education": _parse_priority(priority_education, "education"),
+        "transit": _parse_priority(priority_transit, "transit"),
+        "grocery": _parse_priority(priority_grocery, "grocery"),
+        "value": _parse_priority(priority_value, "value"),
+        "ready": _parse_priority(priority_ready, "ready"),
+        "modern": _parse_priority(priority_modern, "modern"),
+    }
+    preferences = HomeSearchPreferences(
+        districts=selected_districts,
+        rooms=selected_rooms,
+        max_price=_parse_optional_positive_float(max_price),
+        min_area=_parse_optional_positive_float(min_area),
+        max_area=_parse_optional_positive_float(max_area),
+        min_year=_parse_optional_int(min_year),
+        housing_type=selected_housing_type,
+        conditions=selected_conditions,
+        furnished_only=_parse_checkbox_bool(furnished_only),
+        priorities=selected_priorities,
+    )
+    with connect(DB_PATH) as db_connection:
+        candidates = fetch_home_match_candidates(db_connection)
+    result = rank_home_candidates(
+        candidates,
+        preferences,
+        catalog_path=POI_CATALOG_PATH,
+    )
+    return templates.TemplateResponse(
+        request,
+        "home_finder.html",
+        {
+            "request": request,
+            "items": result["items"],
+            "total": result["total"],
+            "candidate_count": len(candidates),
+            "catalog": result["catalog"],
+            "district_options": DISTRICT_OPTIONS,
+            "condition_options": APARTMENT_CONDITION_OPTIONS,
+            "priority_options": PRIORITY_OPTIONS,
+            "selected_districts": selected_districts,
+            "selected_rooms": selected_rooms,
+            "selected_max_price": preferences.max_price,
+            "selected_min_area": preferences.min_area,
+            "selected_max_area": preferences.max_area,
+            "selected_min_year": preferences.min_year,
+            "selected_housing_type": selected_housing_type,
+            "selected_conditions": selected_conditions,
+            "selected_furnished_only": preferences.furnished_only,
+            "selected_priorities": result["priorities"],
         },
     )
 
@@ -1381,6 +1482,11 @@ def _parse_optional_text(value: str | None) -> str | None:
 
 def _parse_checkbox_bool(value: str | None) -> bool:
     return str(value or "").strip().casefold() in {"1", "true", "yes", "on", "да"}
+
+
+def _parse_priority(value: str | None, key: str) -> int:
+    parsed = _parse_optional_int(value, allowed={0, 1, 2})
+    return DEFAULT_PRIORITIES[key] if parsed is None else parsed
 
 
 def _parse_optional_email(value: str | None) -> str | None:

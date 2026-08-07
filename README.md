@@ -19,7 +19,7 @@ The goal is not to replace human due diligence. The app is an analytical screeni
 - Builds geospatial features, including H3 cells and distances to selected city landmarks.
 - Trains three CatBoost quantile models: q10, q50, and q90.
 - Ranks active listings by conservative upside: q10 model estimate vs asking price.
-- Serves a FastAPI web app with filters, map-based polygon search, listing comparison, saved/hidden listings, price history, and model explanations.
+- Serves a FastAPI web app with filters, personal home matching, map-based polygon search, listing comparison, saved/hidden listings, price history, and model explanations.
 - Runs scheduled refresh jobs on a VPS using Docker Compose and cron.
 - Provides admin pages for refresh history, service status, model monitoring snapshots, and model version checks.
 
@@ -71,6 +71,7 @@ The current feature contract is stored in [`model_metadata.json`](model_metadata
 ## User-Facing Features
 
 - Ranking of active below-market listings.
+- Personal apartment ranking for living in Astana, with hard filters, weighted priorities, explainable match scores, and local OpenStreetMap proximity features.
 - District, room count, price, construction year, residential complex, apartment condition, new-build, area, recency, and minimum-upside filters.
 - Multi-district filtering.
 - Map polygon search with Leaflet.
@@ -164,6 +165,14 @@ Typical scheduled refreshes:
 .\.venv\Scripts\python.exe scripts\refresh_listings.py --kind daily --pages 100
 .\.venv\Scripts\python.exe scripts\refresh_listings.py --kind weekly --pages 200
 ```
+
+The personal home finder uses a compact local OpenStreetMap POI snapshot. Refresh it manually when city infrastructure changes:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\refresh_poi_catalog.py
+```
+
+The generated `app/data/astana_pois.json` file is deployed with the app, so page views do not call an external maps API.
 
 The deployed VPS uses cron and Docker Compose; see [`deploy/README.md`](deploy/README.md).
 

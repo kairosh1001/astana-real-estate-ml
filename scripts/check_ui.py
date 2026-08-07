@@ -52,7 +52,7 @@ def seed_listing(db_path: Path) -> None:
             (
                 "https://krisha.kz/a/show/123",
                 "3-комнатная квартира, 80 м², 7/12 этаж, рядом с парком",
-                '{"Город": "Астана, Есиль р-н", "Адрес": "Кабанбай батыра 48", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "Застройщик": "Test Developer", "Состояние квартиры": "свежий ремонт", "Новостройка": true, "lat": 51.13, "lon": 71.43}',
+                '{"Город": "Астана, Есиль р-н", "Адрес": "Кабанбай батыра 48", "Год постройки": "2020", "Жилой комплекс": "Test ЖК", "Застройщик": "Test Developer", "Состояние квартиры": "свежий ремонт", "Квартира меблирована": "полностью меблирована", "Новостройка": true, "lat": 51.13, "lon": 71.43}',
                 first_seen_at,
                 "2026-06-29T00:00:00+00:00",
                 "2026-06-29T00:00:00+00:00",
@@ -394,6 +394,7 @@ def main() -> None:
     assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
     assert_contains(home.text, "/model-page")
     assert_contains(home.text, "/market-page")
+    assert_contains(home.text, "/find-home-page")
     assert_contains(home.text, "Рынок Астаны")
     assert_not_contains(home.text, "/about-page")
     assert_not_contains(home.text, ">О проекте<")
@@ -402,6 +403,39 @@ def main() -> None:
     assert_not_contains(home.text, "Статус сервиса")
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")
+
+    home_finder = client.get("/find-home-page")
+    if home_finder.status_code != 200:
+        raise SystemExit(f"Home finder returned {home_finder.status_code}")
+    for needle in [
+        "Подобрать квартиру для жизни",
+        "Личные приоритеты",
+        "Лучшие совпадения в Астане",
+        "Почему подходит",
+        "Компромиссы",
+        "полностью меблирована",
+        "OpenStreetMap",
+        "3-комнатная квартира · 40 м²",
+    ]:
+        assert_contains(home_finder.text, needle)
+
+    filtered_home_finder = client.get(
+        "/find-home-page?district=yesil&room=3&max_price=21000000"
+        "&housing_type=new&condition=fresh_repair&furnished_only=1"
+        "&priority_park=2&priority_value=2"
+    )
+    if filtered_home_finder.status_code != 200:
+        raise SystemExit(
+            f"Filtered home finder returned {filtered_home_finder.status_code}"
+        )
+    assert_contains(filtered_home_finder.text, "3-комнатная квартира · 40 м²")
+    assert_contains(filtered_home_finder.text, 'name="room" value="3" checked')
+    assert_contains(filtered_home_finder.text, 'name="furnished_only" value="1" checked')
+
+    empty_home_finder = client.get("/find-home-page?room=1")
+    if empty_home_finder.status_code != 200:
+        raise SystemExit(f"Empty home finder returned {empty_home_finder.status_code}")
+    assert_contains(empty_home_finder.text, "По выбранным обязательным условиям квартир не найдено")
 
     predict_entry = client.get("/predict-page")
     if predict_entry.status_code != 200:

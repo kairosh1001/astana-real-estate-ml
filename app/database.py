@@ -817,6 +817,35 @@ def fetch_undervalued(
     return items[offset : offset + limit]
 
 
+def fetch_home_match_candidates(connection: sqlite3.Connection) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT
+            url,
+            title,
+            raw_json,
+            status,
+            first_seen_at,
+            last_seen_at,
+            listed_price,
+            area_m2,
+            listed_price_per_m2,
+            pred_price_per_m2_q10,
+            pred_price_per_m2_q50,
+            pred_price_per_m2_q90,
+            pred_total_q50,
+            discount_vs_asking_pct_conservative,
+            discount_vs_asking_pct_median,
+            interval_width_pct
+        FROM listings
+        WHERE status = 'active'
+          AND listed_price IS NOT NULL
+          AND area_m2 IS NOT NULL
+        """
+    ).fetchall()
+    return [_prepare_undervalued_item(dict(row)) for row in rows]
+
+
 def count_undervalued(
     connection: sqlite3.Connection,
     *,
@@ -1792,6 +1821,9 @@ def _prepare_undervalued_item(row: dict) -> dict:
         row["apartment_condition"]
     )
     row["is_new_build"] = _extract_new_build_flag(raw_listing)
+    row["furnished"] = _clean_text(raw_listing.get("Квартира меблирована"))
+    row["is_furnished"] = _extract_furnished_flag(row["furnished"])
+    row["building_type"] = _clean_text(raw_listing.get("Тип дома"))
     row["address"] = _extract_address(raw_listing)
     row["lat"] = _extract_float(raw_listing.get("lat"))
     row["lon"] = _extract_float(raw_listing.get("lon"))
@@ -1989,6 +2021,18 @@ def _extract_new_build_flag(raw_listing: dict) -> bool:
         "да",
         "новостройка",
     }
+
+
+def _extract_furnished_flag(value: object) -> bool | None:
+    cleaned = _clean_text(value).casefold()
+    if not cleaned:
+        return None
+    if "без мебели" in cleaned or "не меблирован" in cleaned:
+        return False
+    return any(
+        marker in cleaned
+        for marker in ("полностью", "частично", "меблирован", "с мебелью")
+    )
 
 
 def _short_listing_title(title: object, area_m2: object) -> str:
