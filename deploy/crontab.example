@@ -1,7 +1,7 @@
 # Replace /opt/krisha with the actual repository path on the VPS.
 
 # Daily shallow refresh at 03:00.
-0 3 * * * cd /opt/krisha && docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind daily --pages 50 >> logs/daily-refresh.log 2>&1
+0 3 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind daily --pages 100 >> logs/daily-refresh.log 2>&1
 
-# Weekly deeper refresh on Sunday at 04:00.
-0 4 * * 0 cd /opt/krisha && docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind weekly --pages 200 >> logs/weekly-refresh.log 2>&1
+# Weekly deeper refresh on Sunday at 15:00, away from the daily job.
+0 15 * * 0 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind weekly --pages 200 >> logs/weekly-refresh.log 2>&1

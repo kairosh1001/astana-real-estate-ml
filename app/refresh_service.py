@@ -14,6 +14,7 @@ from app.database import (
     iter_unique_urls,
     mark_refresh_started,
     mark_stale_listings,
+    recover_abandoned_refreshes,
     start_refresh_run,
     upsert_listing_prediction,
 )
@@ -48,6 +49,9 @@ def run_refresh(
     end_page = start_page + pages - 1
     connection = connect(db_path)
     init_db(connection)
+    recovered = recover_abandoned_refreshes(connection)
+    if recovered:
+        print(f"[WARN] Recovered {recovered} interrupted refresh run(s).")
     running_refresh = fetch_running_refresh(connection)
     if running_refresh:
         connection.close()

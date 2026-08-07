@@ -62,13 +62,13 @@
         <tr>
           <td data-label="Параметр">Район</td>
           {% for item in items %}
-          <td data-label="{{ item.short_title }}">{{ item.district_label }}</td>
+          <td data-label="{{ item.short_title }}">{% if item.district_slug %}<a class="entity-link" href="/district/{{ item.district_slug }}" title="Открыть аналитику района {{ item.district_label }} в Астане">{{ item.district_label }}</a>{% else %}—{% endif %}</td>
           {% endfor %}
         </tr>
         <tr>
           <td data-label="Параметр">Жилой комплекс</td>
           {% for item in items %}
-          <td data-label="{{ item.short_title }}">{{ item.residential_complex or "—" }}</td>
+          <td data-label="{{ item.short_title }}">{% if item.residential_complex %}<a class="entity-link" href="/complex-page?name={{ item.residential_complex | urlencode }}" title="Открыть аналитику ЖК {{ item.residential_complex }} в Астане">{{ item.residential_complex }}</a>{% else %}—{% endif %}</td>
           {% endfor %}
         </tr>
         <tr>

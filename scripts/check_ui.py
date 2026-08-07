@@ -134,6 +134,9 @@ def check_listing_field_parser() -> None:
 
     scraper = ApartmentScraper()
     try:
+        retry_policy = scraper.session.get_adapter("https://").max_retries
+        if retry_policy.total != 4 or 429 not in retry_policy.status_forcelist:
+            raise SystemExit("Krisha scraper retry policy is not configured")
         new_build_html = """
         <div class="offer__advert-title"><h1>2-комнатная квартира · 60 м²</h1></div>
         <div class="offer__price">30 000 000 ₸</div>
@@ -181,6 +184,86 @@ def check_listing_field_parser() -> None:
             raise SystemExit("Listing parser did not read condition from summary fields")
     finally:
         scraper.session.close()
+
+
+def check_refresh_storage_safety() -> None:
+    from app.database import (
+        connect,
+        init_db,
+        recover_abandoned_refreshes,
+        upsert_listing_prediction,
+        utc_now,
+    )
+    from app.prediction_service import ListingPrediction
+
+    db_path = ROOT / "data" / "refresh_safety_check.sqlite3"
+    for suffix in ["", "-wal", "-shm"]:
+        path = Path(str(db_path) + suffix)
+        if path.exists():
+            path.unlink()
+    prediction = ListingPrediction(
+        url="https://krisha.kz/a/show/refresh-safety",
+        title="2-комнатная квартира, 60 м²",
+        listed_price=30000000,
+        area_m2=60,
+        listed_price_per_m2=500000,
+        pred_price_per_m2_q10=520000,
+        pred_price_per_m2_q50=560000,
+        pred_price_per_m2_q90=620000,
+        pred_total_q50=33600000,
+        discount_vs_asking_pct_conservative=0.04,
+        discount_vs_asking_pct_median=0.12,
+        interval_width_pct=0.18,
+    )
+    connection = connect(db_path)
+    try:
+        init_db(connection)
+        raw_listing = {
+            "url": prediction.url,
+            "title": prediction.title,
+            "price": "30000000",
+            "Город": "Астана, Есиль р-н",
+        }
+        upsert_listing_prediction(
+            connection,
+            raw_listing=raw_listing,
+            prediction=prediction,
+        )
+        upsert_listing_prediction(
+            connection,
+            raw_listing=raw_listing,
+            prediction=prediction,
+        )
+        daily_rows = connection.execute(
+            "SELECT COUNT(*) FROM listing_price_history WHERE url = ?",
+            (prediction.url,),
+        ).fetchone()[0]
+        if daily_rows != 1:
+            raise SystemExit("Refresh stored more than one price point per day")
+
+        connection.execute(
+            """
+            INSERT INTO refresh_runs (started_at, kind, start_page, end_page, status)
+            VALUES (?, 'daily', 1, 100, 'running'),
+                   (?, 'daily', 1, 100, 'running')
+            """,
+            ("2020-01-01T00:00:00+00:00", utc_now()),
+        )
+        connection.commit()
+        recovered = recover_abandoned_refreshes(connection)
+        if recovered != 1:
+            raise SystemExit("Interrupted refresh recovery count is incorrect")
+        statuses = connection.execute(
+            "SELECT status FROM refresh_runs ORDER BY id"
+        ).fetchall()
+        if [row["status"] for row in statuses] != ["failed", "running"]:
+            raise SystemExit("Interrupted refresh recovery changed wrong runs")
+    finally:
+        connection.close()
+        for suffix in ["", "-wal", "-shm"]:
+            path = Path(str(db_path) + suffix)
+            if path.exists():
+                path.unlink()
 
 
 def check_telegram_digest_format() -> None:
@@ -268,6 +351,7 @@ def main() -> None:
     check_market_dashboard_calculations(db_path)
     check_complex_developer_parser()
     check_listing_field_parser()
+    check_refresh_storage_safety()
     check_telegram_digest_format()
 
     from fastapi.testclient import TestClient
@@ -310,6 +394,7 @@ def main() -> None:
     assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
     assert_contains(home.text, "/model-page")
     assert_contains(home.text, "/market-page")
+    assert_contains(home.text, "Рынок Астаны")
     assert_contains(home.text, "/about-page")
     assert_contains(home.text, "https://t.me/krisha_test_bot")
     assert_contains(home.text, "Telegram бот")
@@ -408,6 +493,8 @@ def main() -> None:
     assert_contains(details_page.text, "Улица")
     assert_contains(details_page.text, "Кабанбай батыра 48")
     assert_contains(details_page.text, "Test ЖК")
+    assert_contains(details_page.text, "/district/yesil")
+    assert_contains(details_page.text, "/complex-page?name=Test%20%D0%96%D0%9A")
     assert_contains(details_page.text, "Активных объявлений в базе")
     assert_contains(details_page.text, "2026-06-30 05:00")
 
@@ -424,20 +511,66 @@ def main() -> None:
     for needle in [
         "Рынок квартир в Астане",
         "Районы: цена, разброс и возможности",
-        "Жилые комплексы",
-        "Медианная цена за м²",
+        "Медианная цена за м² в Астане",
         "Структура предложения",
-        "Ценовые диапазоны",
-        "Предложение по комнатности",
-        "Цена по состоянию квартиры",
-        "Тип предложения",
-        "История медианной цены за м²",
+        "Ценовые диапазоны в Астане",
+        "Предложение по комнатности в Астане",
+        "Цена по состоянию квартир в Астане",
+        "Тип предложения в Астане",
+        "История медианной цены за м² в Астане",
         "Истории пока недостаточно для честного графика",
         "Объектов со снижением цены",
-        "Test ЖК",
         "Есиль",
+        "/district/yesil",
     ]:
         assert_contains(market_page.text, needle)
+    assert_not_contains(market_page.text, "экспозиц")
+    assert_not_contains(market_page.text, "Экспозиц")
+    assert_not_contains(market_page.text, "закрыт")
+    assert_not_contains(market_page.text, "Жилые комплексы с возможностями")
+    assert_not_contains(market_page.text, "Как читать аналитику")
+
+    district_page = client.get("/district/yesil")
+    if district_page.status_code != 200:
+        raise SystemExit(f"District analytics page returned {district_page.status_code}")
+    for needle in [
+        "Район Есиль",
+        "Аналитика района Астаны",
+        "Медианный срок в базе",
+        "Относительно Астаны",
+        "История медианной цены за м² — Район Есиль, Астана",
+        "ЖК района Есиль",
+        "Test ЖК",
+        "/complex-page?name=Test%20%D0%96%D0%9A",
+    ]:
+        assert_contains(district_page.text, needle)
+
+    complex_page = client.get("/complex-page?name=Test%20%D0%96%D0%9A")
+    if complex_page.status_code != 200:
+        raise SystemExit(f"Complex analytics page returned {complex_page.status_code}")
+    for needle in [
+        "ЖК Test ЖК",
+        "Аналитика жилого комплекса в Астане",
+        "Рейтинг и отзывы",
+        "Найти Test ЖК в 2ГИС",
+        "https://2gis.kz/astana/search/",
+        "/district/yesil",
+        "История медианной цены за м² — ЖК Test ЖК, Астана",
+        "3-комнатная квартира · 40 м²",
+    ]:
+        assert_contains(complex_page.text, needle)
+
+    missing_complex_page = client.get("/complex-page?name=Unknown%20Complex")
+    if missing_complex_page.status_code != 404:
+        raise SystemExit(
+            f"Missing complex analytics returned {missing_complex_page.status_code}"
+        )
+
+    missing_district_page = client.get("/district/unknown")
+    if missing_district_page.status_code != 404:
+        raise SystemExit(
+            f"Missing district analytics returned {missing_district_page.status_code}"
+        )
 
     about_page = client.get("/about-page")
     if about_page.status_code != 200:
@@ -565,6 +698,8 @@ def main() -> None:
         "3-комнатная квартира · 40 м²",
         "Подробнее",
         "/listing-details?url=",
+        "/district/yesil",
+        "/complex-page?name=Test%20%D0%96%D0%9A",
         "2026-06-29 05:00",
     ]:
         assert_contains(undervalued.text, needle)

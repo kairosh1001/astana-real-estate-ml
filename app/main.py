@@ -36,12 +36,14 @@ from app.database import (
     create_feedback_message,
     delete_feedback_message,
     fetch_complex_stats,
+    fetch_complex_analytics,
     fetch_cached_prediction,
     fetch_feedback_messages,
     fetch_listing_by_url,
     fetch_listings_by_urls,
     fetch_market_brief,
     fetch_market_dashboard,
+    fetch_district_analytics,
     fetch_monitoring_snapshots,
     fetch_price_history,
     fetch_refresh_runs,
@@ -53,6 +55,7 @@ from app.database import (
     record_request_event,
     store_cached_prediction,
     valid_apartment_condition_slug,
+    valid_district_slug,
     valid_district_slugs,
 )
 from app.model_service import MODEL_FILENAMES
@@ -363,6 +366,61 @@ def market_page(request: Request) -> HTMLResponse:
             "request": request,
             "dashboard": dashboard,
             "summary": status_summary,
+        },
+    )
+
+
+@app.get("/district/{district_slug}", response_class=HTMLResponse)
+def district_analytics_page(
+    request: Request,
+    district_slug: str,
+) -> HTMLResponse:
+    valid_slug = valid_district_slug(district_slug)
+    if not valid_slug:
+        raise HTTPException(status_code=404, detail="Район Астаны не найден.")
+    with connect(DB_PATH) as db_connection:
+        analytics = fetch_district_analytics(db_connection, valid_slug)
+    if not analytics:
+        raise HTTPException(status_code=404, detail="Район Астаны не найден.")
+    return templates.TemplateResponse(
+        request,
+        "market_entity.html",
+        {
+            "request": request,
+            "analytics": analytics,
+            "entity_kind": "district",
+            "entity_name": analytics["entity"]["name"],
+            "entity_title": f"Район {analytics['entity']['name']}",
+            "listing_filter_url": f"/undervalued-page?district={valid_slug}",
+            "two_gis_url": None,
+        },
+    )
+
+
+@app.get("/complex-page", response_class=HTMLResponse)
+def complex_analytics_page(request: Request, name: str = "") -> HTMLResponse:
+    complex_name = name.strip()
+    if not complex_name or len(complex_name) > 160:
+        raise HTTPException(status_code=404, detail="Жилой комплекс не найден.")
+    with connect(DB_PATH) as db_connection:
+        analytics = fetch_complex_analytics(db_connection, complex_name)
+    if not analytics:
+        raise HTTPException(status_code=404, detail="Жилой комплекс не найден.")
+    encoded_name = quote(complex_name, safe="")
+    two_gis_query = quote(f"ЖК {complex_name}", safe="")
+    return templates.TemplateResponse(
+        request,
+        "market_entity.html",
+        {
+            "request": request,
+            "analytics": analytics,
+            "entity_kind": "complex",
+            "entity_name": analytics["entity"]["name"],
+            "entity_title": f"ЖК {analytics['entity']['name']}",
+            "listing_filter_url": (
+                f"/undervalued-page?residential_complex={encoded_name}"
+            ),
+            "two_gis_url": f"https://2gis.kz/astana/search/{two_gis_query}",
         },
     )
 

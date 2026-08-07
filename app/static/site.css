@@ -1375,6 +1375,107 @@ html[data-theme="light"] .site-footer {
   font-weight: 800;
 }
 
+.entity-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  border-radius: 6px;
+  color: var(--strong);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--teal) 42%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: 160ms ease;
+}
+
+.entity-link::after {
+  color: var(--teal-dark);
+  content: "↗";
+  font-size: 0.72em;
+  opacity: 0.7;
+}
+
+.entity-link:hover,
+.entity-link:focus-visible {
+  background: var(--soft);
+  color: var(--teal-dark);
+  outline: none;
+  text-decoration-color: currentColor;
+}
+
+.entity-link-strong {
+  width: fit-content;
+  margin: 8px 0 2px;
+  font: 700 1.15rem/1.25 "Space Grotesk", sans-serif;
+}
+
+.entity-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.entity-kpis {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.entity-summary-link {
+  display: grid;
+  gap: 5px;
+  padding: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 15px;
+  background: var(--surface-soft);
+  text-decoration: none;
+  transition: 180ms ease;
+}
+
+.entity-summary-link:hover {
+  border-color: var(--teal);
+  background: var(--soft);
+  text-decoration: none;
+  transform: translateY(-2px);
+}
+
+.entity-summary-link span,
+.entity-summary-link small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.entity-summary-link strong {
+  color: var(--strong);
+  font: 700 1.55rem/1.15 "Space Grotesk", sans-serif;
+}
+
+.two-gis-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.two-gis-panel p {
+  max-width: 620px;
+  margin-bottom: 0;
+}
+
+.two-gis-panel .button {
+  flex: 0 0 auto;
+}
+
+.entity-table {
+  min-width: 820px;
+}
+
+.entity-listing-table {
+  min-width: 1040px;
+}
+
 .reveal {
   opacity: 0;
   transform: translateY(18px);
@@ -1393,6 +1494,10 @@ html[data-theme="light"] .site-footer {
 
 @media (max-width: 1100px) {
   .analytics-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .entity-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
@@ -1603,6 +1708,17 @@ html[data-theme="light"] .site-footer {
 
   .market-mini-head {
     display: grid;
+  }
+
+  .entity-head-actions,
+  .two-gis-panel {
+    display: grid;
+    justify-content: stretch;
+  }
+
+  .entity-head-actions .button,
+  .two-gis-panel .button {
+    width: 100%;
   }
 }
 

@@ -100,7 +100,7 @@ Daily refresh:
 
 ```bash
 docker compose --profile tools run --rm refresh \
-  python scripts/refresh_listings.py --kind daily --pages 50
+  python scripts/refresh_listings.py --kind daily --pages 100
 ```
 
 Weekly refresh:
@@ -128,6 +128,12 @@ curl -X POST http://127.0.0.1:8000/refresh-listings \
 
 ## Cron Example
 
+Create the log directory once before installing the jobs:
+
+```bash
+mkdir -p /opt/krisha/logs
+```
+
 Edit crontab:
 
 ```bash
@@ -138,13 +144,15 @@ Example entries:
 
 ```cron
 # Daily shallow refresh at 03:00.
-0 3 * * * cd /opt/krisha && docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind daily --pages 50 >> logs/daily-refresh.log 2>&1
+0 3 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind daily --pages 100 >> logs/daily-refresh.log 2>&1
 
-# Weekly deeper refresh on Sunday at 04:00.
-0 4 * * 0 cd /opt/krisha && docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind weekly --pages 200 >> logs/weekly-refresh.log 2>&1
+# Weekly deeper refresh on Sunday at 15:00, away from the daily job.
+0 15 * * 0 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind weekly --pages 200 >> logs/weekly-refresh.log 2>&1
 ```
 
 Replace `/opt/krisha` with the actual repository path.
+Both jobs use the same lock, so a slow refresh waits instead of running concurrently.
+Interrupted refresh records older than 18 hours are closed automatically on the next run.
 
 ## Caddy/HTTPS
 

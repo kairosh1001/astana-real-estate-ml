@@ -15,7 +15,7 @@ from app.refresh_service import run_refresh
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Refresh Krisha listing predictions.")
     parser.add_argument("--start-page", type=int, default=1)
-    parser.add_argument("--pages", type=int, default=50)
+    parser.add_argument("--pages", type=int, default=100)
     parser.add_argument("--kind", choices=["daily", "weekly", "manual"], default="manual")
     parser.add_argument(
         "--db",

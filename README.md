@@ -161,7 +161,7 @@ Small smoke test:
 Typical scheduled refreshes:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\refresh_listings.py --kind daily --pages 50
+.\.venv\Scripts\python.exe scripts\refresh_listings.py --kind daily --pages 100
 .\.venv\Scripts\python.exe scripts\refresh_listings.py --kind weekly --pages 200
 ```
 

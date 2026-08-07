@@ -81,6 +81,19 @@ def check_model_prediction() -> None:
     )
 
 
+def check_refresh_schedule() -> None:
+    crontab = (ROOT / "deploy" / "crontab.example").read_text(encoding="utf-8")
+    required = [
+        "--kind daily --pages 100",
+        "--kind weekly --pages 200",
+        "flock -w 21600 /tmp/krisha-refresh.lock",
+    ]
+    missing = [value for value in required if value not in crontab]
+    if missing:
+        raise SystemExit(f"Refresh schedule is missing safeguards: {missing}")
+    print("[OK] Refresh schedule uses 100/200 pages and a shared lock.", flush=True)
+
+
 def run_command(args: list[str]) -> None:
     print(f"[RUN] {' '.join(args)}", flush=True)
     subprocess.run(args, cwd=ROOT, check=True)
@@ -106,6 +119,7 @@ def main() -> None:
     args = parse_args()
     check_required_paths()
     check_model_prediction()
+    check_refresh_schedule()
 
     if args.full:
         run_command([sys.executable, "scripts/validate_feature_pipeline.py"])

@@ -34,7 +34,7 @@
       {% if listing and listing.district_label %}
       <div class="detail-row">
         <dt>Район</dt>
-        <dd>{{ listing.district_label }}</dd>
+        <dd>{% if listing.district_slug %}<a class="entity-link" href="/district/{{ listing.district_slug }}" title="Открыть аналитику района {{ listing.district_label }} в Астане">{{ listing.district_label }}</a>{% else %}{{ listing.district_label }}{% endif %}</dd>
       </div>
       {% endif %}
       {% if listing and listing.address %}
@@ -46,7 +46,7 @@
       {% if listing and listing.residential_complex %}
       <div class="detail-row">
         <dt>Жилой комплекс</dt>
-        <dd>{{ listing.residential_complex }}</dd>
+        <dd><a class="entity-link" href="/complex-page?name={{ listing.residential_complex | urlencode }}" title="Открыть аналитику ЖК {{ listing.residential_complex }} в Астане">{{ listing.residential_complex }}</a></dd>
       </div>
       {% endif %}
     </dl>
@@ -174,9 +174,9 @@
   </section>
 
   <section class="panel">
-    <h2>Жилой комплекс</h2>
+    <h2>Жилой комплекс в Астане</h2>
     {% if complex_stats %}
-    <h3>{{ complex_stats.name }}</h3>
+    <h3><a class="entity-link" href="/complex-page?name={{ complex_stats.name | urlencode }}" title="Открыть полную аналитику ЖК {{ complex_stats.name }} в Астане">{{ complex_stats.name }}</a></h3>
     <dl class="detail-list">
       <div class="detail-row">
         <dt>Активных объявлений в базе</dt>

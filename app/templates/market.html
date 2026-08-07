@@ -7,7 +7,7 @@
     <h1>Рынок квартир в Астане</h1>
     <p>
       Цены, предложение и потенциальные точки входа для инвесторов, флипперов и агентов.
-      Все показатели рассчитаны по объявлениям из текущей базы сервиса, а не по закрытым сделкам.
+      Все показатели рассчитаны по объявлениям из текущей базы сервиса.
     </p>
     <div class="market-meta-row">
       <span>{{ dashboard.coverage.active_listings }} активных объектов</span>
@@ -25,22 +25,22 @@
     <small>объявлений с рассчитанной ценой за м²</small>
   </article>
   <article class="analytics-kpi">
-    <span>Медиана за м²</span>
+    <span>Медиана за м² в Астане</span>
     <strong>{{ "{:,.0f}".format(dashboard.city.median_price_per_m2) }} тг</strong>
     <small>центральная цена активного предложения</small>
   </article>
   <article class="analytics-kpi">
-    <span>Медианная стоимость</span>
+    <span>Медианная стоимость в Астане</span>
     <strong>{% if dashboard.city.median_total_price %}{{ "{:,.1f}".format(dashboard.city.median_total_price / 1000000) }} млн{% else %}—{% endif %}</strong>
     <small>полная цена квартиры в объявлении</small>
   </article>
   <article class="analytics-kpi">
-    <span>Ниже оценки q10</span>
+    <span>Ниже оценки q10 в Астане</span>
     <strong>{{ "{:.1f}%".format(dashboard.city.below_market_share * 100) }}</strong>
     <small>{{ dashboard.city.below_market }} потенциально интересных объектов</small>
   </article>
   <article class="analytics-kpi">
-    <span>Медиана экспозиции</span>
+    <span>Медианный срок объявления в базе</span>
     <strong>{% if dashboard.city.median_age_days is not none %}{{ "{:.0f}".format(dashboard.city.median_age_days) }} дн.{% else %}—{% endif %}</strong>
     <small>с первого появления в базе сервиса</small>
   </article>
@@ -51,7 +51,7 @@
   {% for insight in dashboard.insights %}
   <article class="market-insight-card">
     <span>{{ insight.label }}</span>
-    <strong>{{ insight.name }}</strong>
+    {% if insight.slug %}<a class="entity-link entity-link-strong" href="/district/{{ insight.slug }}" title="Открыть аналитику района {{ insight.name }} в Астане">{{ insight.name }}</a>{% else %}<strong>{{ insight.name }}</strong>{% endif %}
     <div>
       {% if insight.kind == "price" %}
         {{ "{:,.0f}".format(insight.value) }} тг/м²
@@ -69,7 +69,7 @@
   <div class="analytics-section-head">
     <div>
       <span class="analytics-kicker">Сравнение районов</span>
-      <h2>Медианная цена за м²</h2>
+      <h2>Медианная цена за м² в Астане</h2>
       <p>Горизонтальные бары начинаются от нуля. Рядом указан размер выборки каждого района.</p>
     </div>
     <span class="analytics-benchmark">Астана: {{ "{:,.0f}".format(dashboard.city.median_price_per_m2) }} тг/м²</span>
@@ -79,7 +79,7 @@
     {% for row in dashboard.districts %}
     <div class="district-bar-row">
       <div class="district-bar-label">
-        {% if row.slug %}<a href="/undervalued-page?district={{ row.slug }}">{{ row.name }}</a>{% else %}<span>{{ row.name }}</span>{% endif %}
+        {% if row.slug %}<a class="entity-link" href="/district/{{ row.slug }}" title="Открыть аналитику района {{ row.name }} в Астане">{{ row.name }}</a>{% else %}<span>{{ row.name }}</span>{% endif %}
         <small>n={{ row.count }}</small>
       </div>
       <div class="district-bar-track">
@@ -116,20 +116,20 @@
           <th>Индекс цены</th>
           <th>Медиана квартиры</th>
           <th>Ниже q10</th>
-          <th>Экспозиция</th>
+          <th>Срок в базе</th>
         </tr>
       </thead>
       <tbody>
         {% for row in dashboard.districts %}
         <tr>
-          <td data-label="Район"><strong>{{ row.name }}</strong></td>
+          <td data-label="Район">{% if row.slug %}<a class="entity-link" href="/district/{{ row.slug }}" title="Открыть аналитику района {{ row.name }} в Астане">{{ row.name }}</a>{% else %}<strong>{{ row.name }}</strong>{% endif %}</td>
           <td data-label="Объектов">{{ row.count }}</td>
           <td data-label="Медиана/м²">{{ "{:,.0f}".format(row.median_price_per_m2) }} тг</td>
           <td data-label="Q25–Q75/м²">{{ "{:,.0f}".format(row.q25_price_per_m2) }}–{{ "{:,.0f}".format(row.q75_price_per_m2) }}</td>
           <td data-label="Индекс цены">{{ "{:.0f}".format(row.price_index) }}</td>
           <td data-label="Медиана квартиры">{% if row.median_total_price %}{{ "{:,.1f}".format(row.median_total_price / 1000000) }} млн тг{% else %}—{% endif %}</td>
           <td data-label="Ниже q10">{{ "{:.1f}%".format(row.below_market_share * 100) }}</td>
-          <td data-label="Экспозиция">{% if row.median_age_days is not none %}{{ "{:.0f}".format(row.median_age_days) }} дн.{% else %}—{% endif %}</td>
+          <td data-label="Срок в базе">{% if row.median_age_days is not none %}{{ "{:.0f}".format(row.median_age_days) }} дн.{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -142,7 +142,7 @@
     <div class="analytics-section-head compact">
       <div>
         <span class="analytics-kicker">Структура предложения</span>
-        <h2>Ценовые диапазоны</h2>
+        <h2>Ценовые диапазоны в Астане</h2>
         <p>Количество активных объявлений по цене за м².</p>
       </div>
     </div>
@@ -161,7 +161,7 @@
     <div class="analytics-section-head compact">
       <div>
         <span class="analytics-kicker">Ликвидные форматы</span>
-        <h2>Предложение по комнатности</h2>
+        <h2>Предложение по комнатности в Астане</h2>
         <p>Объём, медианная цена квартиры и цена за м².</p>
       </div>
     </div>
@@ -185,7 +185,7 @@
     <div class="analytics-section-head compact">
       <div>
         <span class="analytics-kicker">Ремонт и потенциал</span>
-        <h2>Цена по состоянию квартиры</h2>
+        <h2>Цена по состоянию квартир в Астане</h2>
         <p>Медиана цены за м². Малые выборки следует трактовать осторожно.</p>
       </div>
     </div>
@@ -204,7 +204,7 @@
     <div class="analytics-section-head compact">
       <div>
         <span class="analytics-kicker">Первичный и вторичный рынок</span>
-        <h2>Тип предложения</h2>
+        <h2>Тип предложения в Астане</h2>
         <p>Сравнение объявлений, отмеченных как новостройки, с остальным рынком.</p>
       </div>
     </div>
@@ -230,7 +230,7 @@
   <div class="analytics-section-head">
     <div>
       <span class="analytics-kicker">Динамика предложения</span>
-      <h2>История медианной цены за м²</h2>
+      <h2>История медианной цены за м² в Астане</h2>
       <p>До 180 дней, дневная медиана по последнему наблюдению каждого объявления за день.</p>
     </div>
     {% if dashboard.historical.available and dashboard.historical.change_pct is not none %}
@@ -241,7 +241,7 @@
   {% if dashboard.historical.available %}
   <div class="trend-chart-shell">
     <svg class="trend-chart" viewBox="0 0 1000 260" role="img" aria-labelledby="trend-title trend-desc">
-      <title id="trend-title">Динамика медианной цены за квадратный метр</title>
+      <title id="trend-title">Динамика медианной цены за квадратный метр в Астане</title>
       <desc id="trend-desc">{{ dashboard.historical.day_count }} дневных точек, от {{ dashboard.historical.start_date }} до {{ dashboard.historical.end_date }}.</desc>
       <line x1="55" y1="40" x2="945" y2="40" class="chart-grid-line"></line>
       <line x1="55" y1="127" x2="945" y2="127" class="chart-grid-line"></line>
@@ -287,53 +287,4 @@
   </div>
 </section>
 
-<section class="section panel analytics-panel" data-spotlight>
-  <div class="analytics-section-head">
-    <div>
-      <span class="analytics-kicker">Точечный поиск</span>
-      <h2>Жилые комплексы с возможностями</h2>
-      <p>Сортировка сначала по доле объектов ниже q10, затем по размеру выборки.</p>
-    </div>
-  </div>
-  {% if not dashboard.complexes %}
-  <div class="empty-state">Пока нет данных по жилым комплексам.</div>
-  {% else %}
-  <div class="table-wrap">
-    <table class="listing-table analytics-table">
-      <thead>
-        <tr>
-          <th>ЖК</th>
-          <th>Объектов</th>
-          <th>Медиана/м²</th>
-          <th>Q25–Q75/м²</th>
-          <th>Медиана квартиры</th>
-          <th>Ниже q10</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in dashboard.complexes %}
-        <tr>
-          <td data-label="ЖК"><strong>{{ row.name }}</strong></td>
-          <td data-label="Объектов">{{ row.count }}</td>
-          <td data-label="Медиана/м²">{{ "{:,.0f}".format(row.median_price_per_m2) }} тг</td>
-          <td data-label="Q25–Q75/м²">{{ "{:,.0f}".format(row.q25_price_per_m2) }}–{{ "{:,.0f}".format(row.q75_price_per_m2) }}</td>
-          <td data-label="Медиана квартиры">{% if row.median_total_price %}{{ "{:,.1f}".format(row.median_total_price / 1000000) }} млн тг{% else %}—{% endif %}</td>
-          <td data-label="Ниже q10">{{ row.below_market }} · {{ "{:.1f}%".format(row.below_market_share * 100) }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
-</section>
-
-<section class="section analytics-caveat">
-  <strong>Как читать аналитику</strong>
-  <p>
-    Это рынок публичных цен предложения, а не закрытых сделок. Малые районные и ЖК-выборки
-    могут быть нестабильны; экспозиция считается только с момента первого появления объекта
-    в базе сервиса. Статус «снято» не означает подтверждённую продажу.
-  </p>
-  <span>Покрытие распознанных районов: {{ "{:.1f}%".format(dashboard.coverage.known_district_share * 100) }}</span>
-</section>
 {% endblock %}
