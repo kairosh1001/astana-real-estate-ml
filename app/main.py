@@ -61,6 +61,7 @@ from app.database import (
 )
 from app.home_matcher import (
     DEFAULT_PRIORITIES,
+    HOME_PRESETS,
     PRIORITY_OPTIONS,
     HomeSearchPreferences,
     format_distance,
@@ -739,6 +740,51 @@ def find_home_page(
         preferences,
         catalog_path=POI_CATALOG_PATH,
     )
+    preserved_filters: dict[str, object] = {}
+    if preferences.districts:
+        preserved_filters["district"] = preferences.districts
+    if preferences.rooms:
+        preserved_filters["room"] = preferences.rooms
+    for key, value in (
+        ("max_price", preferences.max_price),
+        ("min_area", preferences.min_area),
+        ("max_area", preferences.max_area),
+        ("min_year", preferences.min_year),
+    ):
+        if value is not None:
+            preserved_filters[key] = value
+    if preferences.housing_type != "any":
+        preserved_filters["housing_type"] = preferences.housing_type
+    if preferences.conditions:
+        preserved_filters["condition"] = preferences.conditions
+    if preferences.furnished_only:
+        preserved_filters["furnished_only"] = 1
+    home_presets = []
+    for preset in HOME_PRESETS:
+        preset_copy = dict(preset)
+        preset_params = dict(preserved_filters)
+        if preset["slug"] != "balanced":
+            preset_params.update(
+                {
+                    f"priority_{key}": value
+                    for key, value in preset["priorities"].items()
+                }
+            )
+        preset_query = urlencode(preset_params, doseq=True)
+        preset_copy["url"] = (
+            f"/find-home-page?{preset_query}"
+            if preset_query
+            else "/find-home-page"
+        )
+        home_presets.append(preset_copy)
+    selected_preset = next(
+        (
+            preset
+            for preset in home_presets
+            if preset["priorities"] == result["priorities"]
+        ),
+        None,
+    )
     return templates.TemplateResponse(
         request,
         "home_finder.html",
@@ -751,6 +797,8 @@ def find_home_page(
             "district_options": DISTRICT_OPTIONS,
             "condition_options": APARTMENT_CONDITION_OPTIONS,
             "priority_options": PRIORITY_OPTIONS,
+            "home_presets": home_presets,
+            "selected_preset": selected_preset,
             "selected_districts": selected_districts,
             "selected_rooms": selected_rooms,
             "selected_max_price": preferences.max_price,

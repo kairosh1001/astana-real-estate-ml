@@ -26,6 +26,56 @@ DEFAULT_PRIORITIES = {
     "ready": 1,
     "modern": 0,
 }
+HOME_PRESETS = [
+    {
+        "slug": "balanced",
+        "label": "Сбалансированный",
+        "description": "Цена важнее всего; также учитываются парк, остановки, магазины и готовность к заселению.",
+        "priorities": dict(DEFAULT_PRIORITIES),
+    },
+    {
+        "slug": "family",
+        "label": "Для семьи",
+        "description": "Максимальный вес получают школы, детсады, парки и магазины рядом.",
+        "priorities": {
+            "park": 2,
+            "education": 2,
+            "transit": 1,
+            "grocery": 2,
+            "value": 1,
+            "ready": 1,
+            "modern": 0,
+        },
+    },
+    {
+        "slug": "ready",
+        "label": "Заехать сразу",
+        "description": "Главное — готовое состояние и мебель; дополнительно учитывается современность дома.",
+        "priorities": {
+            "park": 0,
+            "education": 0,
+            "transit": 1,
+            "grocery": 1,
+            "value": 1,
+            "ready": 2,
+            "modern": 1,
+        },
+    },
+    {
+        "slug": "value",
+        "label": "Максимум выгоды",
+        "description": "Рейтинг строится только по сравнению цены объявления с оценкой ИИ.",
+        "priorities": {
+            "park": 0,
+            "education": 0,
+            "transit": 0,
+            "grocery": 0,
+            "value": 2,
+            "ready": 0,
+            "modern": 0,
+        },
+    },
+]
 PRIORITY_LABELS = {
     "park": "Парк рядом",
     "education": "Школа или детсад рядом",

@@ -391,7 +391,11 @@ def main() -> None:
     assert_contains(home.text, "Скрыть")
     assert_contains(home.text, "Сравнить")
     assert_contains(home.text, "Telegram")
-    assert_contains(home.text, "Разработчик - Кайрат Жаркынбай")
+    assert_contains(home.text, "Оценить по ссылке")
+    assert_contains(home.text, "Оценить квартиру по ссылке")
+    assert_contains(home.text, "Смотреть рейтинг квартир")
+    assert_contains(home.text, "Создатель - Kairat Zharkynbay")
+    assert_contains(home.text, "kairosh1001@gmail.com")
     assert_contains(home.text, "/model-page")
     assert_contains(home.text, "/market-page")
     assert_contains(home.text, "/find-home-page")
@@ -403,6 +407,7 @@ def main() -> None:
     assert_not_contains(home.text, "Статус сервиса")
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")
+    assert_not_contains(home.text, 'href="/feedback-page">Предложения</a>')
 
     home_finder = client.get("/find-home-page")
     if home_finder.status_code != 200:
@@ -416,8 +421,24 @@ def main() -> None:
         "полностью меблирована",
         "OpenStreetMap",
         "3-комнатная квартира · 40 м²",
+        "Сбалансированный",
+        "Текущая стратегия",
+        "Цена важнее всего",
+        "Выбран",
     ]:
         assert_contains(home_finder.text, needle)
+
+    family_home_finder = client.get(
+        "/find-home-page?priority_park=2&priority_education=2"
+        "&priority_transit=1&priority_grocery=2&priority_value=1"
+        "&priority_ready=1&priority_modern=0"
+    )
+    if family_home_finder.status_code != 200:
+        raise SystemExit(
+            f"Family home finder returned {family_home_finder.status_code}"
+        )
+    assert_contains(family_home_finder.text, "Максимальный вес получают школы")
+    assert_contains(family_home_finder.text, 'aria-current="true"')
 
     filtered_home_finder = client.get(
         "/find-home-page?district=yesil&room=3&max_price=21000000"
@@ -431,6 +452,10 @@ def main() -> None:
     assert_contains(filtered_home_finder.text, "3-комнатная квартира · 40 м²")
     assert_contains(filtered_home_finder.text, 'name="room" value="3" checked')
     assert_contains(filtered_home_finder.text, 'name="furnished_only" value="1" checked')
+    assert_contains(
+        filtered_home_finder.text,
+        'href="/find-home-page?district=yesil&amp;room=3',
+    )
 
     empty_home_finder = client.get("/find-home-page?room=1")
     if empty_home_finder.status_code != 200:

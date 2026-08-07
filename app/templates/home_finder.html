@@ -22,13 +22,31 @@
     <div>
       <span class="eyebrow">Быстрый старт</span>
       <h2>Выберите сценарий или настройте свой</h2>
+      <p class="muted finder-preset-help">Сценарий одним нажатием меняет веса приоритетов и сразу пересчитывает рейтинг ниже. «Сбалансированный» используется по умолчанию.</p>
     </div>
     <div class="finder-presets">
-      <a class="chip" href="/find-home-page">Сбалансированный</a>
-      <a class="chip" href="/find-home-page?priority_park=2&priority_education=2&priority_transit=1&priority_grocery=2&priority_value=1&priority_ready=1&priority_modern=0">Для семьи</a>
-      <a class="chip" href="/find-home-page?priority_park=0&priority_education=0&priority_transit=1&priority_grocery=1&priority_value=1&priority_ready=2&priority_modern=1">Заехать сразу</a>
-      <a class="chip" href="/find-home-page?priority_park=0&priority_education=0&priority_transit=0&priority_grocery=0&priority_value=2&priority_ready=0&priority_modern=0">Максимум выгоды</a>
+      {% for preset in home_presets %}
+      <a
+        class="chip finder-preset-chip {% if selected_preset and selected_preset.slug == preset.slug %}active{% endif %}"
+        href="{{ preset.url }}"
+        {% if selected_preset and selected_preset.slug == preset.slug %}aria-current="true"{% endif %}
+      >
+        {{ preset.label }}
+        {% if selected_preset and selected_preset.slug == preset.slug %}<span>Выбран</span>{% endif %}
+      </a>
+      {% endfor %}
     </div>
+  </div>
+
+  <div class="finder-preset-status" aria-live="polite">
+    <span>Текущая стратегия</span>
+    {% if selected_preset %}
+    <strong>{{ selected_preset.label }}</strong>
+    <p>{{ selected_preset.description }}</p>
+    {% else %}
+    <strong>Своя настройка</strong>
+    <p>Используются веса, которые вы вручную выбрали в разделе личных приоритетов.</p>
+    {% endif %}
   </div>
 
   <form id="home-finder-form" method="get" action="/find-home-page">

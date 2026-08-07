@@ -917,6 +917,17 @@ html[data-theme="light"] .site-footer {
   background: rgba(255, 255, 255, 0.35);
 }
 
+.footer-creator {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: right;
+}
+
+.footer-creator a {
+  color: var(--teal-dark);
+}
+
 .compare-bar {
   border: 1px solid var(--line-strong);
   border-radius: 18px;
@@ -1824,6 +1835,65 @@ html[data-theme="light"] .site-footer {
   gap: 8px;
 }
 
+.finder-preset-help {
+  max-width: 650px;
+  margin: 7px 0 0;
+  font-size: 0.8rem;
+}
+
+.finder-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.finder-preset-chip.active {
+  border-color: var(--teal);
+  background: linear-gradient(135deg, rgba(49, 216, 255, 0.2), rgba(122, 108, 255, 0.16));
+  color: var(--strong);
+  box-shadow: 0 0 22px rgba(49, 216, 255, 0.12);
+}
+
+.finder-preset-chip > span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--teal);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.finder-preset-status {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: linear-gradient(135deg, var(--soft), var(--accent-soft));
+}
+
+.finder-preset-status > span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.finder-preset-status strong {
+  color: var(--strong);
+  font-size: 0.86rem;
+}
+
+.finder-preset-status p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .finder-form-section {
   padding: 28px 0;
   border-bottom: 1px solid var(--line);
@@ -2239,6 +2309,7 @@ html[data-theme="light"] .site-footer {
   .finder-submit-row,
   .finder-results-head { align-items: stretch; flex-direction: column; }
   .finder-presets { justify-content: flex-start; }
+  .finder-preset-status { grid-template-columns: 1fr; }
   .finder-filter-grid,
   .priority-grid,
   .finder-explanation-grid { grid-template-columns: 1fr; }
@@ -2248,6 +2319,12 @@ html[data-theme="light"] .site-footer {
   .match-score { width: 82px; height: 82px; }
   .finder-card-main { grid-column: 1 / -1; }
   .distance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 540px) {
+  .footer-creator {
+    text-align: left;
+  }
 }
 
 @media (max-width: 460px) {
