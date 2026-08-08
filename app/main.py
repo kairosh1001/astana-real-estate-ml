@@ -583,13 +583,9 @@ def undervalued_page(
     selected_new_since_hours = _parse_optional_int(new_since_hours, allowed={24, 48})
     selected_new_since = _new_since_threshold(selected_new_since_hours)
     selected_min_discount_pct = _parse_optional_percent(min_discount_pct)
-    safe_page = max(page, 1)
-    offset = (safe_page - 1) * UNDERVALUED_PAGE_SIZE
     with connect(DB_PATH) as db_connection:
-        items = fetch_undervalued(
+        total = count_undervalued(
             db_connection,
-            limit=UNDERVALUED_PAGE_SIZE,
-            offset=offset,
             districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
@@ -606,8 +602,16 @@ def undervalued_page(
             sort=sort,
             include_stale=include_stale,
         )
-        total = count_undervalued(
+        total_pages = max(
+            (total + UNDERVALUED_PAGE_SIZE - 1) // UNDERVALUED_PAGE_SIZE,
+            1,
+        )
+        safe_page = min(max(page, 1), total_pages)
+        offset = (safe_page - 1) * UNDERVALUED_PAGE_SIZE
+        items = fetch_undervalued(
             db_connection,
+            limit=UNDERVALUED_PAGE_SIZE,
+            offset=offset,
             districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
@@ -667,6 +671,8 @@ def undervalued_page(
             "page": safe_page,
             "page_size": UNDERVALUED_PAGE_SIZE,
             "total": total,
+            "total_pages": total_pages,
+            "pagination_pages": _pagination_window(safe_page, total_pages),
             "has_previous": safe_page > 1,
             "has_next": offset + UNDERVALUED_PAGE_SIZE < total,
             "start_rank": offset + 1,
@@ -1494,6 +1500,25 @@ def _parse_optional_positive_float(value: str | None) -> float | None:
     except ValueError:
         return None
     return parsed if parsed > 0 else None
+
+
+def _pagination_window(current_page: int, total_pages: int) -> list[int | None]:
+    """Return compact page numbers, using None as an ellipsis marker."""
+    if total_pages <= 7:
+        return list(range(1, total_pages + 1))
+
+    visible_pages = {1, total_pages}
+    visible_pages.update(
+        range(max(1, current_page - 2), min(total_pages, current_page + 2) + 1)
+    )
+    result: list[int | None] = []
+    previous_page: int | None = None
+    for page_number in sorted(visible_pages):
+        if previous_page is not None and page_number - previous_page > 1:
+            result.append(None)
+        result.append(page_number)
+        previous_page = page_number
+    return result
 
 
 def _parse_optional_percent(value: str | None) -> float | None:

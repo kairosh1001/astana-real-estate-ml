@@ -538,6 +538,89 @@ html[data-theme="dark"] .muted-action {
   margin-top: 24px;
 }
 
+.pagination-shell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.pagination-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.pagination-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font-weight: 800;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+a.pagination-page:hover {
+  border-color: var(--line-strong);
+  background: var(--accent-soft);
+  color: var(--strong);
+  transform: translateY(-1px);
+}
+
+.pagination-page.is-current {
+  border-color: color-mix(in srgb, var(--teal) 72%, var(--line));
+  background: linear-gradient(135deg, #10aeda, #6557e9);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(28, 177, 222, 0.2);
+}
+
+.pagination-arrow {
+  font-size: 1.05rem;
+}
+
+.pagination-ellipsis {
+  min-width: 22px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.pagination-jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.pagination-jump label {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.pagination-jump input[type="number"] {
+  width: 72px;
+  min-width: 72px;
+  padding: 9px 10px;
+  text-align: center;
+}
+
+.pagination-jump .button {
+  padding: 9px 13px;
+  font-size: 0.75rem;
+}
+
 .home-side-stack {
   display: grid;
   gap: 22px;
@@ -2370,6 +2453,10 @@ html[data-theme="light"] .site-footer {
 }
 
 @media (max-width: 720px) {
+  .pagination-shell,
+  .pagination-jump { align-items: stretch; flex-direction: column; }
+  .pagination-pages { justify-content: center; }
+  .pagination-jump input[type="number"] { width: 100%; }
   .finder-intro,
   .finder-panel { padding: 20px; }
   .finder-toolbar,

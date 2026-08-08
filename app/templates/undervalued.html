@@ -26,7 +26,7 @@
       <p class="muted">
         Показано {{ items|length }} из {{ total }} вариантов.
         Активных объявлений в базе: {{ active_listings }}.
-        Страница {{ page }}.
+        Страница {{ page }} из {{ total_pages }}.
       </p>
     </div>
   </div>
@@ -196,23 +196,65 @@
 <section class="section panel">
   {% include "_undervalued_table.html" %}
 
-  <div class="pagination">
-    {% if has_previous %}
+  <div class="pagination-shell">
+    <nav class="pagination-pages" aria-label="Страницы рейтинга">
+      {% if has_previous %}
       <a
-        class="button secondary"
+        class="pagination-page pagination-arrow"
         href="/undervalued-page?page={{ page - 1 }}{% if filter_query %}&{{ filter_query }}{% endif %}"
-      >
-        Назад
-      </a>
-    {% endif %}
-    {% if has_next %}
+        aria-label="Предыдущая страница"
+      >←</a>
+      {% endif %}
+      {% for page_number in pagination_pages %}
+        {% if page_number is none %}
+        <span class="pagination-ellipsis" aria-hidden="true">…</span>
+        {% elif page_number == page %}
+        <span class="pagination-page is-current" aria-current="page">{{ page_number }}</span>
+        {% else %}
+        <a
+          class="pagination-page"
+          href="/undervalued-page?page={{ page_number }}{% if filter_query %}&{{ filter_query }}{% endif %}"
+        >{{ page_number }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if has_next %}
       <a
-        class="button"
+        class="pagination-page pagination-arrow"
         href="/undervalued-page?page={{ page + 1 }}{% if filter_query %}&{{ filter_query }}{% endif %}"
+        aria-label="Следующая страница"
+      >→</a>
+      {% endif %}
+    </nav>
+
+    <form class="pagination-jump" method="get" action="/undervalued-page">
+      {% for district_slug in selected_districts %}
+      <input type="hidden" name="district" value="{{ district_slug }}">
+      {% endfor %}
+      {% if selected_rooms %}<input type="hidden" name="rooms" value="{{ selected_rooms }}">{% endif %}
+      {% if selected_max_price %}<input type="hidden" name="max_price" value="{{ selected_max_price }}">{% endif %}
+      {% if selected_min_year %}<input type="hidden" name="min_year" value="{{ selected_min_year }}">{% endif %}
+      {% if selected_max_year %}<input type="hidden" name="max_year" value="{{ selected_max_year }}">{% endif %}
+      {% if selected_complex %}<input type="hidden" name="residential_complex" value="{{ selected_complex }}">{% endif %}
+      {% if selected_condition %}<input type="hidden" name="condition" value="{{ selected_condition }}">{% endif %}
+      {% if selected_new_build %}<input type="hidden" name="new_build" value="1">{% endif %}
+      {% if selected_min_area %}<input type="hidden" name="min_area" value="{{ selected_min_area }}">{% endif %}
+      {% if selected_max_area %}<input type="hidden" name="max_area" value="{{ selected_max_area }}">{% endif %}
+      {% if selected_polygon %}<input type="hidden" name="map_polygon" value="{{ selected_polygon }}">{% endif %}
+      {% if selected_new_since_hours %}<input type="hidden" name="new_since_hours" value="{{ selected_new_since_hours }}">{% endif %}
+      {% if selected_min_discount_pct %}<input type="hidden" name="min_discount_pct" value="{{ selected_min_discount_pct * 100 }}">{% endif %}
+      {% if selected_sort %}<input type="hidden" name="sort" value="{{ selected_sort }}">{% endif %}
+      <label for="page-jump">Перейти на страницу</label>
+      <input
+        id="page-jump"
+        name="page"
+        type="number"
+        min="1"
+        max="{{ total_pages }}"
+        value="{{ page }}"
+        inputmode="numeric"
       >
-        Следующие 10
-      </a>
-    {% endif %}
+      <button class="button secondary" type="submit">Перейти</button>
+    </form>
   </div>
 </section>
 {% endblock %}

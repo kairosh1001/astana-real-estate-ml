@@ -369,7 +369,11 @@ def main() -> None:
     if home.status_code != 200:
         raise SystemExit(f"Home page returned {home.status_code}")
     assert_contains(home.text, "Kvartiry-ai.kz")
-    assert_contains(home.text, "Оценка объявлений Krisha с помощью ИИ")
+    assert_contains(home.text, "Подбор квартир Krisha.kz с помощью ИИ")
+    assert_contains(
+        home.text,
+        "Найдите нужную вам квартиру в Астане по выгодной цене с помощью искусственного интеллекта",
+    )
     assert_contains(home.text, "Как работает ИИ модель")
     assert_contains(home.text, "Модель машинного обучения оценивает цену за м²")
     assert_contains(home.text, "Тёмная тема")
@@ -394,12 +398,13 @@ def main() -> None:
     assert_contains(home.text, "Оценить по ссылке")
     assert_contains(home.text, "Оценить квартиру по ссылке")
     assert_contains(home.text, "Смотреть рейтинг квартир")
+    assert_contains(home.text, "Подобрать квартиру")
     assert_contains(home.text, "Создатель - Kairat Zharkynbay")
     assert_contains(home.text, "kairosh1001@gmail.com")
     assert_contains(home.text, "/model-page")
     assert_contains(home.text, "/market-page")
     assert_contains(home.text, "/find-home-page")
-    assert_contains(home.text, "Рынок Астаны")
+    assert_contains(home.text, "Анализ рынка")
     assert_not_contains(home.text, "/about-page")
     assert_not_contains(home.text, ">О проекте<")
     assert_contains(home.text, "https://t.me/krisha_test_bot")
@@ -408,6 +413,27 @@ def main() -> None:
     assert_not_contains(home.text, "История обновлений")
     assert_not_contains(home.text, "Админ: обновить данные")
     assert_not_contains(home.text, 'href="/feedback-page">Предложения</a>')
+    assert_not_contains(home.text, "Оценка объявлений Krisha с помощью ИИ")
+    assert_not_contains(
+        home.text,
+        "Если список пуст, новых вариантов с запасом по низкой оценке за сутки не найдено",
+    )
+    assert_contains(
+        home.text,
+        "Рейтинг строится по низкой оценке q10: если q10 выше цены объявления, вариант попадает в базу",
+    )
+    nav_start = home.text.index('<nav class="site-nav"')
+    nav_end = home.text.index("</nav>", nav_start)
+    home_nav = home.text[nav_start:nav_end]
+    nav_links = [
+        'href="/find-home-page">Подобрать квартиру</a>',
+        'href="/predict-page">Оценить по ссылке</a>',
+        'href="/undervalued-page">Квартиры ниже рынка</a>',
+        'href="/market-page">Анализ рынка</a>',
+    ]
+    nav_positions = [home_nav.index(link) for link in nav_links]
+    if nav_positions != sorted(nav_positions):
+        raise SystemExit("Main navigation links are not in the expected order")
 
     home_finder = client.get("/find-home-page")
     if home_finder.status_code != 200:
@@ -767,9 +793,25 @@ def main() -> None:
         "/district/yesil",
         "/complex-page?name=Test%20%D0%96%D0%9A",
         "2026-06-29 05:00",
+        "Страница 1 из 1",
+        "Страницы рейтинга",
+        "Перейти на страницу",
+        'aria-current="page">1</span>',
     ]:
         assert_contains(undervalued.text, needle)
     assert_not_contains(undervalued.text, "активно")
+
+    if main._pagination_window(1, 20) != [1, 2, 3, None, 20]:
+        raise SystemExit("Pagination window for the first page is incorrect")
+    if main._pagination_window(10, 20) != [1, None, 8, 9, 10, 11, 12, None, 20]:
+        raise SystemExit("Pagination window around the current page is incorrect")
+    if main._pagination_window(4, 6) != [1, 2, 3, 4, 5, 6]:
+        raise SystemExit("Pagination window for a short result set is incorrect")
+
+    oversized_page = client.get("/undervalued-page?page=999")
+    if oversized_page.status_code != 200:
+        raise SystemExit(f"Oversized page returned {oversized_page.status_code}")
+    assert_contains(oversized_page.text, "Страница 1 из 1")
 
     yesil_page = client.get("/undervalued-page?district=yesil")
     if yesil_page.status_code != 200:
@@ -783,6 +825,8 @@ def main() -> None:
     assert_contains(multi_district_page.text, "3-комнатная квартира · 40 м²")
     assert_contains(multi_district_page.text, "value=\"yesil\"")
     assert_contains(multi_district_page.text, "value=\"nura\"")
+    assert_contains(multi_district_page.text, 'type="hidden" name="district" value="yesil"')
+    assert_contains(multi_district_page.text, 'type="hidden" name="district" value="nura"')
 
     room_price_page = client.get("/undervalued-page?rooms=3&max_price=21000000")
     if room_price_page.status_code != 200:
