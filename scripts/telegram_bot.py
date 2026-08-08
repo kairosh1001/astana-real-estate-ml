@@ -303,11 +303,11 @@ def format_prediction(prediction: ListingPrediction, public_url: str) -> str:
 def format_digest(listings: list[dict], public_url: str) -> str:
     if not listings:
         return (
-            "<b>Новые выгодные за 24 часа</b>\n\n"
+            "<b>Новые выгодные квартиры за 24 часа</b>\n\n"
             "За последние 24 часа новых объявлений ниже рынка не найдено."
         )
 
-    lines = ["<b>Новые выгодные за 24 часа</b>", ""]
+    lines = ["<b>Новые выгодные квартиры за 24 часа</b>", ""]
     for index, item in enumerate(listings, start=1):
         details_url = (
             f"{public_url.rstrip('/')}/listing-details?url={quote(item['url'], safe='')}"

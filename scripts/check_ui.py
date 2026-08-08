@@ -281,6 +281,7 @@ def check_telegram_digest_format() -> None:
         ],
         "https://kvartiry-ai.kz",
     )
+    assert_contains(text, "Новые выгодные квартиры за 24 часа")
     assert_contains(text, "2-комнатная квартира · 55 м², есиль")
 
 
@@ -372,18 +373,20 @@ def main() -> None:
     assert_contains(home.text, "Подбор квартир Krisha.kz с помощью ИИ")
     assert_contains(
         home.text,
-        "Найдите нужную вам квартиру в Астане по выгодной цене с помощью искусственного интеллекта",
+        "Найдите нужную вам квартиру в Астане по выгодной цене с помощью искусственного интеллекта, быстро и бесплатно!",
     )
     assert_contains(home.text, "Как работает ИИ модель")
     assert_contains(home.text, "Модель машинного обучения оценивает цену за м²")
-    assert_contains(home.text, "Тёмная тема")
+    assert_contains(home.text, "Светлая тема")
+    assert_contains(home.text, 'savedTheme === "light" ? "light" : "dark"')
     assert_contains(home.text, "Смотреть весь рейтинг")
     assert_contains(home.text, "Астана в цифрах")
     assert_contains(home.text, "Открыть аналитику рынка")
     assert_contains(home.text, "медианная цена за м²")
     assert_not_contains(home.text, "CatBoost")
     assert_contains(home.text, "Топ-10 квартир ниже рынка")
-    assert_contains(home.text, "Новые выгодные за 24 часа")
+    assert_contains(home.text, "Новые выгодные квартиры за 24 часа")
+    assert_contains(home.text, "Открыть все новые квартиры")
     assert_contains(home.text, "Активных объявлений в базе: 1")
     assert_contains(home.text, "Последнее обновление: 2026-06-29 05:05")
     assert_contains(home.text, "Медианная оценка")
@@ -774,7 +777,8 @@ def main() -> None:
         "Только новостройки",
         "Площадь от",
         "Площадь до",
-        "Новые за 24 часа",
+        "Новые квартиры за 24 часа",
+        "Новые квартиры за 48 часов",
         "Минимальная выгода q10",
         "Сортировка",
         "Сначала новые",
