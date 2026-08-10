@@ -44,3 +44,36 @@ The default delay is deliberately conservative. A complete detail-page crawl
 can take several hours. Keep the terminal and computer awake, do not open the
 output CSV in Excel while it is running, and press `Ctrl+C` once if you need a
 clean checkpointed stop.
+
+## Universal Astana + Almaty Features (v2)
+
+The v2 pipeline is isolated from the current Astana production model. Refresh
+the shared OpenStreetMap catalog with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\refresh_poi_catalog.py
+```
+
+After the Almaty scrape has completed, build one deduplicated model-ready
+dataset with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_universal_dataset.py `
+  --input krisha_data_raw_orig.csv `
+  --input krisha_data_raw.csv `
+  --input data\almaty_sale_raw.csv
+```
+
+The generated `data/universal_training_v2.csv` contains city-aware location
+categories, H3 cells, distance to each city center, and reusable OSM proximity
+and density features for parks, schools, kindergartens, groceries, malls,
+healthcare, transit, and universities. It intentionally contains no
+Astana-only landmark features. Model metadata and the ЖК-to-district mapping
+are written under the ignored `models_candidate/` directory.
+
+OSM proximity values currently use great-circle distance to the representative
+point returned by Overpass. They are deterministic and inexpensive enough for
+model training and online prediction, but they are not walking-route distances;
+large park polygons can therefore be approximated by their representative
+point. The catalog timestamp and SHA-256 fingerprint are recorded in model
+metadata so training and serving can use the same frozen POI snapshot.

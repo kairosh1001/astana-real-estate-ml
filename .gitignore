@@ -12,6 +12,8 @@ data/almaty_sale_raw.csv
 data/almaty_sale_raw.state.json
 data/almaty_sale_raw.csv.tmp
 data/almaty_sale_raw.state.json.tmp
+data/universal_training_v2.csv
+data/universal_training_v2.csv.tmp
 Turar's code/
 models_candidate/
 # Byte-compiled / optimized / DLL files
