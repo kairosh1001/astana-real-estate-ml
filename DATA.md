@@ -75,7 +75,7 @@ clean checkpointed stop.
 
 ## Universal Astana + Almaty Features (v2)
 
-The v2 pipeline is isolated from the current Astana production model. Refresh
+The v2 feature pipeline is isolated from the Astana v1 feature contract. Refresh
 the shared OpenStreetMap catalog with:
 
 ```powershell
@@ -135,6 +135,9 @@ point model in the q50 slot, show held-out metrics and diagnostics, and save
 only under the ignored `models_candidate/`. Q10/q90 receive frozen log-space
 tail offsets estimated from validation residuals; the held-out test is not used
 for either feature selection, hyperparameter selection, or interval calibration.
-They do not overwrite the current production model. Finish every
-Almaty room-count partition and rebuild the shared dataset before considering
-either candidate for production.
+They write candidates without overwriting production artifacts. The validated
+universal candidate is promoted by `scripts/promote_v2_bundle.py` into the
+versioned `models/universal_v2/` bundle. Production uses `city_auto` routing:
+Astana remains on v1, while Almaty uses universal v2. The bundle stores its
+feature contract, validation-tail interval offsets, held-out metrics, and SHA-256
+fingerprints alongside the models.

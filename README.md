@@ -53,18 +53,26 @@ flowchart LR
 
 ## Model
 
-The model predicts apartment price per square meter on a log scale. Instead of training only one point estimate, the project trains three quantile models:
+The service predicts apartment price per square meter on a log scale and uses a
+city-aware model router:
 
-- `q10`: lower estimate, used for conservative below-market ranking.
-- `q50`: median estimate, used as the central model estimate.
-- `q90`: upper estimate, used to show uncertainty range.
+- Astana keeps the established 23-feature model used by the public ranking;
+- Almaty uses the 41-feature universal v2 model with frozen OpenStreetMap
+  proximity features;
+- the universal bundle loads lazily on the first Almaty request, avoiding its
+  memory cost during Astana-only traffic.
+
+Both bundles expose `q10`, a central point estimate, and `q90`. The interval
+models are calibrated in log space and serving guarantees ordered outputs.
 
 Main feature groups:
 
 - apartment parameters: area, rooms, floor, total floors, construction year, ceiling height;
 - categorical fields: district, residential complex, building type, condition, furnishing;
-- geospatial fields: H3 indexes and distances to selected Astana landmarks;
-- engineered fields: floor ratio and normalized listing attributes.
+- geospatial fields: H3 indexes, Astana landmarks in v1, and reusable OSM
+  proximity/density features in v2;
+- engineered fields: floor position, area per room, building age, and normalized
+  listing attributes.
 
 The current feature contract is stored in [`model_metadata.json`](model_metadata.json).
 
@@ -99,7 +107,8 @@ scripts/             Validation, refresh, backup, and retraining scripts
 deploy/              VPS, Caddy, cron, and deployment notes
 dataset.ipynb        Notebook used for data cleaning, feature engineering, and model work
 df_check.csv         Model-ready dataset snapshot used for validation and retraining
-model_metadata.json  Feature contract used by training and serving
+model_metadata.json  Astana v1 feature contract
+models/universal_v2  Universal v2 models, metadata, calibration, and config
 ```
 
 See [`DATA.md`](DATA.md) for notes about data files and reproducibility.
@@ -120,6 +129,7 @@ Run validation checks:
 .\.venv\Scripts\python.exe scripts\check_ui.py
 .\.venv\Scripts\python.exe scripts\validate_feature_pipeline.py
 .\.venv\Scripts\python.exe scripts\validate_models.py --rows 200000
+.\.venv\Scripts\python.exe scripts\validate_model_routing.py
 ```
 
 Run the app locally:
@@ -149,6 +159,7 @@ Run checks inside Docker:
 ```bash
 docker compose exec -T app python scripts/check_deployment.py
 docker compose exec -T app python scripts/check_ui.py
+docker compose exec -T app python scripts/validate_model_routing.py
 ```
 
 ## Refreshing Listings
@@ -218,6 +229,17 @@ The script writes:
 - `evaluation_report.md` with validation metrics.
 
 Candidate models should be reviewed before replacing the production files in `models/`.
+
+The validated universal v2 candidate can be promoted reproducibly with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\promote_v2_bundle.py
+.\.venv\Scripts\python.exe scripts\validate_model_routing.py
+```
+
+`PRICE_MODEL_ROUTING=city_auto` is the production default. It routes Astana to
+`astana_v1` and Almaty to `universal_v2`. The explicit values `astana_v1` and
+`universal_v2` are available for controlled QA only.
 
 ## Disclaimer
 

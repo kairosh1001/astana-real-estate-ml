@@ -22,6 +22,8 @@ class ModelMetadata:
     feature_columns: list[str]
     categorical_features: list[str]
     target: str
+    model_version: str = "legacy_astana_v1"
+    quantile_offsets_log: dict[str, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -46,10 +48,21 @@ class PriceModelService:
         with path.open("r", encoding="utf-8") as file:
             raw = json.load(file)
 
+        calibration = raw.get("quantile_calibration") or {}
+        offsets = (
+            calibration.get("offsets_log")
+            or raw.get("quantile_offsets_log")
+            or {}
+        )
+
         return ModelMetadata(
             feature_columns=list(raw["feature_columns"]),
             categorical_features=list(raw["categorical_features"]),
             target=str(raw["target"]),
+            model_version=str(raw.get("model_version") or "legacy_astana_v1"),
+            quantile_offsets_log={
+                str(key): float(value) for key, value in offsets.items()
+            },
         )
 
     @staticmethod
@@ -99,8 +112,23 @@ class PriceModelService:
         features = self.prepare_features(data)
         predictions = pd.DataFrame(index=features.index)
 
+        log_predictions: dict[str, np.ndarray] = {}
+
         for quantile, model in self.models.items():
-            pred_log = model.predict(features)
+            offset = (self.metadata.quantile_offsets_log or {}).get(quantile, 0.0)
+            log_predictions[quantile] = np.asarray(model.predict(features)) + offset
+
+        # Keep the public interval contract valid even for the rare row where
+        # separately trained quantile models cross the point prediction.
+        log_predictions["q10"] = np.minimum(
+            log_predictions["q10"], log_predictions["q50"]
+        )
+        log_predictions["q90"] = np.maximum(
+            log_predictions["q90"], log_predictions["q50"]
+        )
+
+        for quantile in MODEL_FILENAMES:
+            pred_log = log_predictions[quantile]
             predictions[f"pred_price_per_m2_log_{quantile}"] = pred_log
             predictions[f"pred_price_per_m2_{quantile}"] = np.exp(pred_log)
 

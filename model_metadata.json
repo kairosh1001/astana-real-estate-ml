@@ -1,4 +1,5 @@
 {
+  "model_version": "astana_v1_current",
   "feature_columns": [
     "ceiling_height",
     "year_of_construction",

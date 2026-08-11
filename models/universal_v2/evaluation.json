@@ -1,0 +1,139 @@
+{
+  "scope": "universal",
+  "production_ready": false,
+  "data_inventory_complete": false,
+  "warning": "Almaty scrape has incomplete room partitions; metrics are provisional.",
+  "dataset_path": "data\\universal_training_v2.csv",
+  "rows_after_scope_and_filter": 44932,
+  "rows_by_split": {
+    "train": 31508,
+    "test": 6767,
+    "validation": 6657
+  },
+  "price_per_m2_filter": [
+    100000,
+    5000000
+  ],
+  "split_definition": "sha256(city|h3_res_9|city_residential_complex|rooms|area_m2|current_floor|total_floors|year_of_construction) modulo 100; 0-69 train, 70-84 validation, 85-99 test",
+  "parameters": {
+    "iterations": 800,
+    "depth": 7,
+    "learning_rate": 0.04,
+    "l2_leaf_reg": 7,
+    "early_stopping_rounds": 100,
+    "random_seed": 42,
+    "objectives": {
+      "q10": "Quantile:alpha=0.10",
+      "q50": "RMSE",
+      "q90": "Quantile:alpha=0.90"
+    }
+  },
+  "best_iterations": {
+    "q10": 639,
+    "q50": 799,
+    "q90": 776
+  },
+  "quantile_calibration": {
+    "method": "validation_residual_tail_offsets",
+    "offsets_log": {
+      "q10": -0.010705052901487731,
+      "q90": 0.011411190568729883
+    }
+  },
+  "overall_test_metrics": {
+    "rows": 6767,
+    "log_rmse": 0.1323208140598967,
+    "approx_multiplicative_error_pct": 14.14744615885831,
+    "log_mae": 0.09743905836533409,
+    "log_r2": 0.8145773654436261,
+    "mae_kzt_per_m2": 74291.76255249945,
+    "rmse_kzt_per_m2": 115971.67931349271,
+    "median_absolute_percentage_error_pct": 7.518745635804337,
+    "q10_q90_coverage_pct": 78.76459287719817,
+    "bad_quantile_order_pct": 0.014777597162701344
+  },
+  "segment_test_metrics": [
+    {
+      "segment": "almaty",
+      "rows": 4377,
+      "log_rmse": 0.13069720640769916,
+      "approx_multiplicative_error_pct": 13.96226586254855,
+      "log_mae": 0.09546231623807762,
+      "log_r2": 0.7966770702934172,
+      "mae_kzt_per_m2": 78317.9834568662,
+      "rmse_kzt_per_m2": 124930.64182226753,
+      "median_absolute_percentage_error_pct": 7.381610926987907,
+      "q10_q90_coverage_pct": 78.50125656842586,
+      "bad_quantile_order_pct": 0.02284669865204478
+    },
+    {
+      "segment": "astana",
+      "rows": 2390,
+      "log_rmse": 0.135243732339083,
+      "approx_multiplicative_error_pct": 14.481577897755624,
+      "log_mae": 0.10105922585110885,
+      "log_r2": 0.7928514434867014,
+      "mae_kzt_per_m2": 66918.21908035997,
+      "rmse_kzt_per_m2": 97451.94001831666,
+      "median_absolute_percentage_error_pct": 7.828116740492458,
+      "q10_q90_coverage_pct": 79.2468619246862,
+      "bad_quantile_order_pct": 0.0
+    }
+  ],
+  "feature_columns": [
+    "city",
+    "city_district",
+    "city_residential_complex",
+    "ceiling_height",
+    "year_of_construction",
+    "furnished",
+    "apartment_condition",
+    "building_type",
+    "is_new_build",
+    "rooms",
+    "current_floor",
+    "total_floors",
+    "area_m2",
+    "floor_ratio",
+    "h3_res_7",
+    "h3_res_8",
+    "h3_res_9",
+    "dist_to_city_center_km",
+    "dist_to_nearest_park_km",
+    "count_park_within_2km",
+    "dist_to_nearest_school_km",
+    "count_school_within_2km",
+    "dist_to_nearest_kindergarten_km",
+    "count_kindergarten_within_2km",
+    "dist_to_nearest_grocery_km",
+    "count_grocery_within_2km",
+    "dist_to_nearest_mall_km",
+    "count_mall_within_2km",
+    "dist_to_nearest_healthcare_km",
+    "count_healthcare_within_2km",
+    "dist_to_nearest_transit_km",
+    "count_transit_within_2km",
+    "dist_to_nearest_university_km",
+    "count_university_within_2km",
+    "rooms_segment",
+    "area_per_room",
+    "log_area_m2",
+    "building_age",
+    "is_first_floor",
+    "is_top_floor",
+    "floor_from_top"
+  ],
+  "categorical_features": [
+    "city",
+    "city_district",
+    "city_residential_complex",
+    "furnished",
+    "apartment_condition",
+    "building_type",
+    "h3_res_7",
+    "h3_res_8",
+    "h3_res_9",
+    "rooms_segment"
+  ],
+  "feature_profile": "optimized_compact_v2"
+}

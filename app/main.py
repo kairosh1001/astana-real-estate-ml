@@ -153,6 +153,8 @@ def health() -> dict:
         "feature_count": len(
             prediction_service.model_service.metadata.feature_columns
         ),
+        "model_routing": prediction_service.routing_mode,
+        "available_model_bundles": prediction_service.available_model_bundles,
     }
 
 
@@ -1293,11 +1295,12 @@ def _predict_for_request(request: Request, url: str) -> ListingPrediction:
     normalized_url = _normalize_prediction_url(url)
     validate_krisha_url(normalized_url)
     _enforce_predict_rate_limit(request)
+    cache_key = prediction_service.cache_key(normalized_url)
 
     with connect(DB_PATH) as db_connection:
         cached = fetch_cached_prediction(
             db_connection,
-            normalized_url,
+            cache_key,
             ttl_seconds=PREDICTION_CACHE_TTL_SECONDS,
         )
     if cached:
@@ -1307,7 +1310,7 @@ def _predict_for_request(request: Request, url: str) -> ListingPrediction:
     with connect(DB_PATH) as db_connection:
         store_cached_prediction(
             db_connection,
-            url=normalized_url,
+            url=cache_key,
             prediction=asdict(prediction),
         )
     return prediction

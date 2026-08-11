@@ -7,6 +7,7 @@ services:
       APP_ROOT: /app
       DB_PATH: ${DB_PATH:-/app/data/krisha.sqlite3}
       SQLITE_JOURNAL_MODE: ${SQLITE_JOURNAL_MODE:-WAL}
+      PRICE_MODEL_ROUTING: ${PRICE_MODEL_ROUTING:-city_auto}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
     volumes:
@@ -39,6 +40,7 @@ services:
       APP_ROOT: /app
       DB_PATH: ${DB_PATH:-/app/data/krisha.sqlite3}
       SQLITE_JOURNAL_MODE: ${SQLITE_JOURNAL_MODE:-WAL}
+      PRICE_MODEL_ROUTING: ${PRICE_MODEL_ROUTING:-city_auto}
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups
@@ -67,6 +69,7 @@ services:
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://kvartiry-ai.kz}
       DB_PATH: ${DB_PATH:-/app/data/krisha.sqlite3}
       SQLITE_JOURNAL_MODE: ${SQLITE_JOURNAL_MODE:-WAL}
+      PRICE_MODEL_ROUTING: ${PRICE_MODEL_ROUTING:-city_auto}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_DIGEST_HOUR_ASTANA: ${TELEGRAM_DIGEST_HOUR_ASTANA:-9}
       PREDICTION_CACHE_TTL_SECONDS: ${PREDICTION_CACHE_TTL_SECONDS:-21600}

@@ -22,9 +22,15 @@ REQUIRED_PATHS = [
     "models/catboost_q10_price_per_m2_log.cbm",
     "models/catboost_q50_price_per_m2_log.cbm",
     "models/catboost_q90_price_per_m2_log.cbm",
+    "models/universal_v2/catboost_q10_price_per_m2_log.cbm",
+    "models/universal_v2/catboost_q50_price_per_m2_log.cbm",
+    "models/universal_v2/catboost_q90_price_per_m2_log.cbm",
+    "models/universal_v2/model_metadata.json",
+    "models/universal_v2/feature_config.json",
     "app/main.py",
     "app/home_matcher.py",
     "app/data/astana_pois.json",
+    "app/data/kazakhstan_pois.json",
     "app/templates/base.html",
     "app/templates/home_finder.html",
     "app/templates/feedback.html",
@@ -71,7 +77,7 @@ def check_model_prediction() -> None:
     q10 = float(predictions["pred_price_per_m2_q10"][0])
     q50 = float(predictions["pred_price_per_m2_q50"][0])
     q90 = float(predictions["pred_price_per_m2_q90"][0])
-    if not (0 < q10 <= q90 and q50 > 0):
+    if not (0 < q10 <= q50 <= q90):
         raise SystemExit(
             "Prediction sanity check failed: "
             f"q10={q10:,.0f}, q50={q50:,.0f}, q90={q90:,.0f}"
@@ -126,6 +132,8 @@ def main() -> None:
 
     if args.full:
         run_command([sys.executable, "scripts/validate_feature_pipeline.py"])
+        run_command([sys.executable, "scripts/validate_feature_pipeline_v2.py"])
+        run_command([sys.executable, "scripts/validate_model_routing.py"])
         run_command(
             [
                 sys.executable,
