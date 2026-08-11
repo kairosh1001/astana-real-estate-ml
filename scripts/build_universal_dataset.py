@@ -87,6 +87,7 @@ def main() -> None:
         include_target=True,
         filter_training_rows=True,
         deduplicate_listings=not args.keep_duplicate_urls,
+        include_metadata=True,
     )
     atomic_write_csv(features, args.output)
     atomic_write_json(config.to_dict(), args.config_output)

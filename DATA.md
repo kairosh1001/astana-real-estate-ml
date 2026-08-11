@@ -70,6 +70,10 @@ and density features for parks, schools, kindergartens, groceries, malls,
 healthcare, transit, and universities. It intentionally contains no
 Astana-only landmark features. Model metadata and the ЖК-to-district mapping
 are written under the ignored `models_candidate/` directory.
+The dataset also retains `listing_url`, `scraped_at`, and `scrape_partition` as
+non-model audit columns. The training notebooks assign a deterministic split
+from property-like attributes so likely duplicates/reposts cannot cross from
+training into validation or test, without leaking the audit fields into CatBoost.
 
 OSM proximity values currently use great-circle distance to the representative
 point returned by Overpass. They are deterministic and inexpensive enough for
@@ -77,3 +81,18 @@ model training and online prediction, but they are not walking-route distances;
 large park polygons can therefore be approximated by their representative
 point. The catalog timestamp and SHA-256 fingerprint are recorded in model
 metadata so training and serving can use the same frozen POI snapshot.
+
+## Training Notebooks (v2)
+
+Open either notebook from the repository root after starting `jupyter notebook`:
+
+- `notebooks/universal_astana_almaty_model.ipynb` trains one city-aware model
+  on both available cities;
+- `notebooks/almaty_model.ipynb` trains an Almaty-only model on the identical
+  deterministic Almaty split for a fair comparison.
+
+Both notebooks train q10, q50, and q90 CatBoost candidates, show held-out
+metrics and diagnostics, and save only under the ignored `models_candidate/`
+directory. They do not overwrite the current production model. Finish every
+Almaty room-count partition and rebuild the shared dataset before considering
+either candidate for production.

@@ -126,6 +126,7 @@ UNIVERSAL_CATEGORICAL_FEATURES = [
     *[f"h3_res_{resolution}" for resolution in H3_RESOLUTIONS],
 ]
 TARGET_COLUMN = "price_per_m2_log"
+DATASET_METADATA_COLUMNS = ["listing_url", "scraped_at", "scrape_partition"]
 
 
 @dataclass
@@ -244,6 +245,7 @@ def build_model_features_v2(
     include_target: bool = False,
     filter_training_rows: bool = False,
     deduplicate_listings: bool = True,
+    include_metadata: bool = False,
 ) -> pd.DataFrame:
     source = _deduplicate_raw(raw_df) if deduplicate_listings else raw_df.copy()
     frame = _prepare_base_frame(source, config=config)
@@ -277,6 +279,13 @@ def build_model_features_v2(
     columns = list(UNIVERSAL_FEATURE_COLUMNS)
     if include_target:
         columns.append(TARGET_COLUMN)
+    if include_metadata:
+        frame["listing_url"] = frame["url"].astype("string")
+        if "scraped_at" not in frame.columns:
+            frame["scraped_at"] = pd.NA
+        if "scrape_partition" not in frame.columns:
+            frame["scrape_partition"] = pd.NA
+        columns = list(DATASET_METADATA_COLUMNS) + columns
     return frame.loc[:, columns].reset_index(drop=True)
 
 
