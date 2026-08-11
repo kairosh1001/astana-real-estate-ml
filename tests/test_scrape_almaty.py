@@ -16,6 +16,7 @@ from scripts.scrape_almaty import (
     DEFAULT_PARTITION_TARGETS,
     DEFAULT_TOTAL_TARGET,
     ROOM_PARTITIONS,
+    build_partition_url,
     partition_counts,
     partition_status,
     resolve_partition_targets,
@@ -43,6 +44,12 @@ class BalancedTargetsTest(unittest.TestCase):
         args = argparse.Namespace(target=40_000, **values)
         targets = resolve_partition_targets(args)
         self.assertEqual(targets["rooms_3"], 12_345)
+
+    def test_partition_url_uses_requested_city(self) -> None:
+        url = build_partition_url("https://krisha.kz", "astana", "5.100", 7)
+        self.assertIn("/prodazha/kvartiry/astana/", url)
+        self.assertIn("das%5Blive.rooms%5D=5.100", url)
+        self.assertIn("page=7", url)
 
 
 class ResumeAccountingTest(unittest.TestCase):

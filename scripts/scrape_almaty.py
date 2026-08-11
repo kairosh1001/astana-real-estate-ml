@@ -23,8 +23,7 @@ if str(ROOT) not in sys.path:
 from scrape import ApartmentScraper
 
 
-BASE_PATH = "/prodazha/kvartiry/almaty/"
-DEFAULT_OUTPUT = ROOT / "data" / "almaty_sale_raw.csv"
+SUPPORTED_CITIES = ("almaty", "astana")
 SCHEMA_VERSION = 2
 
 # Krisha caps a search result at 1,000 pages. Splitting by room count keeps the
@@ -50,8 +49,8 @@ DEFAULT_PARTITION_TARGETS = {
 DEFAULT_TOTAL_TARGET = sum(DEFAULT_PARTITION_TARGETS.values())
 
 
-class AlmatyApartmentScraper(ApartmentScraper):
-    """Apartment scraper that can skip unnecessary ЖК developer requests."""
+class CityApartmentScraper(ApartmentScraper):
+    """City apartment scraper that can skip unnecessary ЖК developer requests."""
 
     def __init__(self, *, timeout: int, fetch_developers: bool) -> None:
         super().__init__(timeout=timeout)
@@ -66,10 +65,11 @@ class AlmatyApartmentScraper(ApartmentScraper):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Collect a balanced room-count sample of Almaty apartment-sale "
+            "Collect a balanced room-count sample of city apartment-sale "
             "listings from Krisha.kz with checkpoints and automatic resume."
         )
     )
+    parser.add_argument("--city", choices=SUPPORTED_CITIES, default="almaty")
     parser.add_argument(
         "--target",
         type=int,
@@ -86,7 +86,20 @@ def parse_args() -> argparse.Namespace:
             type=int,
             help=f"Override the target for {partition_name}.",
         )
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--only-partition",
+        action="append",
+        choices=[name for name, _ in ROOM_PARTITIONS],
+        help=(
+            "Collect only this room partition; repeat for multiple partitions. "
+            "Other partitions and their state are left untouched."
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="CSV output (default: data/<city>_sale_raw.csv).",
+    )
     parser.add_argument(
         "--state",
         type=Path,
@@ -182,11 +195,11 @@ def listing_id_from_url(url: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def build_partition_url(base_url: str, room_value: str, page: int) -> str:
+def build_partition_url(base_url: str, city: str, room_value: str, page: int) -> str:
     query = urlencode(
         [("das[live.rooms]", room_value), ("page", str(page))]
     )
-    return f"{base_url}{BASE_PATH}?{query}"
+    return f"{base_url}/prodazha/kvartiry/{city}/?{query}"
 
 
 def parse_listing_page(base_url: str, page_url: str, html: str) -> tuple[list[str], int | None]:
@@ -363,7 +376,12 @@ def main() -> None:
     args = parse_args()
     validate_args(args)
     targets = resolve_partition_targets(args)
-    output = args.output.resolve()
+    selected_partitions = set(
+        args.only_partition or [name for name, _ in ROOM_PARTITIONS]
+    )
+    output = (
+        args.output or ROOT / "data" / f"{args.city}_sale_raw.csv"
+    ).resolve()
     state_path = (args.state or output.with_suffix(".state.json")).resolve()
     existing = load_existing(output)
     state = load_state(state_path)
@@ -384,7 +402,7 @@ def main() -> None:
                 "attempts": int(saved_failure),
                 "partition": "retry",
             }
-    scraper = AlmatyApartmentScraper(
+    scraper = CityApartmentScraper(
         timeout=args.timeout,
         fetch_developers=args.fetch_developers,
     )
@@ -422,7 +440,7 @@ def main() -> None:
             return False
         row["url"] = canonical_listing_url(scraper.base_url, str(row.get("url") or url))
         row["listing_id"] = listing_id_from_url(row["url"])
-        row["scrape_city"] = "almaty"
+        row["scrape_city"] = args.city
         row["scraped_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         row["scrape_partition"] = partition_name
         row["scrape_schema_version"] = SCHEMA_VERSION
@@ -444,6 +462,7 @@ def main() -> None:
         collected_by_partition[name] >= targets[name]
         or bool(state["partitions"][name].get("complete"))
         for name, _ in ROOM_PARTITIONS
+        if name in selected_partitions
     )
     if already_satisfied:
         print("[OK] Every room partition met its quota or exhausted its inventory.")
@@ -454,6 +473,9 @@ def main() -> None:
     interrupted = False
     try:
         for partition_name, room_value in ROOM_PARTITIONS:
+            if partition_name not in selected_partitions:
+                print(f"[INFO] {partition_name}: not selected; skipped")
+                continue
             progress = state["partitions"][partition_name]
             partition_target = targets[partition_name]
             if collected_by_partition[partition_name] >= partition_target:
@@ -474,7 +496,9 @@ def main() -> None:
                 page <= args.max_pages_per_partition
                 and collected_by_partition[partition_name] < partition_target
             ):
-                page_url = build_partition_url(scraper.base_url, room_value, page)
+                page_url = build_partition_url(
+                    scraper.base_url, args.city, room_value, page
+                )
                 html = scraper.fetch_page(page_url)
                 if not html:
                     raise RuntimeError(
@@ -571,10 +595,14 @@ def main() -> None:
     summary = quality_summary(existing)
     summary["partition_targets"] = targets
     summary["partition_status"] = {
-        name: partition_status(
-            summary["partition_counts"][name],
-            targets[name],
-            bool(state["partitions"][name].get("complete")),
+        name: (
+            partition_status(
+                summary["partition_counts"][name],
+                targets[name],
+                bool(state["partitions"][name].get("complete")),
+            )
+            if name in selected_partitions
+            else "not_selected"
         )
         for name, _ in ROOM_PARTITIONS
     }
@@ -593,7 +621,7 @@ def main() -> None:
             "command; completed quotas will be skipped and progress will resume."
         )
     print(
-        f"[DONE] Collected {summary['unique_listings']:,} unique Almaty listings "
+        f"[DONE] Collected {summary['unique_listings']:,} unique {args.city} listings "
         "with every room quota met or available inventory exhausted"
     )
 

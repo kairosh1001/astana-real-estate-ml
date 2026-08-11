@@ -8,10 +8,10 @@ df_raw.csv
 df_meta.csv
 krisha_data_raw.csv
 krisha_data_raw_orig.csv
-data/almaty_sale_raw.csv
-data/almaty_sale_raw.state.json
-data/almaty_sale_raw.csv.tmp
-data/almaty_sale_raw.state.json.tmp
+data/*_sale_raw.csv
+data/*_sale_raw.state.json
+data/*_sale_raw.csv.tmp
+data/*_sale_raw.state.json.tmp
 data/universal_training_v2.csv
 data/universal_training_v2.csv.tmp
 Turar's code/

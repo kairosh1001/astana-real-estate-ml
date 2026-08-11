@@ -55,6 +55,19 @@ Individual quotas can also be overridden, for example
 `--rooms-3-target 12000 --rooms-4-target 8000`. Increasing a quota later resumes
 from the saved search page; it does not discard previously collected rows.
 
+The same checkpointed collector supports Astana with a separate output/state:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\scrape_almaty.py --city astana
+```
+
+The default output becomes `data/astana_sale_raw.csv`; Almaty remains the
+default city for backward compatibility.
+
+Use repeated `--only-partition` arguments for a short targeted refresh, such as
+`--only-partition rooms_4 --only-partition rooms_5_plus`. Unselected room
+partitions and their checkpoints remain untouched.
+
 The default delay is deliberately conservative. A complete detail-page crawl
 can take several hours. Keep the terminal and computer awake, do not open the
 output CSV in Excel while it is running, and press `Ctrl+C` once if you need a
