@@ -53,22 +53,26 @@ def _validate_prediction(name: str, prediction) -> None:
 def main() -> None:
     os.environ["PRICE_MODEL_ROUTING"] = "city_auto"
     service = PredictionService(ROOT)
-    if service.available_model_bundles != ["astana_v1", "universal_v2"]:
+    if service.available_model_bundles != [
+        "astana_v1",
+        "almaty_v2",
+        "universal_v2",
+    ]:
         raise AssertionError(f"Unexpected bundles: {service.available_model_bundles}")
 
     astana = _sample("astana")
     almaty = _sample("almaty")
     if service._select_model_key(astana) != "astana_v1":
         raise AssertionError("Astana did not route to the legacy Astana model.")
-    if service._select_model_key(almaty) != "universal_v2":
-        raise AssertionError("Almaty did not route to universal v2.")
+    if service._select_model_key(almaty) != "almaty_v2":
+        raise AssertionError("Almaty did not route to the Almaty v2 model.")
 
     _validate_prediction("Astana / astana_v1", service.predict_raw_listing(astana))
-    if service._universal_model_service is not None:
-        raise AssertionError("Universal v2 was loaded before an Almaty request.")
-    _validate_prediction("Almaty / universal_v2", service.predict_raw_listing(almaty))
-    if service._universal_model_service is None:
-        raise AssertionError("Universal v2 was not loaded lazily.")
+    if service._v2_bundles:
+        raise AssertionError("A v2 model was loaded before an Almaty request.")
+    _validate_prediction("Almaty / almaty_v2", service.predict_raw_listing(almaty))
+    if set(service._v2_bundles) != {"almaty_v2"}:
+        raise AssertionError("Only Almaty v2 should be loaded lazily.")
     print("[OK] City routing and lazy model loading validated.")
 
 

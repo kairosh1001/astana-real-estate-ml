@@ -1,0 +1,178 @@
+{
+  "scope": "almaty",
+  "production_ready": false,
+  "data_inventory_complete": false,
+  "warning": "Almaty scrape has incomplete room partitions; metrics are provisional.",
+  "dataset_path": "data\\universal_training_v2.csv",
+  "rows_after_scope_and_filter": 28706,
+  "rows_by_split": {
+    "train": 20032,
+    "test": 4377,
+    "validation": 4297
+  },
+  "price_per_m2_filter": [
+    100000,
+    5000000
+  ],
+  "split_definition": "sha256(city|h3_res_9|city_residential_complex|rooms|area_m2|current_floor|total_floors|year_of_construction) modulo 100; 0-69 train, 70-84 validation, 85-99 test",
+  "parameters": {
+    "iterations": 800,
+    "depth": 7,
+    "learning_rate": 0.04,
+    "l2_leaf_reg": 7,
+    "early_stopping_rounds": 100,
+    "random_seed": 42,
+    "objectives": {
+      "q10": "Quantile:alpha=0.10",
+      "q50": "RMSE",
+      "q90": "Quantile:alpha=0.90"
+    }
+  },
+  "best_iterations": {
+    "q10": 587,
+    "q50": 799,
+    "q90": 726
+  },
+  "quantile_calibration": {
+    "method": "validation_residual_tail_offsets",
+    "offsets_log": {
+      "q10": -0.016781157977161593,
+      "q90": 0.01597816798059387
+    }
+  },
+  "overall_test_metrics": {
+    "rows": 4377,
+    "log_rmse": 0.1276195199165055,
+    "approx_multiplicative_error_pct": 13.612064917186666,
+    "log_mae": 0.09300728068580147,
+    "log_r2": 0.8061401098543506,
+    "mae_kzt_per_m2": 76227.67051230748,
+    "rmse_kzt_per_m2": 122040.77061558202,
+    "median_absolute_percentage_error_pct": 7.29805556665355,
+    "q10_q90_coverage_pct": 78.61549006168609,
+    "bad_quantile_order_pct": 0.09138679460817913
+  },
+  "segment_test_metrics": [
+    {
+      "segment": "1",
+      "rows": 1670,
+      "log_rmse": 0.11712834404953837,
+      "approx_multiplicative_error_pct": 12.426371298906144,
+      "log_mae": 0.08272590827861169,
+      "log_r2": 0.755926378294338,
+      "mae_kzt_per_m2": 62970.65626915411,
+      "rmse_kzt_per_m2": 94890.34700185116,
+      "median_absolute_percentage_error_pct": 6.452340385465129,
+      "q10_q90_coverage_pct": 80.11976047904191,
+      "bad_quantile_order_pct": 0.059880239520958084
+    },
+    {
+      "segment": "2",
+      "rows": 1422,
+      "log_rmse": 0.12228430229449604,
+      "approx_multiplicative_error_pct": 13.007533912576458,
+      "log_mae": 0.09248872380192573,
+      "log_r2": 0.8174895338654216,
+      "mae_kzt_per_m2": 73460.60674527774,
+      "rmse_kzt_per_m2": 106250.59094033117,
+      "median_absolute_percentage_error_pct": 7.617031297802086,
+      "q10_q90_coverage_pct": 78.34036568213783,
+      "bad_quantile_order_pct": 0.07032348804500703
+    },
+    {
+      "segment": "3",
+      "rows": 1122,
+      "log_rmse": 0.13380149290823623,
+      "approx_multiplicative_error_pct": 14.316587058751953,
+      "log_mae": 0.10056589011009295,
+      "log_r2": 0.8319172551491296,
+      "mae_kzt_per_m2": 86271.61148256245,
+      "rmse_kzt_per_m2": 143958.2392726919,
+      "median_absolute_percentage_error_pct": 8.18442233552289,
+      "q10_q90_coverage_pct": 78.25311942959001,
+      "bad_quantile_order_pct": 0.08912655971479501
+    },
+    {
+      "segment": "4",
+      "rows": 115,
+      "log_rmse": 0.16192368656071338,
+      "approx_multiplicative_error_pct": 17.577051080572968,
+      "log_mae": 0.12050580342710263,
+      "log_r2": 0.7834584526481866,
+      "mae_kzt_per_m2": 130286.6503192365,
+      "rmse_kzt_per_m2": 189933.370927855,
+      "median_absolute_percentage_error_pct": 7.795455495414548,
+      "q10_q90_coverage_pct": 74.78260869565217,
+      "bad_quantile_order_pct": 0.0
+    },
+    {
+      "segment": "5+",
+      "rows": 48,
+      "log_rmse": 0.28904467109390725,
+      "approx_multiplicative_error_pct": 33.515136986860036,
+      "log_mae": 0.2235112373435847,
+      "log_r2": 0.5758568957533488,
+      "mae_kzt_per_m2": 255142.12918646404,
+      "rmse_kzt_per_m2": 373600.9121575341,
+      "median_absolute_percentage_error_pct": 21.221575567409367,
+      "q10_q90_coverage_pct": 52.083333333333336,
+      "bad_quantile_order_pct": 2.083333333333333
+    }
+  ],
+  "feature_columns": [
+    "city",
+    "city_district",
+    "city_residential_complex",
+    "ceiling_height",
+    "year_of_construction",
+    "furnished",
+    "apartment_condition",
+    "building_type",
+    "is_new_build",
+    "rooms",
+    "current_floor",
+    "total_floors",
+    "area_m2",
+    "floor_ratio",
+    "h3_res_7",
+    "h3_res_8",
+    "h3_res_9",
+    "dist_to_city_center_km",
+    "dist_to_nearest_park_km",
+    "count_park_within_2km",
+    "dist_to_nearest_school_km",
+    "count_school_within_2km",
+    "dist_to_nearest_kindergarten_km",
+    "count_kindergarten_within_2km",
+    "dist_to_nearest_grocery_km",
+    "count_grocery_within_2km",
+    "dist_to_nearest_mall_km",
+    "count_mall_within_2km",
+    "dist_to_nearest_healthcare_km",
+    "count_healthcare_within_2km",
+    "dist_to_nearest_transit_km",
+    "count_transit_within_2km",
+    "dist_to_nearest_university_km",
+    "count_university_within_2km",
+    "rooms_segment",
+    "area_per_room",
+    "log_area_m2",
+    "building_age",
+    "is_first_floor",
+    "is_top_floor",
+    "floor_from_top"
+  ],
+  "categorical_features": [
+    "city",
+    "city_district",
+    "city_residential_complex",
+    "furnished",
+    "apartment_condition",
+    "building_type",
+    "h3_res_7",
+    "h3_res_8",
+    "h3_res_9",
+    "rooms_segment"
+  ],
+  "feature_profile": "optimized_compact_v2"
+}

@@ -57,7 +57,7 @@ The service predicts apartment price per square meter on a log scale and uses a
 city-aware model router:
 
 - Astana keeps the established 23-feature model used by the public ranking;
-- Almaty uses the 41-feature universal v2 model with frozen OpenStreetMap
+- Almaty uses the stronger 41-feature Almaty v2 model with frozen OpenStreetMap
   proximity features;
 - the universal bundle loads lazily on the first Almaty request, avoiding its
   memory cost during Astana-only traffic.
@@ -109,6 +109,7 @@ dataset.ipynb        Notebook used for data cleaning, feature engineering, and m
 df_check.csv         Model-ready dataset snapshot used for validation and retraining
 model_metadata.json  Astana v1 feature contract
 models/universal_v2  Universal v2 models, metadata, calibration, and config
+models/almaty_v2     Almaty v2 models, metadata, calibration, and config
 ```
 
 See [`DATA.md`](DATA.md) for notes about data files and reproducibility.
@@ -233,13 +234,14 @@ Candidate models should be reviewed before replacing the production files in `mo
 The validated universal v2 candidate can be promoted reproducibly with:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\promote_v2_bundle.py
+.\.venv\Scripts\python.exe scripts\promote_v2_bundle.py --scope universal
+.\.venv\Scripts\python.exe scripts\promote_v2_bundle.py --scope almaty
 .\.venv\Scripts\python.exe scripts\validate_model_routing.py
 ```
 
 `PRICE_MODEL_ROUTING=city_auto` is the production default. It routes Astana to
-`astana_v1` and Almaty to `universal_v2`. The explicit values `astana_v1` and
-`universal_v2` are available for controlled QA only.
+`astana_v1` and Almaty to `almaty_v2`. The explicit values `astana_v1`,
+`almaty_v2`, and `universal_v2` are available for controlled QA only.
 
 ## Disclaimer
 

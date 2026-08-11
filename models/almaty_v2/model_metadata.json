@@ -163,8 +163,8 @@
       }
     }
   },
-  "model_version": "universal_v2_2026-08-11",
-  "training_scope": "universal",
+  "model_version": "almaty_v2_2026-08-11",
+  "training_scope": "almaty",
   "serving_policy": {
     "default_routing": "city_auto",
     "astana": "legacy_astana_v1",
@@ -179,67 +179,106 @@
   "quantile_calibration": {
     "method": "validation_residual_tail_offsets",
     "offsets_log": {
-      "q10": -0.010705052901487731,
-      "q90": 0.011411190568729883
+      "q10": -0.016781157977161593,
+      "q90": 0.01597816798059387
     }
   },
   "held_out_metrics": {
     "overall": {
-      "rows": 6767,
-      "log_rmse": 0.1323208140598967,
-      "approx_multiplicative_error_pct": 14.14744615885831,
-      "log_mae": 0.09743905836533409,
-      "log_r2": 0.8145773654436261,
-      "mae_kzt_per_m2": 74291.76255249945,
-      "rmse_kzt_per_m2": 115971.67931349271,
-      "median_absolute_percentage_error_pct": 7.518745635804337,
-      "q10_q90_coverage_pct": 78.76459287719817,
-      "bad_quantile_order_pct": 0.014777597162701344
+      "rows": 4377,
+      "log_rmse": 0.1276195199165055,
+      "approx_multiplicative_error_pct": 13.612064917186666,
+      "log_mae": 0.09300728068580147,
+      "log_r2": 0.8061401098543506,
+      "mae_kzt_per_m2": 76227.67051230748,
+      "rmse_kzt_per_m2": 122040.77061558202,
+      "median_absolute_percentage_error_pct": 7.29805556665355,
+      "q10_q90_coverage_pct": 78.61549006168609,
+      "bad_quantile_order_pct": 0.09138679460817913
     },
     "segments": [
       {
-        "segment": "almaty",
-        "rows": 4377,
-        "log_rmse": 0.13069720640769916,
-        "approx_multiplicative_error_pct": 13.96226586254855,
-        "log_mae": 0.09546231623807762,
-        "log_r2": 0.7966770702934172,
-        "mae_kzt_per_m2": 78317.9834568662,
-        "rmse_kzt_per_m2": 124930.64182226753,
-        "median_absolute_percentage_error_pct": 7.381610926987907,
-        "q10_q90_coverage_pct": 78.50125656842586,
-        "bad_quantile_order_pct": 0.02284669865204478
+        "segment": "1",
+        "rows": 1670,
+        "log_rmse": 0.11712834404953837,
+        "approx_multiplicative_error_pct": 12.426371298906144,
+        "log_mae": 0.08272590827861169,
+        "log_r2": 0.755926378294338,
+        "mae_kzt_per_m2": 62970.65626915411,
+        "rmse_kzt_per_m2": 94890.34700185116,
+        "median_absolute_percentage_error_pct": 6.452340385465129,
+        "q10_q90_coverage_pct": 80.11976047904191,
+        "bad_quantile_order_pct": 0.059880239520958084
       },
       {
-        "segment": "astana",
-        "rows": 2390,
-        "log_rmse": 0.135243732339083,
-        "approx_multiplicative_error_pct": 14.481577897755624,
-        "log_mae": 0.10105922585110885,
-        "log_r2": 0.7928514434867014,
-        "mae_kzt_per_m2": 66918.21908035997,
-        "rmse_kzt_per_m2": 97451.94001831666,
-        "median_absolute_percentage_error_pct": 7.828116740492458,
-        "q10_q90_coverage_pct": 79.2468619246862,
+        "segment": "2",
+        "rows": 1422,
+        "log_rmse": 0.12228430229449604,
+        "approx_multiplicative_error_pct": 13.007533912576458,
+        "log_mae": 0.09248872380192573,
+        "log_r2": 0.8174895338654216,
+        "mae_kzt_per_m2": 73460.60674527774,
+        "rmse_kzt_per_m2": 106250.59094033117,
+        "median_absolute_percentage_error_pct": 7.617031297802086,
+        "q10_q90_coverage_pct": 78.34036568213783,
+        "bad_quantile_order_pct": 0.07032348804500703
+      },
+      {
+        "segment": "3",
+        "rows": 1122,
+        "log_rmse": 0.13380149290823623,
+        "approx_multiplicative_error_pct": 14.316587058751953,
+        "log_mae": 0.10056589011009295,
+        "log_r2": 0.8319172551491296,
+        "mae_kzt_per_m2": 86271.61148256245,
+        "rmse_kzt_per_m2": 143958.2392726919,
+        "median_absolute_percentage_error_pct": 8.18442233552289,
+        "q10_q90_coverage_pct": 78.25311942959001,
+        "bad_quantile_order_pct": 0.08912655971479501
+      },
+      {
+        "segment": "4",
+        "rows": 115,
+        "log_rmse": 0.16192368656071338,
+        "approx_multiplicative_error_pct": 17.577051080572968,
+        "log_mae": 0.12050580342710263,
+        "log_r2": 0.7834584526481866,
+        "mae_kzt_per_m2": 130286.6503192365,
+        "rmse_kzt_per_m2": 189933.370927855,
+        "median_absolute_percentage_error_pct": 7.795455495414548,
+        "q10_q90_coverage_pct": 74.78260869565217,
         "bad_quantile_order_pct": 0.0
+      },
+      {
+        "segment": "5+",
+        "rows": 48,
+        "log_rmse": 0.28904467109390725,
+        "approx_multiplicative_error_pct": 33.515136986860036,
+        "log_mae": 0.2235112373435847,
+        "log_r2": 0.5758568957533488,
+        "mae_kzt_per_m2": 255142.12918646404,
+        "rmse_kzt_per_m2": 373600.9121575341,
+        "median_absolute_percentage_error_pct": 21.221575567409367,
+        "q10_q90_coverage_pct": 52.083333333333336,
+        "bad_quantile_order_pct": 2.083333333333333
       }
     ]
   },
   "model_artifacts": {
     "q10": {
       "filename": "catboost_q10_price_per_m2_log.cbm",
-      "sha256": "f7a9247de49f4f74c1790e358390f85cab936136cf64e56b94049c456c32db21",
-      "size_bytes": 2946780
+      "sha256": "ab9dc08571c6a1dd22bd4c22ed9411be4caf0e500370eca2c157c6b626ff0ddc",
+      "size_bytes": 2179252
     },
     "q50": {
       "filename": "catboost_q50_price_per_m2_log.cbm",
-      "sha256": "d9547b09a452c248312372e9f5f986e2a2b899cd4d9439489c39e833e7fc8063",
-      "size_bytes": 3641880
+      "sha256": "9254e0719d71d8d943adac50ef62e9b02ba7aac18ecfbe99bc3999b55eccc07c",
+      "size_bytes": 3319608
     },
     "q90": {
       "filename": "catboost_q90_price_per_m2_log.cbm",
-      "sha256": "ae087d1118eb7edd380a4a79e7ce5ffc3cf96f60f390ef3a270ac66133de9e02",
-      "size_bytes": 3426488
+      "sha256": "03cc2f704b5b244382db8df536d4ff9fbc016bc473738cc535cf11e4aa9088cc",
+      "size_bytes": 2677912
     }
   }
 }

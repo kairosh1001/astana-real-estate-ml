@@ -20,7 +20,8 @@ from app.model_service import PriceModelService
 from scrape import ApartmentScraper
 
 
-MODEL_ROUTING_MODES = {"city_auto", "astana_v1", "universal_v2"}
+MODEL_ROUTING_MODES = {"city_auto", "astana_v1", "almaty_v2", "universal_v2"}
+V2_BUNDLE_NAMES = ("almaty_v2", "universal_v2")
 
 
 @dataclass(frozen=True)
@@ -53,27 +54,33 @@ class PredictionService:
             metadata_path=self.root / "model_metadata.json",
         )
         self.feature_config = build_feature_config(self._load_training_raw())
-        self._universal_model_service: PriceModelService | None = None
-        self._universal_feature_config: UniversalFeatureConfig | None = None
-        self._universal_poi_catalog: PoiCatalog | None = None
-        self._universal_load_lock = Lock()
+        self._v2_bundles: dict[
+            str, tuple[PriceModelService, UniversalFeatureConfig, PoiCatalog]
+        ] = {}
+        self._v2_load_lock = Lock()
 
     @property
     def available_model_bundles(self) -> list[str]:
         bundles = ["astana_v1"]
-        if self._universal_bundle_complete():
-            bundles.append("universal_v2")
+        bundles.extend(
+            name for name in V2_BUNDLE_NAMES if self._v2_bundle_complete(name)
+        )
         return bundles
 
     def cache_key(self, url: str) -> str:
         versions = [self.model_service.metadata.model_version]
-        bundle_metadata = self.root / "models" / "universal_v2" / "model_metadata.json"
-        if bundle_metadata.exists():
-            try:
-                raw = json.loads(bundle_metadata.read_text(encoding="utf-8"))
-                versions.append(str(raw.get("model_version") or "universal_v2"))
-            except (OSError, json.JSONDecodeError):
-                versions.append("universal_v2_unknown")
+        for bundle_name in V2_BUNDLE_NAMES:
+            bundle_metadata = (
+                self.root / "models" / bundle_name / "model_metadata.json"
+            )
+            if bundle_metadata.exists():
+                try:
+                    raw = json.loads(bundle_metadata.read_text(encoding="utf-8"))
+                    versions.append(
+                        str(raw.get("model_version") or bundle_name)
+                    )
+                except (OSError, json.JSONDecodeError):
+                    versions.append(f"{bundle_name}_unknown")
         namespace = ":".join([self.routing_mode, *versions])
         return f"{url}#model={namespace}"
 
@@ -89,8 +96,10 @@ class PredictionService:
         url: str | None = None,
     ) -> ListingPrediction:
         model_key = self._select_model_key(raw_listing)
-        if model_key == "universal_v2":
-            model_service, feature_config, poi_catalog = self._load_universal_v2()
+        if model_key in V2_BUNDLE_NAMES:
+            model_service, feature_config, poi_catalog = self._load_v2_bundle(
+                model_key
+            )
             features = build_model_features_v2(
                 pd.DataFrame([raw_listing]),
                 feature_config,
@@ -138,8 +147,8 @@ class PredictionService:
     def _select_model_key(self, raw_listing: dict) -> str:
         if self.routing_mode != "city_auto":
             if (
-                self.routing_mode == "universal_v2"
-                and not self._universal_bundle_complete()
+                self.routing_mode in V2_BUNDLE_NAMES
+                and not self._v2_bundle_complete(self.routing_mode)
             ):
                 raise RuntimeError("Universal v2 model bundle is incomplete.")
             return self.routing_mode
@@ -150,14 +159,15 @@ class PredictionService:
             raw_listing.get("Город"),
         ]
         city_text = " ".join(str(value).casefold() for value in city_values if value)
-        if (
-            "алмат" in city_text or "almaty" in city_text
-        ) and self._universal_bundle_complete():
-            return "universal_v2"
+        if "алмат" in city_text or "almaty" in city_text:
+            if self._v2_bundle_complete("almaty_v2"):
+                return "almaty_v2"
+            if self._v2_bundle_complete("universal_v2"):
+                return "universal_v2"
         return "astana_v1"
 
-    def _universal_bundle_complete(self) -> bool:
-        bundle = self.root / "models" / "universal_v2"
+    def _v2_bundle_complete(self, bundle_name: str) -> bool:
+        bundle = self.root / "models" / bundle_name
         required = [
             bundle / "model_metadata.json",
             bundle / "feature_config.json",
@@ -168,34 +178,31 @@ class PredictionService:
         ]
         return all(path.exists() for path in required)
 
-    def _load_universal_v2(
+    def _load_v2_bundle(
         self,
+        bundle_name: str,
     ) -> tuple[PriceModelService, UniversalFeatureConfig, PoiCatalog]:
-        if (
-            self._universal_model_service is None
-            or self._universal_feature_config is None
-            or self._universal_poi_catalog is None
-        ):
-            with self._universal_load_lock:
-                if self._universal_model_service is None:
-                    if not self._universal_bundle_complete():
-                        raise RuntimeError("Universal v2 model bundle is incomplete.")
-                    bundle = self.root / "models" / "universal_v2"
-                    self._universal_model_service = PriceModelService(
-                        models_dir=bundle,
-                        metadata_path=bundle / "model_metadata.json",
+        if bundle_name not in V2_BUNDLE_NAMES:
+            raise ValueError(f"Unknown v2 bundle: {bundle_name}")
+        if bundle_name not in self._v2_bundles:
+            with self._v2_load_lock:
+                if bundle_name not in self._v2_bundles:
+                    if not self._v2_bundle_complete(bundle_name):
+                        raise RuntimeError(
+                            f"{bundle_name} model bundle is incomplete."
+                        )
+                    bundle = self.root / "models" / bundle_name
+                    self._v2_bundles[bundle_name] = (
+                        PriceModelService(
+                            models_dir=bundle,
+                            metadata_path=bundle / "model_metadata.json",
+                        ),
+                        UniversalFeatureConfig.load(bundle / "feature_config.json"),
+                        PoiCatalog.load(
+                            self.root / "app" / "data" / "kazakhstan_pois.json"
+                        ),
                     )
-                    self._universal_feature_config = UniversalFeatureConfig.load(
-                        bundle / "feature_config.json"
-                    )
-                    self._universal_poi_catalog = PoiCatalog.load(
-                        self.root / "app" / "data" / "kazakhstan_pois.json"
-                    )
-        return (
-            self._universal_model_service,
-            self._universal_feature_config,
-            self._universal_poi_catalog,
-        )
+        return self._v2_bundles[bundle_name]
 
     def _load_training_raw(self) -> pd.DataFrame:
         raw_paths = [
