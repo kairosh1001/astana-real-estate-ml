@@ -321,8 +321,16 @@ def build_notebook(scope: str):
             for label, values in predictions.items():
                 test_results[f"pred_{label}_log"] = values
 
+            def room_segment(value):
+                if pd.isna(value):
+                    return "missing"
+                numeric = float(value)
+                return "5+" if numeric >= 5 else str(int(numeric))
+
+            test_results["rooms_segment"] = test_results["rooms"].map(room_segment)
+
             segment_rows = []
-            segment_column = "city" if SCOPE == "universal" else "rooms"
+            segment_column = "city" if SCOPE == "universal" else "rooms_segment"
             for segment, part in test_results.groupby(segment_column):
                 if len(part) < 30:
                     continue
@@ -438,6 +446,25 @@ def finalize_summary(path: Path, evaluation_path: Path) -> None:
                 '"production_ready": bool(almaty_inventory_complete),',
                 '"production_ready": False,\n    "data_inventory_complete": bool(almaty_inventory_complete),',
             )
+            old_segment_code = '''for label, values in predictions.items():
+    test_results[f"pred_{label}_log"] = values
+
+segment_rows = []
+segment_column = "city" if SCOPE == "universal" else "rooms"'''
+            new_segment_code = '''for label, values in predictions.items():
+    test_results[f"pred_{label}_log"] = values
+
+def room_segment(value):
+    if pd.isna(value):
+        return "missing"
+    numeric = float(value)
+    return "5+" if numeric >= 5 else str(int(numeric))
+
+test_results["rooms_segment"] = test_results["rooms"].map(room_segment)
+
+segment_rows = []
+segment_column = "city" if SCOPE == "universal" else "rooms_segment"'''
+            cell.source = cell.source.replace(old_segment_code, new_segment_code)
     evaluation = json.loads(evaluation_path.read_text(encoding="utf-8"))
     metrics = evaluation["overall_test_metrics"]
     warning = evaluation.get("warning")
