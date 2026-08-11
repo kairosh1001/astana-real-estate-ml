@@ -108,12 +108,15 @@ def rank_home_candidates(
     preferences: HomeSearchPreferences,
     *,
     catalog_path: Path,
+    city: str = "astana",
     limit: int = 30,
 ) -> dict:
     filtered = [
         dict(item) for item in candidates if _passes_hard_filters(item, preferences)
     ]
-    groups, catalog_meta = _load_poi_groups(str(catalog_path), _mtime(catalog_path))
+    groups, catalog_meta = _load_poi_groups(
+        str(catalog_path), _mtime(catalog_path), city
+    )
     nearest_pois = _nearest_pois(filtered, groups)
     distances = {
         key: [poi["distance_km"] if poi else None for poi in values]
@@ -370,16 +373,29 @@ def _nearest_pois(
 def _load_poi_groups(
     path_text: str,
     modified_at: float | None,
+    city: str,
 ) -> tuple[dict[str, dict], dict]:
     del modified_at
     path = Path(path_text)
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8"))
-        items = data.get("items") or []
+        items = [
+            item
+            for item in (data.get("items") or [])
+            if not item.get("city") or item.get("city") == city
+        ]
         groups = {}
-        for key in ("park", "education", "transit", "grocery", "healthcare", "mall"):
+        category_map = {
+            "park": {"park"},
+            "education": {"education", "school", "kindergarten"},
+            "transit": {"transit"},
+            "grocery": {"grocery"},
+            "healthcare": {"healthcare"},
+            "mall": {"mall"},
+        }
+        for key, source_categories in category_map.items():
             category_items = [
-                item for item in items if item.get("category") == key
+                item for item in items if item.get("category") in source_categories
             ]
             groups[key] = {
                 "coords": np.array(
@@ -391,10 +407,12 @@ def _load_poi_groups(
                 ).reshape((-1, 2)),
                 "items": category_items,
             }
+        city_meta = (data.get("cities") or {}).get(city) or {}
         return groups, {
             "source": data.get("source") or "OpenStreetMap contributors",
             "generated_at": data.get("generated_at"),
-            "counts": data.get("counts") or {},
+            "counts": city_meta.get("counts") or data.get("counts") or {},
+            "city": city,
             "fallback": False,
         }
     fallback_coords = {
@@ -436,7 +454,7 @@ def _valid_coordinate(lat: object, lon: object) -> bool:
         longitude = float(lon)
     except (TypeError, ValueError):
         return False
-    return 50.0 <= latitude <= 53.0 and 69.0 <= longitude <= 73.0
+    return -90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0
 
 
 def _clamp(value: float, minimum: float, maximum: float) -> float:

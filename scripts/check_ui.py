@@ -90,6 +90,31 @@ def seed_listing(db_path: Path) -> None:
                 "active",
             ),
         )
+        connection.execute(
+            """
+            INSERT INTO listings (
+                url, city, title, raw_json, first_seen_at, last_seen_at,
+                last_checked_at, missed_refreshes, status, listed_price, area_m2,
+                listed_price_per_m2, pred_price_per_m2_q10,
+                pred_price_per_m2_q50, pred_price_per_m2_q90, pred_total_q50,
+                discount_vs_asking_pct_conservative,
+                discount_vs_asking_pct_median, interval_width_pct
+            )
+            SELECT ?, 'almaty', title, ?, first_seen_at, last_seen_at,
+                   last_checked_at, missed_refreshes, status, listed_price, area_m2,
+                   listed_price_per_m2, pred_price_per_m2_q10,
+                   pred_price_per_m2_q50, pred_price_per_m2_q90, pred_total_q50,
+                   discount_vs_asking_pct_conservative,
+                   discount_vs_asking_pct_median, interval_width_pct
+            FROM listings
+            WHERE url = ?
+            """,
+            (
+                "https://krisha.kz/a/show/456-almaty",
+                '{"scrape_city": "almaty", "Город": "Алматы, Бостандыкский р-н", "Адрес": "Аль-Фараби 77", "Год постройки": "2021", "Жилой комплекс": "Test Almaty ЖК", "Состояние квартиры": "свежий ремонт", "Новостройка": true, "lat": 43.22, "lon": 76.93}',
+                "https://krisha.kz/a/show/123",
+            ),
+        )
         connection.commit()
         create_monitoring_snapshot(connection, run_id=run_id)
 
@@ -429,14 +454,42 @@ def main() -> None:
     nav_end = home.text.index("</nav>", nav_start)
     home_nav = home.text[nav_start:nav_end]
     nav_links = [
-        'href="/find-home-page">Подобрать квартиру</a>',
-        'href="/predict-page">Оценить по ссылке</a>',
-        'href="/undervalued-page">Квартиры ниже рынка</a>',
-        'href="/market-page">Анализ рынка</a>',
+        'href="/find-home-page?city=astana">Подобрать квартиру</a>',
+        'href="/predict-page?city=astana">Оценить по ссылке</a>',
+        'href="/undervalued-page?city=astana">Квартиры ниже рынка</a>',
+        'href="/market-page?city=astana">Анализ рынка</a>',
     ]
     nav_positions = [home_nav.index(link) for link in nav_links]
     if nav_positions != sorted(nav_positions):
         raise SystemExit("Main navigation links are not in the expected order")
+
+    almaty_home = client.get("/?city=almaty")
+    if almaty_home.status_code != 200:
+        raise SystemExit(f"Almaty home page returned {almaty_home.status_code}")
+    for needle in [
+        "Найдите нужную вам квартиру в Алматы",
+        "Алматы в цифрах",
+        'href="/?city=almaty"',
+        'href="/undervalued-page?city=almaty"',
+        "Бостандык",
+        "Test Almaty ЖК",
+    ]:
+        assert_contains(almaty_home.text, needle)
+    assert_not_contains(almaty_home.text, "Test ЖК")
+
+    almaty_market = client.get("/market-page?city=almaty")
+    if almaty_market.status_code != 200:
+        raise SystemExit(f"Almaty market page returned {almaty_market.status_code}")
+    assert_contains(almaty_market.text, "Рынок квартир в Алматы")
+    assert_contains(almaty_market.text, "Бостандык")
+    assert_not_contains(almaty_market.text, "Есиль")
+
+    almaty_rating = client.get("/undervalued-page?city=almaty")
+    if almaty_rating.status_code != 200:
+        raise SystemExit(f"Almaty rating returned {almaty_rating.status_code}")
+    assert_contains(almaty_rating.text, "Квартиры ниже рынка в Алматы")
+    assert_contains(almaty_rating.text, "Бостандык")
+    assert_not_contains(almaty_rating.text, "Есиль")
 
     home_finder = client.get("/find-home-page")
     if home_finder.status_code != 200:
@@ -594,7 +647,7 @@ def main() -> None:
     assert_contains(details_page.text, "Кабанбай батыра 48")
     assert_contains(details_page.text, "Test ЖК")
     assert_contains(details_page.text, "/district/yesil")
-    assert_contains(details_page.text, "/complex-page?name=Test%20%D0%96%D0%9A")
+    assert_contains(details_page.text, "/complex-page?city=astana")
     assert_contains(details_page.text, "Активных объявлений в базе")
     assert_contains(details_page.text, "2026-06-30 05:00")
 
@@ -641,7 +694,7 @@ def main() -> None:
         "История медианной цены за м² — Район Есиль, Астана",
         "ЖК района Есиль",
         "Test ЖК",
-        "/complex-page?name=Test%20%D0%96%D0%9A",
+        "/complex-page?city=astana",
     ]:
         assert_contains(district_page.text, needle)
 
@@ -795,7 +848,7 @@ def main() -> None:
         "Подробнее",
         "/listing-details?url=",
         "/district/yesil",
-        "/complex-page?name=Test%20%D0%96%D0%9A",
+        "/complex-page?city=astana",
         "2026-06-29 05:00",
         "Страница 1 из 1",
         "Страницы рейтинга",
@@ -954,7 +1007,7 @@ def main() -> None:
         "завершено",
         "Найдено URL",
         "Обработано",
-        "Начато (Астана)",
+        "Начато (UTC+5)",
         "2026-06-29 05:05",
     ]:
         assert_contains(refresh_runs.text, needle)

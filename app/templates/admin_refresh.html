@@ -11,11 +11,20 @@
   {% if running_refresh %}
   <p class="callout">
     Сейчас уже выполняется обновление run #{{ running_refresh.id }}:
+    {% if running_refresh.city == "almaty" %}Алматы{% else %}Астана{% endif %},
     {{ running_refresh.started_at | astana_time }}.
     Новый запуск лучше делать после завершения текущего.
   </p>
   {% endif %}
   <form class="stack-form" method="post" action="/admin-refresh">
+    <label>
+      Город
+      <select name="city">
+        {% for option in city_options %}
+        <option value="{{ option.slug }}" {% if form.city == option.slug %}selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>
       Тип обновления
       <select name="kind">

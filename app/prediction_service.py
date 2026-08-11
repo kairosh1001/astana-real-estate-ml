@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import pandas as pd
 
 from app.feature_pipeline import build_feature_config, build_model_features
+from app.cities import infer_listing_city
 from app.feature_pipeline_v2 import (
     PoiCatalog,
     UniversalFeatureConfig,
@@ -22,6 +23,7 @@ from scrape import ApartmentScraper
 
 MODEL_ROUTING_MODES = {"city_auto", "astana_v1", "almaty_v2", "universal_v2"}
 V2_BUNDLE_NAMES = ("almaty_v2", "universal_v2")
+CACHE_SCHEMA_VERSION = "city-ui-v1"
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,7 @@ class ListingPrediction:
     discount_vs_asking_pct_conservative: float
     discount_vs_asking_pct_median: float
     interval_width_pct: float
+    city: str = "astana"
 
 
 class PredictionService:
@@ -81,7 +84,7 @@ class PredictionService:
                     )
                 except (OSError, json.JSONDecodeError):
                     versions.append(f"{bundle_name}_unknown")
-        namespace = ":".join([self.routing_mode, *versions])
+        namespace = ":".join([CACHE_SCHEMA_VERSION, self.routing_mode, *versions])
         return f"{url}#model={namespace}"
 
     def predict_by_url(self, url: str) -> ListingPrediction:
@@ -142,6 +145,7 @@ class PredictionService:
             discount_vs_asking_pct_median=(pred_q50 - listed_price_per_m2)
             / listed_price_per_m2,
             interval_width_pct=(pred_q90 - pred_q10) / pred_q50,
+            city=infer_listing_city(raw_listing),
         )
 
     def _select_model_key(self, raw_listing: dict) -> str:

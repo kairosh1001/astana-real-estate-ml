@@ -12,14 +12,15 @@
     <thead>
       <tr>
         <th>ID</th>
+        <th>Город</th>
         <th>Тип</th>
         <th>Статус</th>
         <th>Страницы</th>
         <th>Найдено URL</th>
         <th>Обработано</th>
         <th>Ошибок</th>
-        <th>Начато (Астана)</th>
-        <th>Завершено (Астана)</th>
+        <th>Начато (UTC+5)</th>
+        <th>Завершено (UTC+5)</th>
         <th>Ошибка</th>
       </tr>
     </thead>
@@ -27,6 +28,7 @@
       {% for item in items %}
       <tr>
         <td>{{ item.id }}</td>
+        <td>{% if item.city == "almaty" %}Алматы{% else %}Астана{% endif %}</td>
         <td>
           {% if item.kind == "daily" %}ежедневное
           {% elif item.kind == "weekly" %}еженедельное

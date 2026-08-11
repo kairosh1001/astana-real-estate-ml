@@ -19,6 +19,7 @@ from app.database import (
     upsert_listing_prediction,
 )
 from app.prediction_service import PredictionService
+from app.cities import city_config, normalize_city_slug
 from scrape import ApartmentScraper
 
 
@@ -37,6 +38,7 @@ def run_refresh(
     *,
     root: Path | str,
     db_path: Path | str,
+    city: str = "astana",
     kind: str = "manual",
     start_page: int = 1,
     pages: int = 50,
@@ -46,6 +48,8 @@ def run_refresh(
     max_listings: int = 0,
 ) -> RefreshResult:
     root_path = Path(root)
+    city_slug = normalize_city_slug(city)
+    selected_city = city_config(city_slug)
     end_page = start_page + pages - 1
     connection = connect(db_path)
     init_db(connection)
@@ -60,13 +64,14 @@ def run_refresh(
         )
     run_id = start_refresh_run(
         connection,
+        city=city_slug,
         kind=kind,
         start_page=start_page,
         end_page=end_page,
     )
     should_update_stale_status = kind == "weekly"
     if should_update_stale_status:
-        mark_refresh_started(connection)
+        mark_refresh_started(connection, city=city_slug)
 
     scraper = ApartmentScraper()
     prediction_service = PredictionService(root_path)
@@ -80,7 +85,10 @@ def run_refresh(
     try:
         for page in range(start_page, end_page + 1):
             stop_requested = False
-            page_url = f"{scraper.base_url}/prodazha/kvartiry/astana/?page={page}"
+            page_url = (
+                f"{scraper.base_url}/prodazha/kvartiry/"
+                f"{selected_city['krisha_slug']}/?page={page}"
+            )
             print(f"[INFO] Page {page}: {page_url}")
             urls = iter_unique_urls(scraper.get_listing_urls(page_url))
             if not urls:
@@ -103,6 +111,7 @@ def run_refresh(
                     failed += 1
                     print(f"[WARN] Failed to parse listing: {url}")
                     continue
+                raw_listing["scrape_city"] = city_slug
 
                 try:
                     prediction = prediction_service.predict_raw_listing(
@@ -131,7 +140,11 @@ def run_refresh(
     finally:
         scraper.session.close()
         if should_update_stale_status:
-            mark_stale_listings(connection, stale_after_missed=stale_after_missed)
+            mark_stale_listings(
+                connection,
+                city=city_slug,
+                stale_after_missed=stale_after_missed,
+            )
         finish_refresh_run(
             connection,
             run_id,

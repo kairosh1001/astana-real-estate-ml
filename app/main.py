@@ -28,9 +28,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from app.cities import CITY_OPTIONS, city_config, district_options, normalize_city_slug
 from app.database import (
     APARTMENT_CONDITION_OPTIONS,
-    DISTRICT_OPTIONS,
     connect,
     count_undervalued,
     create_feedback_message,
@@ -77,9 +77,28 @@ from app.refresh_service import run_refresh
 
 
 ROOT = Path(os.getenv("APP_ROOT", Path(__file__).resolve().parents[1]))
-POI_CATALOG_PATH = ROOT / "app" / "data" / "astana_pois.json"
+POI_CATALOG_PATH = ROOT / "app" / "data" / "kazakhstan_pois.json"
 ASTANA_TZ = timezone(timedelta(hours=5), name="Asia/Astana")
-templates = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
+
+
+def _city_template_context(request: Request) -> dict:
+    selected_city = city_config(request.query_params.get("city"))
+    city_choices = []
+    for option in CITY_OPTIONS:
+        params = [
+            (key, value)
+            for key, value in request.query_params.multi_items()
+            if key not in {"city", "page"}
+        ]
+        params.append(("city", option["slug"]))
+        city_choices.append({**option, "url": f"{request.url.path}?{urlencode(params)}"})
+    return {"city": selected_city, "city_options": city_choices}
+
+
+templates = Jinja2Templates(
+    directory=str(ROOT / "app" / "templates"),
+    context_processors=[_city_template_context],
+)
 templates.env.filters["astana_time"] = lambda value: format_astana_time(value)
 templates.env.filters["distance"] = format_distance
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
@@ -137,6 +156,7 @@ class PredictByLinkRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
+    city: str = "astana"
     kind: str = "manual"
     start_page: int = 1
     pages: int = 1
@@ -159,22 +179,27 @@ def health() -> dict:
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request) -> HTMLResponse:
+def home(request: Request, city: str = "astana") -> HTMLResponse:
+    city_slug = normalize_city_slug(city)
     with connect(DB_PATH) as db_connection:
         preview_items = fetch_undervalued(
             db_connection,
+            city=city_slug,
             limit=HOME_UNDERVALUED_LIMIT,
             include_stale=False,
         )
         fresh_items = fetch_undervalued(
             db_connection,
+            city=city_slug,
             limit=5,
             new_since=_new_since_threshold(24),
             include_stale=False,
         )
-        total_undervalued = count_undervalued(db_connection, include_stale=False)
-        status_summary = fetch_status_summary(db_connection)
-        market_brief = fetch_market_brief(db_connection)
+        total_undervalued = count_undervalued(
+            db_connection, city=city_slug, include_stale=False
+        )
+        status_summary = fetch_status_summary(db_connection, city=city_slug)
+        market_brief = fetch_market_brief(db_connection, city=city_slug)
 
     return templates.TemplateResponse(
         request,
@@ -189,7 +214,7 @@ def home(request: Request) -> HTMLResponse:
             "active_listings": status_summary.get("active_listings") or 0,
             "latest_refresh": status_summary.get("latest_refresh"),
             "market_brief": market_brief,
-            "district_options": DISTRICT_OPTIONS,
+            "district_options": district_options(city_slug),
             "start_rank": 1,
             "is_preview": True,
         },
@@ -363,10 +388,11 @@ def compare_page(
 
 
 @app.get("/market-page", response_class=HTMLResponse)
-def market_page(request: Request) -> HTMLResponse:
+def market_page(request: Request, city: str = "astana") -> HTMLResponse:
+    city_slug = normalize_city_slug(city)
     with connect(DB_PATH) as db_connection:
-        dashboard = fetch_market_dashboard(db_connection)
-        status_summary = fetch_status_summary(db_connection)
+        dashboard = fetch_market_dashboard(db_connection, city=city_slug)
+        status_summary = fetch_status_summary(db_connection, city=city_slug)
 
     return templates.TemplateResponse(
         request,
@@ -383,14 +409,25 @@ def market_page(request: Request) -> HTMLResponse:
 def district_analytics_page(
     request: Request,
     district_slug: str,
+    city: str = "astana",
 ) -> HTMLResponse:
-    valid_slug = valid_district_slug(district_slug)
+    city_slug = normalize_city_slug(city)
+    selected_city = city_config(city_slug)
+    valid_slug = valid_district_slug(district_slug, city=city_slug)
     if not valid_slug:
-        raise HTTPException(status_code=404, detail="Район Астаны не найден.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Район города {selected_city['name']} не найден.",
+        )
     with connect(DB_PATH) as db_connection:
-        analytics = fetch_district_analytics(db_connection, valid_slug)
+        analytics = fetch_district_analytics(
+            db_connection, valid_slug, city=city_slug
+        )
     if not analytics:
-        raise HTTPException(status_code=404, detail="Район Астаны не найден.")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Район города {selected_city['name']} не найден.",
+        )
     return templates.TemplateResponse(
         request,
         "market_entity.html",
@@ -400,19 +437,30 @@ def district_analytics_page(
             "entity_kind": "district",
             "entity_name": analytics["entity"]["name"],
             "entity_title": f"Район {analytics['entity']['name']}",
-            "listing_filter_url": f"/undervalued-page?district={valid_slug}",
+            "listing_filter_url": (
+                f"/undervalued-page?city={city_slug}&district={valid_slug}"
+            ),
             "two_gis_url": None,
+            "selected_city": selected_city,
         },
     )
 
 
 @app.get("/complex-page", response_class=HTMLResponse)
-def complex_analytics_page(request: Request, name: str = "") -> HTMLResponse:
+def complex_analytics_page(
+    request: Request,
+    name: str = "",
+    city: str = "astana",
+) -> HTMLResponse:
+    city_slug = normalize_city_slug(city)
+    selected_city = city_config(city_slug)
     complex_name = name.strip()
     if not complex_name or len(complex_name) > 160:
         raise HTTPException(status_code=404, detail="Жилой комплекс не найден.")
     with connect(DB_PATH) as db_connection:
-        analytics = fetch_complex_analytics(db_connection, complex_name)
+        analytics = fetch_complex_analytics(
+            db_connection, complex_name, city=city_slug
+        )
     if not analytics:
         raise HTTPException(status_code=404, detail="Жилой комплекс не найден.")
     encoded_name = quote(complex_name, safe="")
@@ -427,9 +475,13 @@ def complex_analytics_page(request: Request, name: str = "") -> HTMLResponse:
             "entity_name": analytics["entity"]["name"],
             "entity_title": f"ЖК {analytics['entity']['name']}",
             "listing_filter_url": (
-                f"/undervalued-page?residential_complex={encoded_name}"
+                f"/undervalued-page?city={city_slug}&residential_complex={encoded_name}"
             ),
-            "two_gis_url": f"https://2gis.kz/astana/search/{two_gis_query}",
+            "two_gis_url": (
+                f"https://2gis.kz/{selected_city['two_gis_slug']}/search/"
+                f"{two_gis_query}"
+            ),
+            "selected_city": selected_city,
         },
     )
 
@@ -452,6 +504,7 @@ def predict_by_link(request: Request, payload: PredictByLinkRequest) -> dict:
 def undervalued(
     limit: int = 50,
     page: int = 1,
+    city: str = "astana",
     district: list[str] | None = Query(default=None),
     rooms: str | None = None,
     max_price: str | None = None,
@@ -469,7 +522,8 @@ def undervalued(
     sort: str = "q10_discount",
     include_stale: bool = False,
 ) -> dict:
-    selected_districts = valid_district_slugs(district)
+    city_slug = normalize_city_slug(city)
+    selected_districts = valid_district_slugs(district, city=city_slug)
     selected_rooms = _parse_optional_int(rooms, allowed={1, 2, 3, 4, 5})
     selected_max_price = _parse_optional_positive_float(max_price)
     selected_min_year = _parse_optional_int(min_year)
@@ -490,6 +544,7 @@ def undervalued(
     with connect(DB_PATH) as db_connection:
         items = fetch_undervalued(
             db_connection,
+            city=city_slug,
             limit=safe_limit,
             offset=offset,
             districts=selected_districts,
@@ -511,6 +566,7 @@ def undervalued(
         )
         total = count_undervalued(
             db_connection,
+            city=city_slug,
             districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
@@ -530,6 +586,7 @@ def undervalued(
         )
     return {
         "items": items,
+        "city": city_slug,
         "total": total,
         "page": safe_page,
         "limit": safe_limit,
@@ -555,6 +612,7 @@ def undervalued(
 def undervalued_page(
     request: Request,
     page: int = 1,
+    city: str = "astana",
     district: list[str] | None = Query(default=None),
     rooms: str | None = None,
     max_price: str | None = None,
@@ -571,7 +629,8 @@ def undervalued_page(
     sort: str = "q10_discount",
     include_stale: bool = False,
 ) -> HTMLResponse:
-    selected_districts = valid_district_slugs(district)
+    city_slug = normalize_city_slug(city)
+    selected_districts = valid_district_slugs(district, city=city_slug)
     selected_rooms = _parse_optional_int(rooms, allowed={1, 2, 3, 4, 5})
     selected_max_price = _parse_optional_positive_float(max_price)
     selected_min_year = _parse_optional_int(min_year)
@@ -588,6 +647,7 @@ def undervalued_page(
     with connect(DB_PATH) as db_connection:
         total = count_undervalued(
             db_connection,
+            city=city_slug,
             districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
@@ -612,6 +672,7 @@ def undervalued_page(
         offset = (safe_page - 1) * UNDERVALUED_PAGE_SIZE
         items = fetch_undervalued(
             db_connection,
+            city=city_slug,
             limit=UNDERVALUED_PAGE_SIZE,
             offset=offset,
             districts=selected_districts,
@@ -630,14 +691,14 @@ def undervalued_page(
             sort=sort,
             include_stale=include_stale,
         )
-        status_summary = fetch_status_summary(db_connection)
+        status_summary = fetch_status_summary(db_connection, city=city_slug)
     return templates.TemplateResponse(
         request,
         "undervalued.html",
         {
             "request": request,
             "items": items,
-            "district_options": DISTRICT_OPTIONS,
+            "district_options": district_options(city_slug),
             "selected_districts": selected_districts,
             "selected_rooms": selected_rooms,
             "selected_max_price": selected_max_price,
@@ -654,6 +715,7 @@ def undervalued_page(
             "selected_min_discount_pct": selected_min_discount_pct,
             "selected_sort": sort,
             "filter_query": _build_filter_query(
+                city=city_slug,
                 districts=selected_districts,
                 rooms=selected_rooms,
                 max_price=selected_max_price,
@@ -686,6 +748,7 @@ def undervalued_page(
 @app.get("/find-home-page", response_class=HTMLResponse)
 def find_home_page(
     request: Request,
+    city: str = "astana",
     district: list[str] | None = Query(default=None),
     room: list[str] | None = Query(default=None),
     max_price: str | None = None,
@@ -703,7 +766,10 @@ def find_home_page(
     priority_ready: str | None = None,
     priority_modern: str | None = None,
 ) -> HTMLResponse:
-    selected_districts = tuple(valid_district_slugs(district))
+    city_slug = normalize_city_slug(city)
+    selected_districts = tuple(
+        valid_district_slugs(district, city=city_slug)
+    )
     selected_rooms = tuple(
         value
         for value in (
@@ -742,13 +808,14 @@ def find_home_page(
         priorities=selected_priorities,
     )
     with connect(DB_PATH) as db_connection:
-        candidates = fetch_home_match_candidates(db_connection)
+        candidates = fetch_home_match_candidates(db_connection, city=city_slug)
     result = rank_home_candidates(
         candidates,
         preferences,
         catalog_path=POI_CATALOG_PATH,
+        city=city_slug,
     )
-    preserved_filters: dict[str, object] = {}
+    preserved_filters: dict[str, object] = {"city": city_slug}
     if preferences.districts:
         preserved_filters["district"] = preferences.districts
     if preferences.rooms:
@@ -802,7 +869,7 @@ def find_home_page(
             "total": result["total"],
             "candidate_count": len(candidates),
             "catalog": result["catalog"],
-            "district_options": DISTRICT_OPTIONS,
+            "district_options": district_options(city_slug),
             "condition_options": APARTMENT_CONDITION_OPTIONS,
             "priority_options": PRIORITY_OPTIONS,
             "home_presets": home_presets,
@@ -1083,6 +1150,7 @@ def admin_refresh_page(
 def admin_refresh_form(
     request: Request,
     background_tasks: BackgroundTasks,
+    city: str = Form("astana"),
     kind: str = Form("manual"),
     start_page: int = Form(1),
     pages: int = Form(1),
@@ -1094,7 +1162,9 @@ def admin_refresh_form(
     if redirect:
         return redirect
 
+    city_slug = normalize_city_slug(city)
     form = {
+        "city": city_slug,
         "kind": kind,
         "start_page": start_page,
         "pages": pages,
@@ -1135,6 +1205,7 @@ def admin_refresh_form(
         run_refresh,
         root=ROOT,
         db_path=DB_PATH,
+        city=city_slug,
         kind=kind,
         start_page=start_page,
         pages=pages,
@@ -1208,6 +1279,7 @@ def refresh_listings(
         run_refresh,
         root=ROOT,
         db_path=DB_PATH,
+        city=normalize_city_slug(payload.city),
         kind=payload.kind,
         start_page=payload.start_page,
         pages=payload.pages,
@@ -1219,6 +1291,7 @@ def refresh_listings(
         "status": "started",
         "message": "Обновление запущено.",
         "kind": payload.kind,
+        "city": normalize_city_slug(payload.city),
         "start_page": payload.start_page,
         "pages": payload.pages,
         "max_listings": payload.max_listings,
@@ -1227,6 +1300,7 @@ def refresh_listings(
 
 def _default_refresh_form() -> dict:
     return {
+        "city": "astana",
         "kind": "manual",
         "start_page": 1,
         "pages": 1,
@@ -1388,7 +1462,11 @@ def _prediction_context(request: Request, prediction: object) -> dict:
             complex_stats = fetch_complex_stats(
                 db_connection,
                 listing.get("residential_complex"),
+                city=listing.get("city") or prediction.city,
             )
+    selected_city = city_config(
+        (listing or {}).get("city") or getattr(prediction, "city", "astana")
+    )
     risk_flags = _build_risk_flags(prediction, listing, price_history, complex_stats)
     price_chart_points = _price_chart_points(price_history)
 
@@ -1400,6 +1478,7 @@ def _prediction_context(request: Request, prediction: object) -> dict:
         "complex_stats": complex_stats,
         "risk_flags": risk_flags,
         "price_chart_points": price_chart_points,
+        "city": selected_city,
     }
 
 
@@ -1609,7 +1688,7 @@ def _parse_polygon(value: str | None) -> list[tuple[float, float]] | None:
             lon = float(lon_text)
         except ValueError:
             return None
-        if not (50.0 <= lat <= 53.0 and 69.0 <= lon <= 73.0):
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
             return None
         points.append((lat, lon))
     return points if len(points) >= 3 else None
@@ -1617,6 +1696,7 @@ def _parse_polygon(value: str | None) -> list[tuple[float, float]] | None:
 
 def _build_filter_query(
     *,
+    city: str = "astana",
     districts: list[str] | None = None,
     rooms: int | None = None,
     max_price: float | None = None,
@@ -1635,6 +1715,7 @@ def _build_filter_query(
     page: int | None = None,
 ) -> str:
     params = _filter_params(
+        city=city,
         districts=districts,
         rooms=rooms,
         max_price=max_price,
@@ -1657,6 +1738,7 @@ def _build_filter_query(
 
 def _filter_params(
     *,
+    city: str = "astana",
     districts: list[str] | None = None,
     rooms: int | None = None,
     max_price: float | None = None,
@@ -1674,7 +1756,7 @@ def _filter_params(
     sort: str | None = None,
     page: int | None = None,
 ) -> list[tuple[str, str]]:
-    params: list[tuple[str, str]] = []
+    params: list[tuple[str, str]] = [("city", normalize_city_slug(city))]
     if page and page > 1:
         params.append(("page", str(page)))
     for district in districts or []:

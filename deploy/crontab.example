@@ -1,7 +1,11 @@
 # Replace /opt/krisha with the actual repository path on the VPS.
 
-# Daily shallow refresh at 03:00.
-0 3 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind daily --pages 100 >> logs/daily-refresh.log 2>&1
+# Daily Astana refresh at 03:00.
+0 3 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city astana --kind daily --pages 100 >> logs/daily-astana-refresh.log 2>&1
 
-# Weekly deeper refresh on Sunday at 15:00, away from the daily job.
-0 15 * * 0 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind weekly --pages 200 >> logs/weekly-refresh.log 2>&1
+# Daily Almaty refresh at 07:00.
+0 7 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city almaty --kind daily --pages 100 >> logs/daily-almaty-refresh.log 2>&1
+
+# Weekly deeper refreshes on separate days.
+0 15 * * 0 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city astana --kind weekly --pages 200 >> logs/weekly-astana-refresh.log 2>&1
+0 15 * * 6 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city almaty --kind weekly --pages 200 >> logs/weekly-almaty-refresh.log 2>&1

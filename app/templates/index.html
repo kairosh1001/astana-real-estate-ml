@@ -1,17 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Kvartiry-ai.kz — ИИ-оценка квартир в Астане{% endblock %}
+{% block title %}Kvartiry-ai.kz — ИИ-подбор квартир в {{ city.in_name }}{% endblock %}
 {% block content %}
-<section class="hero" data-spotlight>
+<section class="hero hero-{{ city.slug }}" data-spotlight>
   <div>
     <span class="hero-eyebrow">Подбор квартир Krisha.kz с помощью ИИ</span>
     <h1>Kvartiry-ai.kz</h1>
     <p>
-      Найдите нужную вам квартиру в Астане по выгодной цене с помощью искусственного интеллекта, быстро и бесплатно!
+      Найдите нужную вам квартиру в {{ city.in_name }} по выгодной цене с помощью искусственного интеллекта, быстро и бесплатно!
     </p>
     <div class="hero-actions">
-      <a class="button" href="/undervalued-page">Смотреть рейтинг квартир</a>
-      <a class="button secondary" href="/find-home-page">Подобрать квартиру</a>
-      <a class="button secondary" href="/predict-page">Оценить квартиру по ссылке</a>
+      <a class="button" href="/undervalued-page?city={{ city.slug }}">Смотреть рейтинг квартир</a>
+      <a class="button secondary" href="/find-home-page?city={{ city.slug }}">Подобрать квартиру</a>
+      <a class="button secondary" href="/predict-page?city={{ city.slug }}">Оценить квартиру по ссылке</a>
     </div>
     <div class="hero-stats" aria-label="Текущая статистика сервиса">
       <div class="hero-stat">
@@ -83,7 +83,7 @@
       <div class="market-mini-head">
         <div>
           <span class="hero-eyebrow">Рынок квартир</span>
-          <h2>Астана в цифрах</h2>
+          <h2>{{ city.name }} в цифрах</h2>
         </div>
         <span class="market-live-dot">{{ market_brief.city.count }} объектов</span>
       </div>
@@ -107,7 +107,7 @@
         </div>
         {% endif %}
       </div>
-      <a class="button secondary" href="/market-page">Открыть аналитику рынка</a>
+      <a class="button secondary" href="/market-page?city={{ city.slug }}">Открыть аналитику рынка</a>
     </section>
   </div>
 </section>
@@ -121,7 +121,7 @@
         строгий фильтр ниже рынка по q10.
       </p>
     </div>
-    <a class="button secondary" href="/undervalued-page?new_since_hours=24">Открыть все новые квартиры</a>
+    <a class="button secondary" href="/undervalued-page?city={{ city.slug }}&new_since_hours=24">Открыть все новые квартиры</a>
   </div>
   <div class="section">
     {% set top_items = items %}
@@ -145,19 +145,19 @@
         Сортировка идёт от самой высокой выгоды по низкой оценке q10 к более низкой.
       </p>
     </div>
-    <a class="button" href="/undervalued-page">Открыть весь рейтинг</a>
+    <a class="button" href="/undervalued-page?city={{ city.slug }}">Открыть весь рейтинг</a>
   </div>
   <div class="districts" aria-label="Фильтр по району">
-    <a class="chip active" href="/undervalued-page">Все районы</a>
+    <a class="chip active" href="/undervalued-page?city={{ city.slug }}">Все районы</a>
     {% for option in district_options %}
-    <a class="chip" href="/undervalued-page?district={{ option.slug }}">{{ option.label }}</a>
+    <a class="chip" href="/undervalued-page?city={{ city.slug }}&district={{ option.slug }}">{{ option.label }}</a>
     {% endfor %}
   </div>
   <div class="section">
     {% include "_undervalued_table.html" %}
   </div>
   <div class="ranking-footer">
-    <a class="button" href="/undervalued-page">Смотреть весь рейтинг</a>
+    <a class="button" href="/undervalued-page?city={{ city.slug }}">Смотреть весь рейтинг</a>
   </div>
 </section>
 {% endblock %}

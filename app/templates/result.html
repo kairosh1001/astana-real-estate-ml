@@ -34,7 +34,7 @@
       {% if listing and listing.district_label %}
       <div class="detail-row">
         <dt>Район</dt>
-        <dd>{% if listing.district_slug %}<a class="entity-link" href="/district/{{ listing.district_slug }}" title="Открыть аналитику района {{ listing.district_label }} в Астане">{{ listing.district_label }}</a>{% else %}{{ listing.district_label }}{% endif %}</dd>
+        <dd>{% if listing.district_slug %}<a class="entity-link" href="/district/{{ listing.district_slug }}?city={{ city.slug }}" title="Открыть аналитику района {{ listing.district_label }} в {{ city.in_name }}">{{ listing.district_label }}</a>{% else %}{{ listing.district_label }}{% endif %}</dd>
       </div>
       {% endif %}
       {% if listing and listing.address %}
@@ -46,7 +46,7 @@
       {% if listing and listing.residential_complex %}
       <div class="detail-row">
         <dt>Жилой комплекс</dt>
-        <dd><a class="entity-link" href="/complex-page?name={{ listing.residential_complex | urlencode }}" title="Открыть аналитику ЖК {{ listing.residential_complex }} в Астане">{{ listing.residential_complex }}</a></dd>
+        <dd><a class="entity-link" href="/complex-page?city={{ city.slug }}&name={{ listing.residential_complex | urlencode }}" title="Открыть аналитику ЖК {{ listing.residential_complex }} в {{ city.in_name }}">{{ listing.residential_complex }}</a></dd>
       </div>
       {% endif %}
     </dl>
@@ -174,9 +174,9 @@
   </section>
 
   <section class="panel">
-    <h2>Жилой комплекс в Астане</h2>
+    <h2>Жилой комплекс в {{ city.in_name }}</h2>
     {% if complex_stats %}
-    <h3><a class="entity-link" href="/complex-page?name={{ complex_stats.name | urlencode }}" title="Открыть полную аналитику ЖК {{ complex_stats.name }} в Астане">{{ complex_stats.name }}</a></h3>
+    <h3><a class="entity-link" href="/complex-page?city={{ city.slug }}&name={{ complex_stats.name | urlencode }}" title="Открыть полную аналитику ЖК {{ complex_stats.name }} в {{ city.in_name }}">{{ complex_stats.name }}</a></h3>
     <dl class="detail-list">
       <div class="detail-row">
         <dt>Активных объявлений в базе</dt>
@@ -208,7 +208,7 @@
 
 <section class="section callout">
   CatBoost - это модель градиентного бустинга. В этом сервисе она обучена на
-  объявлениях Krisha по Астане и оценивает цену за м² по характеристикам
+  объявлениях Krisha по {{ city.name }} и оценивает цену за м² по характеристикам
   квартиры и локации. Итог стоит воспринимать как аналитический ориентир, а не
   как юридическую или оценочную экспертизу.
 </section>

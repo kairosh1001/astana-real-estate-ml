@@ -9,18 +9,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
+from app.cities import city_config, district_options, infer_listing_city, normalize_city_slug
 from app.prediction_service import ListingPrediction
 
 
 DEFAULT_DB_PATH = Path("data") / "krisha.sqlite3"
-DISTRICT_OPTIONS = [
-    {"slug": "yesil", "label": "Есиль"},
-    {"slug": "nura", "label": "Нура"},
-    {"slug": "saryarka", "label": "Сарыарка"},
-    {"slug": "almaty", "label": "Алматы"},
-    {"slug": "baikonyr", "label": "Байконур"},
-    {"slug": "saraishyk", "label": "Сарайшык"},
-]
+DISTRICT_OPTIONS = district_options("astana")
 APARTMENT_CONDITION_OPTIONS = [
     {"slug": "fresh_repair", "label": "Свежий ремонт", "value": "свежий ремонт"},
     {
@@ -32,16 +26,6 @@ APARTMENT_CONDITION_OPTIONS = [
     {"slug": "needs_repair", "label": "Требует ремонта", "value": "требует ремонта"},
     {"slug": "open_plan", "label": "Свободная планировка", "value": "свободная планировка"},
 ]
-
-_DISTRICT_ALIASES = {
-    "yesil": {"есиль", "есильский"},
-    "nura": {"нура"},
-    "saryarka": {"сарыарка"},
-    "almaty": {"алматы"},
-    "baikonyr": {"байконур"},
-    "saraishyk": {"сарайшык"},
-}
-
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -64,6 +48,7 @@ def init_db(connection: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS refresh_runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            city TEXT NOT NULL DEFAULT 'astana',
             started_at TEXT NOT NULL,
             finished_at TEXT,
             kind TEXT NOT NULL,
@@ -79,6 +64,7 @@ def init_db(connection: sqlite3.Connection) -> None:
 
         CREATE TABLE IF NOT EXISTS listings (
             url TEXT PRIMARY KEY,
+            city TEXT NOT NULL DEFAULT 'astana',
             title TEXT,
             raw_json TEXT NOT NULL,
             first_seen_at TEXT NOT NULL,
@@ -180,7 +166,28 @@ def init_db(connection: sqlite3.Connection) -> None:
         );
         """
     )
+    _ensure_column(connection, "refresh_runs", "city", "TEXT NOT NULL DEFAULT 'astana'")
+    _ensure_column(connection, "listings", "city", "TEXT NOT NULL DEFAULT 'astana'")
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_listings_city_status ON listings(city, status)"
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_refresh_runs_city_id ON refresh_runs(city, id DESC)"
+    )
     connection.commit()
+
+
+def _ensure_column(
+    connection: sqlite3.Connection,
+    table: str,
+    column: str,
+    definition: str,
+) -> None:
+    columns = {
+        str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})")
+    }
+    if column not in columns:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def fetch_cached_prediction(
@@ -470,16 +477,17 @@ def mark_telegram_digest_sent(
 def start_refresh_run(
     connection: sqlite3.Connection,
     *,
+    city: str = "astana",
     kind: str,
     start_page: int,
     end_page: int,
 ) -> int:
     cursor = connection.execute(
         """
-        INSERT INTO refresh_runs (started_at, kind, start_page, end_page)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO refresh_runs (started_at, city, kind, start_page, end_page)
+        VALUES (?, ?, ?, ?, ?)
         """,
-        (utc_now(), kind, start_page, end_page),
+        (utc_now(), normalize_city_slug(city), kind, start_page, end_page),
     )
     connection.commit()
     return int(cursor.lastrowid)
@@ -545,13 +553,18 @@ def recover_abandoned_refreshes(
     return int(cursor.rowcount)
 
 
-def mark_refresh_started(connection: sqlite3.Connection) -> None:
+def mark_refresh_started(
+    connection: sqlite3.Connection,
+    *,
+    city: str = "astana",
+) -> None:
     connection.execute(
         """
         UPDATE listings
         SET missed_refreshes = missed_refreshes + 1
-        WHERE status = 'active'
-        """
+        WHERE status = 'active' AND city = ?
+        """,
+        (normalize_city_slug(city),),
     )
     connection.commit()
 
@@ -559,15 +572,16 @@ def mark_refresh_started(connection: sqlite3.Connection) -> None:
 def mark_stale_listings(
     connection: sqlite3.Connection,
     *,
+    city: str = "astana",
     stale_after_missed: int = 3,
 ) -> None:
     connection.execute(
         """
         UPDATE listings
         SET status = 'stale'
-        WHERE missed_refreshes >= ?
+        WHERE missed_refreshes >= ? AND city = ?
         """,
-        (stale_after_missed,),
+        (stale_after_missed, normalize_city_slug(city)),
     )
     connection.commit()
 
@@ -579,19 +593,20 @@ def upsert_listing_prediction(
     prediction: ListingPrediction,
 ) -> None:
     now = utc_now()
+    city = infer_listing_city(raw_listing)
     raw_json = json.dumps(raw_listing, ensure_ascii=False, sort_keys=True)
     values = asdict(prediction)
     connection.execute(
         """
         INSERT INTO listings (
-            url, title, raw_json, first_seen_at, last_seen_at, last_checked_at,
+            url, city, title, raw_json, first_seen_at, last_seen_at, last_checked_at,
             missed_refreshes, status, listed_price, area_m2, listed_price_per_m2,
             pred_price_per_m2_q10, pred_price_per_m2_q50, pred_price_per_m2_q90,
             pred_total_q50, discount_vs_asking_pct_conservative,
             discount_vs_asking_pct_median, interval_width_pct
         )
         VALUES (
-            :url, :title, :raw_json, :now, :now, :now,
+            :url, :city, :title, :raw_json, :now, :now, :now,
             0, 'active', :listed_price, :area_m2, :listed_price_per_m2,
             :pred_price_per_m2_q10, :pred_price_per_m2_q50,
             :pred_price_per_m2_q90, :pred_total_q50,
@@ -599,6 +614,7 @@ def upsert_listing_prediction(
             :discount_vs_asking_pct_median, :interval_width_pct
         )
         ON CONFLICT(url) DO UPDATE SET
+            city = excluded.city,
             title = excluded.title,
             raw_json = excluded.raw_json,
             last_seen_at = excluded.last_seen_at,
@@ -621,6 +637,7 @@ def upsert_listing_prediction(
         {
             **values,
             "raw_json": raw_json,
+            "city": city,
             "now": now,
         },
     )
@@ -687,6 +704,7 @@ def upsert_listing_prediction(
 def fetch_undervalued(
     connection: sqlite3.Connection,
     *,
+    city: str = "astana",
     limit: int = 50,
     offset: int = 0,
     districts: list[str] | None = None,
@@ -711,6 +729,7 @@ def fetch_undervalued(
         f"""
         SELECT
             url,
+            city,
             title,
             raw_json,
             status,
@@ -727,10 +746,12 @@ def fetch_undervalued(
             discount_vs_asking_pct_median,
             interval_width_pct
         FROM listings
-        WHERE discount_vs_asking_pct_conservative > 0
+        WHERE city = ?
+          AND discount_vs_asking_pct_conservative > 0
           {status_clause}
         ORDER BY discount_vs_asking_pct_conservative DESC
         """,
+        (normalize_city_slug(city),),
     ).fetchall()
     items = [_prepare_undervalued_item(dict(row)) for row in rows]
     if districts:
@@ -817,11 +838,16 @@ def fetch_undervalued(
     return items[offset : offset + limit]
 
 
-def fetch_home_match_candidates(connection: sqlite3.Connection) -> list[dict]:
+def fetch_home_match_candidates(
+    connection: sqlite3.Connection,
+    *,
+    city: str = "astana",
+) -> list[dict]:
     rows = connection.execute(
         """
         SELECT
             url,
+            city,
             title,
             raw_json,
             status,
@@ -838,10 +864,12 @@ def fetch_home_match_candidates(connection: sqlite3.Connection) -> list[dict]:
             discount_vs_asking_pct_median,
             interval_width_pct
         FROM listings
-        WHERE status = 'active'
+        WHERE city = ?
+          AND status = 'active'
           AND listed_price IS NOT NULL
           AND area_m2 IS NOT NULL
-        """
+        """,
+        (normalize_city_slug(city),),
     ).fetchall()
     return [_prepare_undervalued_item(dict(row)) for row in rows]
 
@@ -849,6 +877,7 @@ def fetch_home_match_candidates(connection: sqlite3.Connection) -> list[dict]:
 def count_undervalued(
     connection: sqlite3.Connection,
     *,
+    city: str = "astana",
     districts: list[str] | None = None,
     rooms: int | None = None,
     max_price: float | None = None,
@@ -869,6 +898,7 @@ def count_undervalued(
     return len(
         fetch_undervalued(
             connection,
+            city=city,
             limit=100000,
             offset=0,
             districts=districts,
@@ -896,6 +926,7 @@ def fetch_listing_by_url(connection: sqlite3.Connection, url: str) -> dict | Non
         """
         SELECT
             url,
+            city,
             title,
             raw_json,
             status,
@@ -953,6 +984,8 @@ def fetch_price_history(
 def fetch_complex_stats(
     connection: sqlite3.Connection,
     residential_complex: str | None,
+    *,
+    city: str = "astana",
 ) -> dict | None:
     query = _clean_text(residential_complex)
     if not query:
@@ -962,9 +995,11 @@ def fetch_complex_stats(
         """
         SELECT raw_json, listed_price_per_m2, discount_vs_asking_pct_conservative
         FROM listings
-        WHERE status = 'active'
+        WHERE city = ?
+          AND status = 'active'
           AND listed_price_per_m2 IS NOT NULL
-        """
+        """,
+        (normalize_city_slug(city),),
     ).fetchall()
     prices = []
     below_market = 0
@@ -990,15 +1025,23 @@ def fetch_complex_stats(
     }
 
 
-def fetch_market_dashboard(connection: sqlite3.Connection) -> dict:
+def fetch_market_dashboard(
+    connection: sqlite3.Connection,
+    *,
+    city: str = "astana",
+) -> dict:
+    city_slug = normalize_city_slug(city)
+    selected_city = city_config(city_slug)
     rows = connection.execute(
         """
-        SELECT url, title, raw_json, first_seen_at, last_seen_at, status,
+        SELECT url, city, title, raw_json, first_seen_at, last_seen_at, status,
                listed_price, area_m2, listed_price_per_m2,
                pred_price_per_m2_q50,
                discount_vs_asking_pct_conservative
         FROM listings
-        """
+        WHERE city = ?
+        """,
+        (city_slug,),
     ).fetchall()
     now = datetime.now(timezone.utc)
     active_items = []
@@ -1013,8 +1056,8 @@ def fetch_market_dashboard(connection: sqlite3.Connection) -> dict:
         if item:
             active_items.append(item)
 
-    city = _market_segment("Астана", active_items)
-    city_median = city.get("median_price_per_m2") or 0
+    city_summary = _market_segment(selected_city["name"], active_items)
+    city_median = city_summary.get("median_price_per_m2") or 0
 
     district_groups: dict[str, list[dict]] = {}
     complex_groups: dict[str, list[dict]] = {}
@@ -1042,7 +1085,7 @@ def fetch_market_dashboard(connection: sqlite3.Connection) -> dict:
         item["slug"] = next(
             (
                 option["slug"]
-                for option in DISTRICT_OPTIONS
+                for option in district_options(city_slug)
                 if option["label"] == item["name"]
             ),
             "",
@@ -1100,11 +1143,15 @@ def fetch_market_dashboard(connection: sqlite3.Connection) -> dict:
         item["last_seen_at"] for item in active_items if item.get("last_seen_at")
     ]
 
-    historical = _market_history(connection, now=now)
+    historical = _market_history(
+        connection,
+        now=now,
+        urls=[str(row["url"]) for row in rows],
+    )
     insights = _market_insights(districts)
 
     return {
-        "city": city,
+        "city": city_summary,
         "districts": districts,
         "complexes": complexes[:20],
         "rooms": rooms,
@@ -1131,21 +1178,29 @@ def fetch_market_dashboard(connection: sqlite3.Connection) -> dict:
 def fetch_district_analytics(
     connection: sqlite3.Connection,
     district_slug: str,
+    *,
+    city: str = "astana",
 ) -> dict | None:
-    valid_slug = valid_district_slug(district_slug)
+    city_slug = normalize_city_slug(city)
+    valid_slug = valid_district_slug(district_slug, city=city_slug)
     if not valid_slug:
         return None
     return _fetch_market_entity_analytics(
         connection,
         entity_kind="district",
-        entity_name=district_label_for_slug(valid_slug),
-        matcher=lambda raw: normalize_district(raw.get("Город")) == valid_slug,
+        entity_name=district_label_for_slug(valid_slug, city=city_slug),
+        matcher=lambda raw: normalize_district(
+            raw.get("Город"), city=city_slug
+        ) == valid_slug,
+        city=city_slug,
     )
 
 
 def fetch_complex_analytics(
     connection: sqlite3.Connection,
     residential_complex: str,
+    *,
+    city: str = "astana",
 ) -> dict | None:
     complex_name = _clean_text(residential_complex)
     if not complex_name:
@@ -1156,6 +1211,7 @@ def fetch_complex_analytics(
         entity_name=complex_name,
         matcher=lambda raw: _clean_text(raw.get("Жилой комплекс")).casefold()
         == complex_name.casefold(),
+        city=city,
     )
     if not analytics or not analytics["coverage"]["known_listings"]:
         return None
@@ -1168,17 +1224,22 @@ def _fetch_market_entity_analytics(
     entity_kind: str,
     entity_name: str,
     matcher,
+    city: str = "astana",
 ) -> dict:
+    city_slug = normalize_city_slug(city)
+    selected_city = city_config(city_slug)
     rows = connection.execute(
         """
-        SELECT url, title, raw_json, first_seen_at, last_seen_at, status,
+        SELECT url, city, title, raw_json, first_seen_at, last_seen_at, status,
                listed_price, area_m2, listed_price_per_m2,
                pred_price_per_m2_q10, pred_price_per_m2_q50,
                pred_price_per_m2_q90, pred_total_q50,
                discount_vs_asking_pct_conservative,
                discount_vs_asking_pct_median, interval_width_pct
         FROM listings
-        """
+        WHERE city = ?
+        """,
+        (city_slug,),
     ).fetchall()
     now = datetime.now(timezone.utc)
     city_items = []
@@ -1203,8 +1264,8 @@ def _fetch_market_entity_analytics(
             entity_listing_rows.append(row)
 
     summary = _market_segment(entity_name, entity_items)
-    city = _market_segment("Астана", city_items)
-    city_median = city.get("median_price_per_m2") or 0
+    city_summary = _market_segment(selected_city["name"], city_items)
+    city_median = city_summary.get("median_price_per_m2") or 0
     summary["price_index"] = (
         summary["median_price_per_m2"] / city_median * 100
         if city_median and summary["count"]
@@ -1267,7 +1328,7 @@ def _fetch_market_entity_analytics(
         item["slug"] = next(
             (
                 option["slug"]
-                for option in DISTRICT_OPTIONS
+                for option in district_options(city_slug)
                 if option["label"] == item["name"]
             ),
             "",
@@ -1294,7 +1355,7 @@ def _fetch_market_entity_analytics(
     return {
         "entity": {"kind": entity_kind, "name": entity_name},
         "summary": summary,
-        "city": city,
+        "city": city_summary,
         "rooms": rooms,
         "conditions": conditions,
         "property_types": property_types,
@@ -1321,7 +1382,8 @@ def _market_item_from_row(
     if row.get("listed_price_per_m2") is None:
         return None
     raw_listing = raw_listing or _load_raw_listing(row.get("raw_json"))
-    district_slug = normalize_district(raw_listing.get("Город"))
+    city_slug = normalize_city_slug(row.get("city") or infer_listing_city(raw_listing))
+    district_slug = normalize_district(raw_listing.get("Город"), city=city_slug)
     condition_slug = normalize_apartment_condition(
         raw_listing.get("Состояние квартиры")
     )
@@ -1338,7 +1400,7 @@ def _market_item_from_row(
     return {
         "url": row.get("url"),
         "district_slug": district_slug,
-        "district_label": district_label_for_slug(district_slug),
+        "district_label": district_label_for_slug(district_slug, city=city_slug),
         "complex_name": _clean_text(raw_listing.get("Жилой комплекс")),
         "condition_label": condition_label,
         "rooms": _extract_rooms(row.get("title")),
@@ -1356,15 +1418,23 @@ def _market_item_from_row(
     }
 
 
-def fetch_market_brief(connection: sqlite3.Connection) -> dict:
+def fetch_market_brief(
+    connection: sqlite3.Connection,
+    *,
+    city: str = "astana",
+) -> dict:
+    city_slug = normalize_city_slug(city)
+    selected_city = city_config(city_slug)
     rows = connection.execute(
         """
         SELECT raw_json, listed_price, area_m2, listed_price_per_m2,
                discount_vs_asking_pct_conservative, last_seen_at
         FROM listings
-        WHERE status = 'active'
+        WHERE city = ?
+          AND status = 'active'
           AND listed_price_per_m2 IS NOT NULL
-        """
+        """,
+        (city_slug,),
     ).fetchall()
     items = []
     district_groups: dict[str, list[dict]] = {}
@@ -1372,7 +1442,9 @@ def fetch_market_brief(connection: sqlite3.Connection) -> dict:
     for source_row in rows:
         row = dict(source_row)
         raw_listing = _load_raw_listing(row["raw_json"])
-        district_slug = normalize_district(raw_listing.get("Город"))
+        district_slug = normalize_district(
+            raw_listing.get("Город"), city=city_slug
+        )
         item = {
             "price_per_m2": float(row["listed_price_per_m2"]),
             "listed_price": _extract_float(row.get("listed_price")),
@@ -1385,7 +1457,7 @@ def fetch_market_brief(connection: sqlite3.Connection) -> dict:
         items.append(item)
         if district_slug:
             district_groups.setdefault(
-                district_label_for_slug(district_slug), []
+                district_label_for_slug(district_slug, city=city_slug), []
             ).append(item)
         if row.get("last_seen_at"):
             last_seen_values.append(row["last_seen_at"])
@@ -1394,7 +1466,7 @@ def fetch_market_brief(connection: sqlite3.Connection) -> dict:
     ]
     districts.sort(key=lambda item: item["median_price_per_m2"], reverse=True)
     return {
-        "city": _market_segment("Астана", items),
+        "city": _market_segment(selected_city["name"], items),
         "district_count": len(districts),
         "highest_district": districts[0] if districts else None,
         "lowest_district": districts[-1] if districts else None,
@@ -1806,8 +1878,11 @@ def fetch_monitoring_snapshots(
 
 def _prepare_undervalued_item(row: dict) -> dict:
     raw_listing = _load_raw_listing(row.get("raw_json"))
-    district_slug = normalize_district(raw_listing.get("Город"))
-    district_label = district_label_for_slug(district_slug)
+    city_slug = normalize_city_slug(row.get("city") or infer_listing_city(raw_listing))
+    district_slug = normalize_district(raw_listing.get("Город"), city=city_slug)
+    district_label = district_label_for_slug(district_slug, city=city_slug)
+    row["city"] = city_slug
+    row["city_label"] = city_config(city_slug)["name"]
     row["district_slug"] = district_slug
     row["district_label"] = district_label
     row["rooms"] = _extract_rooms(row.get("title"))
@@ -1957,13 +2032,18 @@ def _load_raw_listing(raw_json: object) -> dict:
     return loaded if isinstance(loaded, dict) else {}
 
 
-def normalize_district(value: object) -> str | None:
+def normalize_district(value: object, *, city: str = "astana") -> str | None:
+    city_slug = normalize_city_slug(city)
     cleaned = str(value or "").lower()
     cleaned = cleaned.replace("астана", "")
+    if city_slug == "almaty":
+        cleaned = cleaned.replace("алматы", "")
     cleaned = cleaned.replace("р-н", "")
     cleaned = cleaned.replace("район", "")
     cleaned = re.sub(r"[^а-яёa-z]+", " ", cleaned).strip()
-    for slug, aliases in _DISTRICT_ALIASES.items():
+    for option in city_config(city_slug)["districts"]:
+        slug = option["slug"]
+        aliases = option["aliases"]
         if cleaned in aliases:
             return slug
         if any(alias in cleaned.split() for alias in aliases):
@@ -1971,24 +2051,32 @@ def normalize_district(value: object) -> str | None:
     return None
 
 
-def district_label_for_slug(slug: str | None) -> str:
-    for option in DISTRICT_OPTIONS:
+def district_label_for_slug(slug: str | None, *, city: str = "astana") -> str:
+    for option in district_options(city):
         if option["slug"] == slug:
             return option["label"]
     return "Район не указан"
 
 
-def valid_district_slug(value: str | None) -> str | None:
+def valid_district_slug(
+    value: str | None,
+    *,
+    city: str = "astana",
+) -> str | None:
     if not value:
         return None
-    slugs = {option["slug"] for option in DISTRICT_OPTIONS}
+    slugs = {option["slug"] for option in district_options(city)}
     return value if value in slugs else None
 
 
-def valid_district_slugs(values: list[str] | None) -> list[str]:
+def valid_district_slugs(
+    values: list[str] | None,
+    *,
+    city: str = "astana",
+) -> list[str]:
     if not values:
         return []
-    slugs = {option["slug"] for option in DISTRICT_OPTIONS}
+    slugs = {option["slug"] for option in district_options(city)}
     result = []
     for value in values:
         if value in slugs and value not in result:
@@ -2133,6 +2221,7 @@ def fetch_refresh_runs(
         """
         SELECT
             id,
+            city,
             started_at,
             finished_at,
             kind,
@@ -2158,6 +2247,7 @@ def fetch_running_refresh(connection: sqlite3.Connection) -> dict | None:
         """
         SELECT
             id,
+            city,
             started_at,
             finished_at,
             kind,
@@ -2178,9 +2268,16 @@ def fetch_running_refresh(connection: sqlite3.Connection) -> dict | None:
     return dict(row) if row else None
 
 
-def fetch_status_summary(connection: sqlite3.Connection) -> dict:
+def fetch_status_summary(
+    connection: sqlite3.Connection,
+    *,
+    city: str | None = None,
+) -> dict:
+    city_slug = normalize_city_slug(city) if city else None
+    city_clause = "WHERE city = ?" if city_slug else ""
+    params = (city_slug,) if city_slug else ()
     listing_counts = connection.execute(
-        """
+        f"""
         SELECT
             COUNT(*) AS total_listings,
             SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_listings,
@@ -2193,12 +2290,15 @@ def fetch_status_summary(connection: sqlite3.Connection) -> dict:
                 END
             ) AS below_market_active
         FROM listings
-        """
+        {city_clause}
+        """,
+        params,
     ).fetchone()
     latest_refresh = connection.execute(
-        """
+        f"""
         SELECT
             id,
+            city,
             started_at,
             finished_at,
             kind,
@@ -2211,9 +2311,11 @@ def fetch_status_summary(connection: sqlite3.Connection) -> dict:
             status,
             error
         FROM refresh_runs
+        {city_clause}
         ORDER BY id DESC
         LIMIT 1
-        """
+        """,
+        params,
     ).fetchone()
 
     summary = dict(listing_counts)

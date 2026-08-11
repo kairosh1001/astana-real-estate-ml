@@ -37,9 +37,9 @@
       {% elif refresh.status == "failed" %}ошибка
       {% else %}{{ refresh.status }}{% endif %}
     </dd>
-    <dt>Начато (Астана)</dt>
+    <dt>Начато (UTC+5)</dt>
     <dd>{{ refresh.started_at | astana_time }}</dd>
-    <dt>Завершено (Астана)</dt>
+    <dt>Завершено (UTC+5)</dt>
     <dd>{{ refresh.finished_at | astana_time }}</dd>
     <dt>Страницы</dt>
     <dd>{{ refresh.start_page }}-{{ refresh.end_page }} / {{ refresh.pages_seen }}</dd>

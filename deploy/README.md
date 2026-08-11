@@ -58,7 +58,7 @@ docker compose run --rm app python scripts/check_ui.py
 
 ```bash
 docker compose --profile tools run --rm refresh \
-  python scripts/refresh_listings.py --kind manual --pages 1 --max-listings 3 --min-delay 0 --max-delay 0
+  python scripts/refresh_listings.py --city almaty --kind manual --pages 1 --max-listings 3 --min-delay 0 --max-delay 0
 ```
 
 8. Check the browser pages:
@@ -68,6 +68,7 @@ http://SERVER_IP:8000
 http://SERVER_IP:8000/status-page
 http://SERVER_IP:8000/refresh-runs-page
 http://SERVER_IP:8000/undervalued-page
+http://SERVER_IP:8000/undervalued-page?city=almaty
 ```
 
 9. Add cron only after the smoke test succeeds.
@@ -96,25 +97,29 @@ http://SERVER_IP:8000
 
 ## Refresh Commands
 
-Daily refresh:
+Daily refresh for both cities:
 
 ```bash
 docker compose --profile tools run --rm refresh \
-  python scripts/refresh_listings.py --kind daily --pages 100
+  python scripts/refresh_listings.py --city astana --kind daily --pages 100
+docker compose --profile tools run --rm refresh \
+  python scripts/refresh_listings.py --city almaty --kind daily --pages 100
 ```
 
-Weekly refresh:
+Weekly refresh for both cities:
 
 ```bash
 docker compose --profile tools run --rm refresh \
-  python scripts/refresh_listings.py --kind weekly --pages 200
+  python scripts/refresh_listings.py --city astana --kind weekly --pages 200
+docker compose --profile tools run --rm refresh \
+  python scripts/refresh_listings.py --city almaty --kind weekly --pages 200
 ```
 
 Small smoke test:
 
 ```bash
 docker compose --profile tools run --rm refresh \
-  python scripts/refresh_listings.py --kind manual --pages 1 --max-listings 3 --min-delay 0 --max-delay 0
+  python scripts/refresh_listings.py --city almaty --kind manual --pages 1 --max-listings 3 --min-delay 0 --max-delay 0
 ```
 
 Admin endpoint smoke test:
@@ -123,7 +128,7 @@ Admin endpoint smoke test:
 curl -X POST http://127.0.0.1:8000/refresh-listings \
   -H "Content-Type: application/json" \
   -H "X-Admin-Token: $ADMIN_TOKEN" \
-  -d '{"kind":"manual","pages":1,"max_listings":3,"min_delay":0,"max_delay":0}'
+  -d '{"city":"almaty","kind":"manual","pages":1,"max_listings":3,"min_delay":0,"max_delay":0}'
 ```
 
 ## Cron Example
@@ -143,11 +148,13 @@ crontab -e
 Example entries:
 
 ```cron
-# Daily shallow refresh at 03:00.
-0 3 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind daily --pages 100 >> logs/daily-refresh.log 2>&1
+# Daily shallow refreshes for Astana and Almaty.
+0 3 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city astana --kind daily --pages 100 >> logs/daily-astana-refresh.log 2>&1
+0 7 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city almaty --kind daily --pages 100 >> logs/daily-almaty-refresh.log 2>&1
 
-# Weekly deeper refresh on Sunday at 15:00, away from the daily job.
-0 15 * * 0 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --kind weekly --pages 200 >> logs/weekly-refresh.log 2>&1
+# Weekly deeper refreshes, separated by day.
+0 15 * * 0 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city astana --kind weekly --pages 200 >> logs/weekly-astana-refresh.log 2>&1
+0 15 * * 6 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city almaty --kind weekly --pages 200 >> logs/weekly-almaty-refresh.log 2>&1
 ```
 
 Replace `/opt/krisha` with the actual repository path.

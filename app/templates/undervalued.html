@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Квартиры ниже рынка{% endblock %}
+{% block title %}Квартиры ниже рынка в {{ city.in_name }}{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css">
@@ -7,7 +7,7 @@
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Квартиры ниже рынка</h1>
+    <h1>Квартиры ниже рынка в {{ city.in_name }}</h1>
     <p>
       Рейтинг активных объявлений, где низкая оценка q10 выше цены
       объявления. Чем выше позиция, тем больше запас к цене по q10.
@@ -15,7 +15,7 @@
   </div>
   <div class="listing-actions-bar">
     <button class="button secondary" type="button" data-copy-current-url>Скопировать поиск</button>
-    <a class="button secondary" href="/predict-page">Оценить ссылку</a>
+    <a class="button secondary" href="/predict-page?city={{ city.slug }}">Оценить ссылку</a>
   </div>
 </div>
 
@@ -32,6 +32,7 @@
   </div>
 
   <form id="filter-form" method="get" action="/undervalued-page">
+    <input type="hidden" name="city" value="{{ city.slug }}">
     <div class="check-grid" aria-label="Фильтр по району">
       {% for option in district_options %}
       <label class="check-chip {% if option.slug in selected_districts %}active{% endif %}">
@@ -188,7 +189,7 @@
       </select>
     </label>
     <button type="submit">Применить</button>
-    <a class="button secondary" href="/undervalued-page">Сбросить</a>
+    <a class="button secondary" href="/undervalued-page?city={{ city.slug }}">Сбросить</a>
     </div>
   </form>
 </section>
@@ -227,6 +228,7 @@
     </nav>
 
     <form class="pagination-jump" method="get" action="/undervalued-page">
+      <input type="hidden" name="city" value="{{ city.slug }}">
       {% for district_slug in selected_districts %}
       <input type="hidden" name="district" value="{{ district_slug }}">
       {% endfor %}
@@ -275,7 +277,7 @@
       return;
     }
 
-    const map = L.map(mapElement, { scrollWheelZoom: false }).setView([51.1282, 71.4304], 11);
+    const map = L.map(mapElement, { scrollWheelZoom: false }).setView([{{ city.map_center[0] }}, {{ city.map_center[1] }}], {{ city.map_zoom }});
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap"

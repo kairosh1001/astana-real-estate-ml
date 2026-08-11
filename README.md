@@ -174,8 +174,10 @@ Small smoke test:
 Typical scheduled refreshes:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\refresh_listings.py --kind daily --pages 100
-.\.venv\Scripts\python.exe scripts\refresh_listings.py --kind weekly --pages 200
+.\.venv\Scripts\python.exe scripts\refresh_listings.py --city astana --kind daily --pages 100
+.\.venv\Scripts\python.exe scripts\refresh_listings.py --city almaty --kind daily --pages 100
+.\.venv\Scripts\python.exe scripts\refresh_listings.py --city astana --kind weekly --pages 200
+.\.venv\Scripts\python.exe scripts\refresh_listings.py --city almaty --kind weekly --pages 200
 ```
 
 The personal home finder uses a compact local OpenStreetMap POI snapshot. Refresh it manually when city infrastructure changes:

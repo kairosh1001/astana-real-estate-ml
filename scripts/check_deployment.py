@@ -98,14 +98,19 @@ def check_model_prediction() -> None:
 def check_refresh_schedule() -> None:
     crontab = (ROOT / "deploy" / "crontab.example").read_text(encoding="utf-8")
     required = [
-        "--kind daily --pages 100",
-        "--kind weekly --pages 200",
+        "--city astana --kind daily --pages 100",
+        "--city almaty --kind daily --pages 100",
+        "--city astana --kind weekly --pages 200",
+        "--city almaty --kind weekly --pages 200",
         "flock -w 21600 /tmp/krisha-refresh.lock",
     ]
     missing = [value for value in required if value not in crontab]
     if missing:
         raise SystemExit(f"Refresh schedule is missing safeguards: {missing}")
-    print("[OK] Refresh schedule uses 100/200 pages and a shared lock.", flush=True)
+    print(
+        "[OK] Both cities use 100/200-page refreshes and a shared lock.",
+        flush=True,
+    )
 
 
 def run_command(args: list[str]) -> None:

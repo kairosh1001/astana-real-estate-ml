@@ -1,33 +1,33 @@
 {% extends "base.html" %}
-{% block title %}{{ entity_title }} — аналитика квартир в Астане{% endblock %}
+{% block title %}{{ entity_title }} — аналитика квартир в {{ city.in_name }}{% endblock %}
 {% block content %}
 <div class="page-head market-page-head entity-page-head">
   <div>
     <span class="hero-eyebrow">
-      {% if entity_kind == "district" %}Аналитика района Астаны{% else %}Аналитика жилого комплекса в Астане{% endif %}
+      {% if entity_kind == "district" %}Аналитика района {{ city.genitive }}{% else %}Аналитика жилого комплекса в {{ city.in_name }}{% endif %}
     </span>
     <h1>{{ entity_title }}</h1>
     <p>
-      Цены, структура предложения и история объявлений по объектам в Астане.
+      Цены, структура предложения и история объявлений по объектам в {{ city.in_name }}.
       Все показатели рассчитаны по объявлениям из текущей базы сервиса.
     </p>
     <div class="market-meta-row">
-      <span>{{ analytics.coverage.active_listings }} активных объектов в Астане</span>
+      <span>{{ analytics.coverage.active_listings }} активных объектов в {{ city.in_name }}</span>
       <span>{{ analytics.coverage.stale_listings }} снятых с мониторинга</span>
       <span>Данные на {% if analytics.coverage.as_of %}{{ analytics.coverage.as_of | astana_time }}{% else %}—{% endif %}</span>
     </div>
   </div>
   <div class="entity-head-actions">
-    <a class="button secondary" href="/market-page">Рынок квартир в Астане</a>
+    <a class="button secondary" href="/market-page?city={{ city.slug }}">Рынок квартир в {{ city.in_name }}</a>
     <a class="button" href="{{ listing_filter_url }}">Открыть объявления</a>
   </div>
 </div>
 
-<section class="analytics-kpis entity-kpis" aria-label="Основные показатели {{ entity_title }} в Астане">
+<section class="analytics-kpis entity-kpis" aria-label="Основные показатели {{ entity_title }} в {{ city.in_name }}">
   <article class="analytics-kpi">
     <span>Активные объявления</span>
     <strong>{{ analytics.summary.count }}</strong>
-    <small>текущее предложение в базе по Астане</small>
+    <small>текущее предложение в базе по {{ city.name }}</small>
   </article>
   <article class="analytics-kpi">
     <span>Медиана за м²</span>
@@ -35,7 +35,7 @@
     <small>по активным объявлениям</small>
   </article>
   <article class="analytics-kpi">
-    <span>Относительно Астаны</span>
+    <span>Относительно {{ city.genitive }}</span>
     <strong>{% if analytics.summary.median_diff_pct is not none %}{{ "{:+.1f}%".format(analytics.summary.median_diff_pct * 100) }}{% else %}—{% endif %}</strong>
     <small>к медиане {{ "{:,.0f}".format(analytics.city.median_price_per_m2) }} тг/м²</small>
   </article>
@@ -61,19 +61,19 @@
   <section class="panel analytics-panel" data-spotlight>
     <div class="analytics-section-head compact">
       <div>
-        <span class="analytics-kicker">Локация в Астане</span>
+        <span class="analytics-kicker">Локация в {{ city.in_name }}</span>
         <h2>Район жилого комплекса</h2>
       </div>
     </div>
     {% if analytics.districts %}
     {% set district = analytics.districts[0] %}
-    <a class="entity-summary-link" href="/district/{{ district.slug }}" title="Открыть аналитику района {{ district.name }} в Астане">
-      <span>Район Астаны</span>
+    <a class="entity-summary-link" href="/district/{{ district.slug }}?city={{ city.slug }}" title="Открыть аналитику района {{ district.name }} в {{ city.in_name }}">
+      <span>Район {{ city.genitive }}</span>
       <strong>{{ district.name }}</strong>
       <small>{{ district.count }} активных объявлений этого ЖК</small>
     </a>
     {% else %}
-    <p class="muted">Район Астаны пока не распознан.</p>
+    <p class="muted">Район {{ city.genitive }} пока не распознан.</p>
     {% endif %}
   </section>
   <section class="panel analytics-panel two-gis-panel" data-spotlight>
@@ -92,8 +92,8 @@
 <section class="section panel analytics-panel" data-spotlight>
   <div class="analytics-section-head">
     <div>
-      <span class="analytics-kicker">Динамика цен в Астане</span>
-      <h2>История медианной цены за м² — {{ entity_title }}, Астана</h2>
+      <span class="analytics-kicker">Динамика цен в {{ city.in_name }}</span>
+      <h2>История медианной цены за м² — {{ entity_title }}, {{ city.name }}</h2>
       <p>До 180 дней, одна дневная точка по последнему наблюдению каждого объявления.</p>
     </div>
     {% if analytics.historical.available and analytics.historical.change_pct is not none %}
@@ -103,7 +103,7 @@
   {% if analytics.historical.available %}
   <div class="trend-chart-shell">
     <svg class="trend-chart" viewBox="0 0 1000 260" role="img" aria-labelledby="entity-trend-title entity-trend-desc">
-      <title id="entity-trend-title">История медианной цены за квадратный метр — {{ entity_title }}, Астана</title>
+      <title id="entity-trend-title">История медианной цены за квадратный метр — {{ entity_title }}, {{ city.name }}</title>
       <desc id="entity-trend-desc">{{ analytics.historical.day_count }} дневных точек.</desc>
       <line x1="55" y1="40" x2="945" y2="40" class="chart-grid-line"></line>
       <line x1="55" y1="127" x2="945" y2="127" class="chart-grid-line"></line>
@@ -135,7 +135,7 @@
   <section class="panel analytics-panel" data-spotlight>
     <div class="analytics-section-head compact">
       <div>
-        <span class="analytics-kicker">Структура предложения в Астане</span>
+        <span class="analytics-kicker">Структура предложения в {{ city.in_name }}</span>
         <h2>Комнатность — {{ entity_title }}</h2>
         <p>Количество активных объявлений и медианная цена за м².</p>
       </div>
@@ -156,7 +156,7 @@
   <section class="panel analytics-panel" data-spotlight>
     <div class="analytics-section-head compact">
       <div>
-        <span class="analytics-kicker">Ремонт квартир в Астане</span>
+        <span class="analytics-kicker">Ремонт квартир в {{ city.in_name }}</span>
         <h2>Состояние квартир — {{ entity_title }}</h2>
         <p>Медианная цена за м² и размер каждой выборки.</p>
       </div>
@@ -179,7 +179,7 @@
 <section class="section panel analytics-panel" data-spotlight>
   <div class="analytics-section-head">
     <div>
-      <span class="analytics-kicker">Жилые комплексы района в Астане</span>
+      <span class="analytics-kicker">Жилые комплексы района в {{ city.in_name }}</span>
       <h2>ЖК района {{ entity_name }}</h2>
       <p>Нажмите на название, чтобы открыть отдельную аналитику жилого комплекса.</p>
     </div>
@@ -190,7 +190,7 @@
       <tbody>
         {% for row in analytics.complexes %}
         <tr>
-          <td data-label="Жилой комплекс"><a class="entity-link" href="/complex-page?name={{ row.name | urlencode }}" title="Открыть аналитику ЖК {{ row.name }} в Астане">{{ row.name }}</a></td>
+          <td data-label="Жилой комплекс"><a class="entity-link" href="/complex-page?city={{ city.slug }}&name={{ row.name | urlencode }}" title="Открыть аналитику ЖК {{ row.name }} в {{ city.in_name }}">{{ row.name }}</a></td>
           <td data-label="Объектов">{{ row.count }}</td>
           <td data-label="Медиана/м²">{{ "{:,.0f}".format(row.median_price_per_m2) }} тг</td>
           <td data-label="Q25–Q75/м²">{{ "{:,.0f}".format(row.q25_price_per_m2) }}–{{ "{:,.0f}".format(row.q75_price_per_m2) }}</td>
@@ -206,7 +206,7 @@
 <section class="section panel analytics-panel" data-spotlight>
   <div class="analytics-section-head">
     <div>
-      <span class="analytics-kicker">Активное предложение в Астане</span>
+      <span class="analytics-kicker">Активное предложение в {{ city.in_name }}</span>
       <h2>Квартиры — {{ entity_title }}</h2>
       <p>Нажимайте на район или ЖК, чтобы перейти к соответствующей аналитической странице.</p>
     </div>
@@ -214,13 +214,13 @@
   {% if analytics.listings %}
   <div class="table-wrap">
     <table class="listing-table analytics-table entity-listing-table">
-      <thead><tr><th>Объявление</th><th>Район Астаны</th><th>ЖК</th><th>Цена</th><th>Цена/м²</th><th>Выгода q10</th><th>Ссылки</th></tr></thead>
+      <thead><tr><th>Объявление</th><th>Район {{ city.genitive }}</th><th>ЖК</th><th>Цена</th><th>Цена/м²</th><th>Выгода q10</th><th>Ссылки</th></tr></thead>
       <tbody>
         {% for item in analytics.listings %}
         <tr>
           <td data-label="Объявление"><strong>{{ item.short_title }}</strong></td>
-          <td data-label="Район Астаны">{% if item.district_slug %}<a class="entity-link" href="/district/{{ item.district_slug }}" title="Открыть аналитику района {{ item.district_label }} в Астане">{{ item.district_label }}</a>{% else %}—{% endif %}</td>
-          <td data-label="ЖК">{% if item.residential_complex %}<a class="entity-link" href="/complex-page?name={{ item.residential_complex | urlencode }}" title="Открыть аналитику ЖК {{ item.residential_complex }} в Астане">{{ item.residential_complex }}</a>{% else %}—{% endif %}</td>
+          <td data-label="Район {{ city.genitive }}">{% if item.district_slug %}<a class="entity-link" href="/district/{{ item.district_slug }}?city={{ city.slug }}" title="Открыть аналитику района {{ item.district_label }} в {{ city.in_name }}">{{ item.district_label }}</a>{% else %}—{% endif %}</td>
+          <td data-label="ЖК">{% if item.residential_complex %}<a class="entity-link" href="/complex-page?city={{ city.slug }}&name={{ item.residential_complex | urlencode }}" title="Открыть аналитику ЖК {{ item.residential_complex }} в {{ city.in_name }}">{{ item.residential_complex }}</a>{% else %}—{% endif %}</td>
           <td data-label="Цена">{{ "{:,.0f}".format(item.listed_price or 0) }} тг</td>
           <td data-label="Цена/м²">{{ "{:,.0f}".format(item.listed_price_per_m2 or 0) }} тг</td>
           <td data-label="Выгода q10" class="{% if (item.discount_vs_asking_pct_conservative or 0) > 0 %}positive{% endif %}">{{ "{:.1%}".format(item.discount_vs_asking_pct_conservative or 0) }}</td>
@@ -231,7 +231,7 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">Сейчас активных объявлений по этой выборке в Астане нет.</div>
+  <div class="empty-state">Сейчас активных объявлений по этой выборке в {{ city.in_name }} нет.</div>
   {% endif %}
 </section>
 {% endblock %}
