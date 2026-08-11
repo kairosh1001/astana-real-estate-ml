@@ -106,6 +106,14 @@ non-model audit columns. The training notebooks assign a deterministic split
 from property-like attributes so likely duplicates/reposts cannot cross from
 training into validation or test, without leaking the audit fields into CatBoost.
 
+The CSV retains the complete 62-column experimental feature surface. Candidate
+models use the validation-selected `optimized_compact_v2` profile with 41 model
+features: the exact duplicate normalized center distance, low-value missingness
+flags, and the 500 m/1 km POI count rings are excluded, while area-per-room,
+log-area, fixed-reference building age, room segment, and floor-position
+features are added. The reference year is stored in model metadata so online
+features cannot drift silently with the calendar year.
+
 OSM proximity values currently use great-circle distance to the representative
 point returned by Overpass. They are deterministic and inexpensive enough for
 model training and online prediction, but they are not walking-route distances;
@@ -122,8 +130,11 @@ Open either notebook from the repository root after starting `jupyter notebook`:
 - `notebooks/almaty_model.ipynb` trains an Almaty-only model on the identical
   deterministic Almaty split for a fair comparison.
 
-Both notebooks train q10, q50, and q90 CatBoost candidates, show held-out
-metrics and diagnostics, and save only under the ignored `models_candidate/`
-directory. They do not overwrite the current production model. Finish every
+Both notebooks train q10/q90 CatBoost interval candidates and an RMSE-optimized
+point model in the q50 slot, show held-out metrics and diagnostics, and save
+only under the ignored `models_candidate/`. Q10/q90 receive frozen log-space
+tail offsets estimated from validation residuals; the held-out test is not used
+for either feature selection, hyperparameter selection, or interval calibration.
+They do not overwrite the current production model. Finish every
 Almaty room-count partition and rebuild the shared dataset before considering
 either candidate for production.

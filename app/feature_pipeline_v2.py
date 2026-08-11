@@ -15,6 +15,7 @@ from sklearn.neighbors import BallTree
 
 
 FEATURE_SCHEMA_VERSION = 2
+FEATURE_REFERENCE_YEAR = 2026
 EARTH_RADIUS_KM = 6371.0088
 H3_RESOLUTIONS = (7, 8, 9)
 POI_CATEGORIES = (
@@ -115,7 +116,19 @@ POI_FEATURE_COLUMNS = [
     )
 ]
 
-UNIVERSAL_FEATURE_COLUMNS = BASE_FEATURE_COLUMNS + POI_FEATURE_COLUMNS
+ENGINEERED_FEATURE_COLUMNS = [
+    "rooms_segment",
+    "area_per_room",
+    "log_area_m2",
+    "building_age",
+    "is_first_floor",
+    "is_top_floor",
+    "floor_from_top",
+]
+
+UNIVERSAL_FEATURE_COLUMNS = (
+    BASE_FEATURE_COLUMNS + POI_FEATURE_COLUMNS + ENGINEERED_FEATURE_COLUMNS
+)
 UNIVERSAL_CATEGORICAL_FEATURES = [
     "city",
     "city_district",
@@ -124,6 +137,30 @@ UNIVERSAL_CATEGORICAL_FEATURES = [
     "apartment_condition",
     "building_type",
     *[f"h3_res_{resolution}" for resolution in H3_RESOLUTIONS],
+    "rooms_segment",
+]
+_OPTIMIZED_EXCLUDED_FEATURES = {
+    "dist_to_city_center_normalized",
+    "year_missing",
+    "ceiling_height_missing",
+    "district_missing",
+    "residential_complex_missing",
+    *{
+        feature
+        for feature in POI_FEATURE_COLUMNS
+        if feature.startswith("count_")
+        and (feature.endswith("within_500m") or feature.endswith("within_1km"))
+    },
+}
+OPTIMIZED_MODEL_FEATURE_COLUMNS = [
+    feature
+    for feature in UNIVERSAL_FEATURE_COLUMNS
+    if feature not in _OPTIMIZED_EXCLUDED_FEATURES
+]
+OPTIMIZED_MODEL_CATEGORICAL_FEATURES = [
+    feature
+    for feature in UNIVERSAL_CATEGORICAL_FEATURES
+    if feature in OPTIMIZED_MODEL_FEATURE_COLUMNS
 ]
 TARGET_COLUMN = "price_per_m2_log"
 DATASET_METADATA_COLUMNS = ["listing_url", "scraped_at", "scrape_partition"]
@@ -254,6 +291,7 @@ def build_model_features_v2(
     frame = _add_poi_features(frame, catalog)
     frame["floor_ratio"] = frame["current_floor"] / frame["total_floors"]
     frame["floor_ratio"] = frame["floor_ratio"].where(frame["total_floors"] > 0)
+    frame = _add_engineered_features(frame)
 
     price = _clean_numeric(_series(raw_df=frame, canonical="price"))
     valid_target = ((price > 0) & (frame["area_m2"] > 0)).fillna(False)
@@ -292,8 +330,11 @@ def build_model_features_v2(
 def universal_model_metadata(catalog: PoiCatalog | None = None) -> dict[str, Any]:
     metadata: dict[str, Any] = {
         "schema_version": FEATURE_SCHEMA_VERSION,
-        "feature_columns": list(UNIVERSAL_FEATURE_COLUMNS),
-        "categorical_features": list(UNIVERSAL_CATEGORICAL_FEATURES),
+        "feature_profile": "optimized_compact_v2",
+        "feature_reference_year": FEATURE_REFERENCE_YEAR,
+        "feature_columns": list(OPTIMIZED_MODEL_FEATURE_COLUMNS),
+        "categorical_features": list(OPTIMIZED_MODEL_CATEGORICAL_FEATURES),
+        "dataset_feature_columns": list(UNIVERSAL_FEATURE_COLUMNS),
         "target": TARGET_COLUMN,
         "target_definition": "ln(listing_price_kzt / area_m2)",
         "poi_distance_metric": "haversine_km_to_osm_representative_point",
@@ -504,6 +545,32 @@ def _add_city_center_features(frame: pd.DataFrame, catalog: PoiCatalog) -> pd.Da
     result["dist_to_city_center_km"] = distance
     result["dist_to_city_center_normalized"] = normalized
     return result
+
+
+def _add_engineered_features(frame: pd.DataFrame) -> pd.DataFrame:
+    result = frame.copy()
+    rooms = pd.to_numeric(result["rooms"], errors="coerce")
+    area = pd.to_numeric(result["area_m2"], errors="coerce")
+    floor = pd.to_numeric(result["current_floor"], errors="coerce")
+    floors = pd.to_numeric(result["total_floors"], errors="coerce")
+    year = pd.to_numeric(result["year_of_construction"], errors="coerce")
+    result["rooms_segment"] = rooms.map(_room_segment).astype("string")
+    result["area_per_room"] = area / rooms.where(rooms.gt(0))
+    result["log_area_m2"] = np.log1p(area.clip(lower=0))
+    result["building_age"] = (FEATURE_REFERENCE_YEAR - year).clip(
+        lower=0, upper=200
+    )
+    result["is_first_floor"] = floor.eq(1).fillna(False).astype("int8")
+    result["is_top_floor"] = floor.eq(floors).fillna(False).astype("int8")
+    result["floor_from_top"] = floors - floor
+    return result
+
+
+def _room_segment(value: object) -> str:
+    if not _known(value):
+        return "missing"
+    numeric = float(value)
+    return "5+" if numeric >= 5 else str(int(numeric))
 
 
 def _add_poi_features(frame: pd.DataFrame, catalog: PoiCatalog) -> pd.DataFrame:

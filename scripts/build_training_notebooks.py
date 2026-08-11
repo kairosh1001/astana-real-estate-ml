@@ -40,16 +40,15 @@ def build_notebook(scope: str):
 
             ## tl;dr
 
-            This notebook trains three CatBoost quantile models (`q10`, `q50`, and
-            `q90`) for **{scope_label}** using the shared city-aware feature pipeline
-            v2. It reports held-out metrics and saves only a candidate model bundle;
-            it does not replace the production Astana model.
+            This notebook trains CatBoost lower/upper quantile models (`q10`, `q90`)
+            plus an RMSE-optimized point model stored in the `q50` slot for
+            **{scope_label}**. It uses the validation-selected compact feature profile,
+            calibrates q10/q90 offsets on validation data, reports held-out metrics,
+            and saves only a candidate model bundle.
 
-            **Current Almaty caveat:** the collector reached 20,000 unique listings,
-            but stopped after all one-room listings and part of the two-room inventory.
-            Three-room and larger apartments are nearly absent. Metrics produced from
-            this snapshot are therefore provisional and must not be interpreted as
-            full-market performance.
+            **Current caveat:** room-partition inventories remain incomplete and 5+
+            room apartments are still rare. Metrics are provisional and must not be
+            interpreted as full-market performance.
             """
         ),
         markdown(
@@ -57,9 +56,14 @@ def build_notebook(scope: str):
             ## Context & Methods
 
             The target is the natural logarithm of listing price per square metre.
-            The feature set is shared across cities and uses city-qualified districts
-            and residential complexes, H3 cells, building/apartment attributes, and
-            distances and local counts for eight OpenStreetMap POI categories.
+            The validation-selected 41-feature profile uses city-qualified districts
+            and residential complexes, H3 cells, building/apartment attributes,
+            derived area/age/floor-position features, and compact OpenStreetMap
+            proximity signals. The q50 point model uses RMSE loss because it
+            materially outperformed median Quantile loss on validation data; q10 and
+            q90 retain quantile loss for uncertainty bounds.
+            Final q10/q90 offsets are estimated only from validation residuals and
+            then frozen before the held-out test is evaluated.
 
             To reduce leakage from duplicated or reposted apartments, split assignment
             is based on a stable hash of a property-like group (city, H3 cell, ЖК,
@@ -117,10 +121,11 @@ def build_notebook(scope: str):
             RANDOM_SEED = 42
             PRICE_PER_M2_MIN = 100_000
             PRICE_PER_M2_MAX = 5_000_000
-            ITERATIONS = 500
+            ITERATIONS = 800
             DEPTH = 7
-            LEARNING_RATE = 0.05
-            EARLY_STOPPING_ROUNDS = 75
+            LEARNING_RATE = 0.04
+            L2_LEAF_REG = 7
+            EARLY_STOPPING_ROUNDS = 100
             SAVE_CANDIDATE_MODELS = True
             REBUILD_DATASET = False
 
@@ -255,20 +260,25 @@ def build_notebook(scope: str):
             y = {name: pd.to_numeric(part[target_column], errors="raise") for name, part in subsets.items()}
             cat_indices = [feature_columns.index(column) for column in categorical_features]
 
-            quantile_alphas = {"q10": 0.10, "q50": 0.50, "q90": 0.90}
+            model_objectives = {
+                "q10": "Quantile:alpha=0.10",
+                "q50": "RMSE",
+                "q90": "Quantile:alpha=0.90",
+            }
             models = {}
             predictions = {}
+            validation_predictions = {}
 
-            for label, alpha in quantile_alphas.items():
+            for label, objective in model_objectives.items():
                 print(f"Training {label}...")
                 model = CatBoostRegressor(
-                    loss_function=f"Quantile:alpha={alpha}",
-                    eval_metric=f"Quantile:alpha={alpha}",
+                    loss_function=objective,
+                    eval_metric=objective,
                     iterations=ITERATIONS,
                     depth=DEPTH,
                     learning_rate=LEARNING_RATE,
                     random_seed=RANDOM_SEED,
-                    l2_leaf_reg=5,
+                    l2_leaf_reg=L2_LEAF_REG,
                     random_strength=0.5,
                     verbose=100,
                     allow_writing_files=False,
@@ -282,7 +292,24 @@ def build_notebook(scope: str):
                     use_best_model=True,
                 )
                 models[label] = model
+                validation_predictions[label] = model.predict(X["validation"])
                 predictions[label] = model.predict(X["test"])
+
+            quantile_calibration_offsets_log = {
+                "q10": float(np.quantile(
+                    y["validation"].to_numpy() - validation_predictions["q10"], 0.10
+                )),
+                "q90": float(np.quantile(
+                    y["validation"].to_numpy() - validation_predictions["q90"], 0.90
+                )),
+            }
+            predictions["q10"] = (
+                predictions["q10"] + quantile_calibration_offsets_log["q10"]
+            )
+            predictions["q90"] = (
+                predictions["q90"] + quantile_calibration_offsets_log["q90"]
+            )
+            print("Validation calibration offsets (log space):", quantile_calibration_offsets_log)
             """
         ),
         code(
@@ -394,14 +421,21 @@ def build_notebook(scope: str):
                     "iterations": ITERATIONS,
                     "depth": DEPTH,
                     "learning_rate": LEARNING_RATE,
+                    "l2_leaf_reg": L2_LEAF_REG,
                     "early_stopping_rounds": EARLY_STOPPING_ROUNDS,
                     "random_seed": RANDOM_SEED,
+                    "objectives": model_objectives,
                 },
                 "best_iterations": {name: int(model.get_best_iteration()) for name, model in models.items()},
+                "quantile_calibration": {
+                    "method": "validation_residual_tail_offsets",
+                    "offsets_log": quantile_calibration_offsets_log,
+                },
                 "overall_test_metrics": overall_metrics,
                 "segment_test_metrics": segment_metrics.reset_index().to_dict(orient="records"),
                 "feature_columns": feature_columns,
                 "categorical_features": categorical_features,
+                "feature_profile": metadata.get("feature_profile", "legacy_full_v2"),
             }
 
             if SAVE_CANDIDATE_MODELS:
@@ -483,6 +517,23 @@ segment_column = "city" if SCOPE == "universal" else "rooms_segment"'''
     warning = evaluation.get("warning")
     status = "**Status: provisional.**" if warning else "**Status: candidate model.**"
     warning_text = warning or "All configured scrape partitions were complete."
+    comparison_text = ""
+    optimization_path = (
+        ROOT / "models_candidate" / "optimization_v2" /
+        evaluation["scope"] / "results.json"
+    )
+    if optimization_path.exists():
+        optimization = json.loads(optimization_path.read_text(encoding="utf-8"))
+        baseline_metrics = optimization["test_results"][
+            "baseline_quantile_full"
+        ]["overall"]
+        relative_improvement = (
+            1 - metrics["log_rmse"] / baseline_metrics["log_rmse"]
+        ) * 100
+        comparison_text = (
+            f" Compared with the previous 55-feature Quantile baseline, "
+            f"held-out log RMSE improved by **{relative_improvement:.1f}%**."
+        )
     summary = f"""
     # {notebook.cells[0].source.splitlines()[0].removeprefix('# ').strip()}
 
@@ -492,7 +543,7 @@ segment_column = "city" if SCOPE == "universal" else "rooms_segment"'''
     **{metrics['approx_multiplicative_error_pct']:.1f}% multiplicative error**, median
     absolute percentage error **{metrics['median_absolute_percentage_error_pct']:.1f}%**,
     and q10–q90 coverage **{metrics['q10_q90_coverage_pct']:.1f}%** on
-    **{metrics['rows']:,} test rows**.
+    **{metrics['rows']:,} test rows**.{comparison_text}
 
     {status} {warning_text} The notebook saves a candidate bundle only and
     does not replace the production Astana model.

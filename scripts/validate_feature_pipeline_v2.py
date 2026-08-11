@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.feature_pipeline_v2 import (
+    OPTIMIZED_MODEL_FEATURE_COLUMNS,
     POI_CATEGORIES,
     POI_COUNT_RADII_KM,
     UNIVERSAL_FEATURE_COLUMNS,
@@ -89,6 +90,14 @@ def validate_frame(features: pd.DataFrame) -> None:
         raise AssertionError("The same ЖК name in two cities must remain two categories")
     if not np.allclose(features["dist_to_city_center_km"], 0, atol=0.05):
         raise AssertionError("City-center distance calculation is inconsistent")
+    if features["rooms_segment"].tolist() != ["2", "3"]:
+        raise AssertionError("Room segment engineering is inconsistent")
+    if not np.allclose(features["area_per_room"], [30.0, 85.0 / 3.0]):
+        raise AssertionError("Area-per-room engineering is inconsistent")
+    if "dist_to_city_center_normalized" in OPTIMIZED_MODEL_FEATURE_COLUMNS:
+        raise AssertionError("Exact duplicate center-distance feature was not pruned")
+    if len(OPTIMIZED_MODEL_FEATURE_COLUMNS) != 41:
+        raise AssertionError("Optimized model profile must contain 41 features")
     forbidden = ("baiterek", "expo", "khanshatyr", "lrt", "mangilikel")
     if any(any(token in column for token in forbidden) for column in features.columns):
         raise AssertionError("Astana-only landmark leaked into v2 features")
