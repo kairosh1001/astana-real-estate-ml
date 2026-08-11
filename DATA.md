@@ -33,12 +33,27 @@ Run the resumable full collector from PowerShell at the repository root:
 .\.venv\Scripts\python.exe scripts\scrape_almaty.py
 ```
 
-It targets 20,000 unique apartment-sale listings by default and writes them to
-`data/almaty_sale_raw.csv`. Krisha limits a single result set to 1,000 pages, so
-the collector uses non-overlapping room-count partitions and deduplicates the
-combined output by canonical listing URL. Progress is checkpointed in
+It resumes the existing `data/almaty_sale_raw.csv` and works toward balanced
+room-count quotas: 10,000 one-room, 12,000 two-room, 10,000 three-room, 6,000
+four-room, and 3,000 five-room-or-larger listings. Existing listings count
+toward the quotas, so the current 20,000-row file is not downloaded again.
+
+Krisha limits a single result set to 1,000 pages, so the collector uses
+non-overlapping room-count partitions and deduplicates the combined output by
+canonical listing URL. Progress is checkpointed in
 `data/almaty_sale_raw.state.json`. After an interruption, rerun the same command
-to continue.
+to continue. A partition is accepted when its quota is reached or its available
+inventory is exhausted.
+
+To scale the same room mix to a different aggregate target, use for example:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\scrape_almaty.py --target 50000
+```
+
+Individual quotas can also be overridden, for example
+`--rooms-3-target 12000 --rooms-4-target 8000`. Increasing a quota later resumes
+from the saved search page; it does not discard previously collected rows.
 
 The default delay is deliberately conservative. A complete detail-page crawl
 can take several hours. Keep the terminal and computer awake, do not open the

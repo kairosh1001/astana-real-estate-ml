@@ -25,8 +25,7 @@ from scrape import ApartmentScraper
 
 BASE_PATH = "/prodazha/kvartiry/almaty/"
 DEFAULT_OUTPUT = ROOT / "data" / "almaty_sale_raw.csv"
-DEFAULT_TARGET = 20_000
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Krisha caps a search result at 1,000 pages. Splitting by room count keeps the
 # searches disjoint and lets the collector pass the cap without price ranges
@@ -38,6 +37,17 @@ ROOM_PARTITIONS = (
     ("rooms_4", "4"),
     ("rooms_5_plus", "5.100"),
 )
+
+# The collector works toward a useful room mix instead of stopping as soon as
+# one global row count is reached. Existing rows count toward these targets.
+DEFAULT_PARTITION_TARGETS = {
+    "rooms_1": 10_000,
+    "rooms_2": 12_000,
+    "rooms_3": 10_000,
+    "rooms_4": 6_000,
+    "rooms_5_plus": 3_000,
+}
+DEFAULT_TOTAL_TARGET = sum(DEFAULT_PARTITION_TARGETS.values())
 
 
 class AlmatyApartmentScraper(ApartmentScraper):
@@ -56,11 +66,26 @@ class AlmatyApartmentScraper(ApartmentScraper):
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Collect at least 20,000 unique Almaty apartment-sale listings "
-            "from Krisha.kz with checkpoints and automatic resume."
+            "Collect a balanced room-count sample of Almaty apartment-sale "
+            "listings from Krisha.kz with checkpoints and automatic resume."
         )
     )
-    parser.add_argument("--target", type=int, default=DEFAULT_TARGET)
+    parser.add_argument(
+        "--target",
+        type=int,
+        help=(
+            "Optional balanced total target. It is distributed across room "
+            f"partitions; the default quotas total {DEFAULT_TOTAL_TARGET:,}."
+        ),
+    )
+    for partition_name, _ in ROOM_PARTITIONS:
+        option = f"--{partition_name.replace('_', '-')}-target"
+        parser.add_argument(
+            option,
+            dest=f"{partition_name}_target",
+            type=int,
+            help=f"Override the target for {partition_name}.",
+        )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
         "--state",
@@ -87,8 +112,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def validate_args(args: argparse.Namespace) -> None:
-    if args.target < DEFAULT_TARGET:
-        raise ValueError(f"--target must be at least {DEFAULT_TARGET}")
+    if args.target is not None and args.target < len(ROOM_PARTITIONS):
+        raise ValueError(f"--target must be at least {len(ROOM_PARTITIONS)}")
+    for partition_name, _ in ROOM_PARTITIONS:
+        value = getattr(args, f"{partition_name}_target")
+        if value is not None and value <= 0:
+            raise ValueError(f"--{partition_name.replace('_', '-')}-target must be positive")
     if args.timeout <= 0:
         raise ValueError("--timeout must be positive")
     if args.checkpoint_every <= 0:
@@ -103,6 +132,44 @@ def validate_args(args: argparse.Namespace) -> None:
     ):
         if minimum < 0 or maximum < minimum:
             raise ValueError(f"Invalid {label} bounds")
+
+
+def scaled_partition_targets(total_target: int) -> dict[str, int]:
+    """Scale the default room mix to an exact aggregate target."""
+    weights = {
+        name: DEFAULT_PARTITION_TARGETS[name] / DEFAULT_TOTAL_TARGET
+        for name, _ in ROOM_PARTITIONS
+    }
+    raw = {name: total_target * weight for name, weight in weights.items()}
+    targets = {name: max(1, int(value)) for name, value in raw.items()}
+    difference = total_target - sum(targets.values())
+    order = sorted(
+        targets,
+        key=lambda name: raw[name] - int(raw[name]),
+        reverse=difference > 0,
+    )
+    step = 1 if difference > 0 else -1
+    cursor = 0
+    while difference:
+        name = order[cursor % len(order)]
+        if step > 0 or targets[name] > 1:
+            targets[name] += step
+            difference -= step
+        cursor += 1
+    return targets
+
+
+def resolve_partition_targets(args: argparse.Namespace) -> dict[str, int]:
+    targets = (
+        scaled_partition_targets(args.target)
+        if args.target is not None
+        else dict(DEFAULT_PARTITION_TARGETS)
+    )
+    for partition_name, _ in ROOM_PARTITIONS:
+        override = getattr(args, f"{partition_name}_target")
+        if override is not None:
+            targets[partition_name] = override
+    return targets
 
 
 def canonical_listing_url(base_url: str, href: str) -> str:
@@ -255,6 +322,24 @@ def unique_urls(frame: pd.DataFrame) -> set[str]:
     return set(frame["url"].dropna().astype(str))
 
 
+def partition_counts(frame: pd.DataFrame) -> dict[str, int]:
+    counts = {name: 0 for name, _ in ROOM_PARTITIONS}
+    if frame.empty or "scrape_partition" not in frame.columns:
+        return counts
+    observed = frame["scrape_partition"].astype("string").value_counts()
+    for name in counts:
+        counts[name] = int(observed.get(name, 0))
+    return counts
+
+
+def partition_status(count: int, target: int, inventory_complete: bool) -> str:
+    if count >= target:
+        return "quota_met"
+    if inventory_complete:
+        return "inventory_exhausted"
+    return "incomplete"
+
+
 def quality_summary(frame: pd.DataFrame) -> dict[str, Any]:
     def missing(column: str) -> int:
         if column not in frame.columns:
@@ -264,6 +349,7 @@ def quality_summary(frame: pd.DataFrame) -> dict[str, Any]:
 
     return {
         "unique_listings": len(unique_urls(frame)),
+        "partition_counts": partition_counts(frame),
         "missing_price": missing("price"),
         "missing_lat": missing("lat"),
         "missing_lon": missing("lon"),
@@ -276,17 +362,28 @@ def main() -> None:
 
     args = parse_args()
     validate_args(args)
+    targets = resolve_partition_targets(args)
     output = args.output.resolve()
     state_path = (args.state or output.with_suffix(".state.json")).resolve()
     existing = load_existing(output)
     state = load_state(state_path)
     saved_urls = unique_urls(existing)
+    collected_by_partition = partition_counts(existing)
     pending_rows: list[dict[str, Any]] = []
     pending_urls: set[str] = set()
-    failed_urls: dict[str, int] = {
-        str(url): int(attempts)
-        for url, attempts in state.get("failed_urls", {}).items()
-    }
+    failed_urls: dict[str, dict[str, Any]] = {}
+    for url, saved_failure in state.get("failed_urls", {}).items():
+        if isinstance(saved_failure, dict):
+            failed_urls[str(url)] = {
+                "attempts": int(saved_failure.get("attempts", 0)),
+                "partition": str(saved_failure.get("partition") or "retry"),
+            }
+        else:
+            # Backward compatibility with schema v1, which stored only attempts.
+            failed_urls[str(url)] = {
+                "attempts": int(saved_failure),
+                "partition": "retry",
+            }
     scraper = AlmatyApartmentScraper(
         timeout=args.timeout,
         fetch_developers=args.fetch_developers,
@@ -306,13 +403,22 @@ def main() -> None:
         state["failed_urls"] = dict(sorted(failed_urls.items()))
         state["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         state["unique_listings"] = len(saved_urls)
+        state["partition_targets"] = targets
+        state["partition_counts"] = dict(collected_by_partition)
         atomic_write_json(state, state_path)
         print(f"[CHECKPOINT] {len(saved_urls):,} unique listings -> {output}")
 
     def fetch_detail(url: str, partition_name: str) -> bool:
         row = scraper.parse_apartment_page(url)
         if not row:
-            failed_urls[url] = failed_urls.get(url, 0) + 1
+            previous = failed_urls.get(url, {})
+            previous_partition = str(previous.get("partition") or partition_name)
+            failed_urls[url] = {
+                "attempts": int(previous.get("attempts", 0)) + 1,
+                "partition": (
+                    partition_name if partition_name != "retry" else previous_partition
+                ),
+            }
             return False
         row["url"] = canonical_listing_url(scraper.base_url, str(row.get("url") or url))
         row["listing_id"] = listing_id_from_url(row["url"])
@@ -322,13 +428,25 @@ def main() -> None:
         row["scrape_schema_version"] = SCHEMA_VERSION
         pending_rows.append(row)
         pending_urls.add(row["url"])
+        if partition_name in collected_by_partition:
+            collected_by_partition[partition_name] += 1
         failed_urls.pop(url, None)
         return True
 
     print(f"[INFO] Existing unique listings: {len(saved_urls):,}")
-    print(f"[INFO] Target: {args.target:,}; output: {output}")
-    if len(saved_urls) >= args.target:
-        print("[OK] Target is already satisfied; nothing to scrape.")
+    print(f"[INFO] Balanced target: {sum(targets.values()):,}; output: {output}")
+    for partition_name, _ in ROOM_PARTITIONS:
+        print(
+            f"[INFO] {partition_name}: {collected_by_partition[partition_name]:,}/"
+            f"{targets[partition_name]:,}"
+        )
+    already_satisfied = all(
+        collected_by_partition[name] >= targets[name]
+        or bool(state["partitions"][name].get("complete"))
+        for name, _ in ROOM_PARTITIONS
+    )
+    if already_satisfied:
+        print("[OK] Every room partition met its quota or exhausted its inventory.")
         print(json.dumps(quality_summary(existing), ensure_ascii=False, indent=2))
         scraper.session.close()
         return
@@ -336,14 +454,26 @@ def main() -> None:
     interrupted = False
     try:
         for partition_name, room_value in ROOM_PARTITIONS:
-            if total_unique() >= args.target:
-                break
             progress = state["partitions"][partition_name]
+            partition_target = targets[partition_name]
+            if collected_by_partition[partition_name] >= partition_target:
+                print(
+                    f"[OK] {partition_name}: quota already met "
+                    f"({collected_by_partition[partition_name]:,}/{partition_target:,})"
+                )
+                continue
             if progress.get("complete"):
+                print(
+                    f"[INFO] {partition_name}: inventory exhausted at "
+                    f"{collected_by_partition[partition_name]:,}/{partition_target:,}"
+                )
                 continue
             page = max(1, int(progress.get("next_page") or 1))
             stale_pages = 0
-            while page <= args.max_pages_per_partition and total_unique() < args.target:
+            while (
+                page <= args.max_pages_per_partition
+                and collected_by_partition[partition_name] < partition_target
+            ):
                 page_url = build_partition_url(scraper.base_url, room_value, page)
                 html = scraper.fetch_page(page_url)
                 if not html:
@@ -376,19 +506,29 @@ def main() -> None:
                 )
 
                 for url in new_inventory_urls:
-                    if total_unique() >= args.target:
+                    if collected_by_partition[partition_name] >= partition_target:
                         break
                     if fetch_detail(url, partition_name):
-                        print(f"[OK] {total_unique():,}/{args.target:,} {url}")
+                        print(
+                            f"[OK] {partition_name} "
+                            f"{collected_by_partition[partition_name]:,}/"
+                            f"{partition_target:,}; total={total_unique():,} {url}"
+                        )
                     else:
                         print(f"[WARN] Detail parse failed: {url}")
                     if args.max_delay:
                         time.sleep(random.uniform(args.min_delay, args.max_delay))
 
-                page += 1
-                progress["next_page"] = page
+                quota_met = collected_by_partition[partition_name] >= partition_target
+                if quota_met:
+                    # Revisit this page if a future run raises the quota. Already
+                    # saved URLs will be skipped, so unprocessed cards are not lost.
+                    progress["next_page"] = page
+                else:
+                    page += 1
+                    progress["next_page"] = page
                 last_page = progress.get("last_page")
-                if last_page is not None and page > int(last_page):
+                if not quota_met and last_page is not None and page > int(last_page):
                     progress["complete"] = True
                 if stale_pages >= 3:
                     progress["complete"] = True
@@ -396,10 +536,10 @@ def main() -> None:
                 if (
                     len(pending_rows) >= args.checkpoint_every
                     or progress.get("complete")
-                    or total_unique() >= args.target
+                    or quota_met
                 ):
                     save_checkpoint()
-                if progress.get("complete"):
+                if progress.get("complete") or quota_met:
                     break
                 if args.max_page_delay:
                     time.sleep(
@@ -407,15 +547,14 @@ def main() -> None:
                     )
 
         for retry_pass in range(1, args.failure_retry_passes + 1):
-            if total_unique() >= args.target or not failed_urls:
+            if not failed_urls:
                 break
             retry_urls = list(failed_urls)
             print(f"[INFO] Failure retry pass {retry_pass}: {len(retry_urls):,} URLs")
             for url in retry_urls:
-                if total_unique() >= args.target:
-                    break
-                if fetch_detail(url, "retry"):
-                    print(f"[RECOVERED] {total_unique():,}/{args.target:,} {url}")
+                retry_partition = str(failed_urls[url].get("partition") or "retry")
+                if fetch_detail(url, retry_partition):
+                    print(f"[RECOVERED] total={total_unique():,} {url}")
                 if args.max_delay:
                     time.sleep(random.uniform(max(2.0, args.min_delay), max(4.0, args.max_delay)))
                 if len(pending_rows) >= args.checkpoint_every:
@@ -430,17 +569,33 @@ def main() -> None:
             scraper.session.close()
 
     summary = quality_summary(existing)
+    summary["partition_targets"] = targets
+    summary["partition_status"] = {
+        name: partition_status(
+            summary["partition_counts"][name],
+            targets[name],
+            bool(state["partitions"][name].get("complete")),
+        )
+        for name, _ in ROOM_PARTITIONS
+    }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     if interrupted:
         print(f"[STOPPED] Progress saved. Rerun the same command to continue: {state_path}")
         return
-    if summary["unique_listings"] < args.target:
+    unfinished = [
+        name
+        for name, status in summary["partition_status"].items()
+        if status == "incomplete"
+    ]
+    if unfinished:
         raise RuntimeError(
-            f"Collected {summary['unique_listings']:,} unique listings, below the "
-            f"{args.target:,} target. Rerun the same command: completed segments "
-            "will be skipped and pending failures retried."
+            f"Room partitions remain incomplete: {unfinished}. Rerun the same "
+            "command; completed quotas will be skipped and progress will resume."
         )
-    print(f"[DONE] Collected {summary['unique_listings']:,} unique Almaty listings")
+    print(
+        f"[DONE] Collected {summary['unique_listings']:,} unique Almaty listings "
+        "with every room quota met or available inventory exhausted"
+    )
 
 
 if __name__ == "__main__":
