@@ -139,6 +139,9 @@ def build_notebook(scope: str):
                     "--input", str(ROOT / "krisha_data_raw.csv"),
                     "--input", str(ROOT / "data" / "almaty_sale_raw.csv"),
                 ]
+                astana_refresh = ROOT / "data" / "astana_sale_raw.csv"
+                if astana_refresh.exists():
+                    command.extend(["--input", str(astana_refresh)])
                 subprocess.run(command, cwd=ROOT, check=True)
 
             if not DATA_PATH.exists() or not METADATA_PATH.exists():
@@ -465,6 +468,16 @@ test_results["rooms_segment"] = test_results["rooms"].map(room_segment)
 segment_rows = []
 segment_column = "city" if SCOPE == "universal" else "rooms_segment"'''
             cell.source = cell.source.replace(old_segment_code, new_segment_code)
+            old_rebuild_code = '''"--input", str(ROOT / "data" / "almaty_sale_raw.csv"),
+    ]
+    subprocess.run(command, cwd=ROOT, check=True)'''
+            new_rebuild_code = '''"--input", str(ROOT / "data" / "almaty_sale_raw.csv"),
+    ]
+    astana_refresh = ROOT / "data" / "astana_sale_raw.csv"
+    if astana_refresh.exists():
+        command.extend(["--input", str(astana_refresh)])
+    subprocess.run(command, cwd=ROOT, check=True)'''
+            cell.source = cell.source.replace(old_rebuild_code, new_rebuild_code)
     evaluation = json.loads(evaluation_path.read_text(encoding="utf-8"))
     metrics = evaluation["overall_test_metrics"]
     warning = evaluation.get("warning")

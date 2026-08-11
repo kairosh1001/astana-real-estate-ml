@@ -89,8 +89,11 @@ dataset with:
 .\.venv\Scripts\python.exe scripts\build_universal_dataset.py `
   --input krisha_data_raw_orig.csv `
   --input krisha_data_raw.csv `
-  --input data\almaty_sale_raw.csv
+  --input data\almaty_sale_raw.csv `
+  --input data\astana_sale_raw.csv
 ```
+
+Omit the final Astana refresh input until that optional file has been created.
 
 The generated `data/universal_training_v2.csv` contains city-aware location
 categories, H3 cells, distance to each city center, and reusable OSM proximity
