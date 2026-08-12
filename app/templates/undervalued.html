@@ -15,14 +15,14 @@
   </div>
   <div class="listing-actions-bar">
     <button class="button secondary" type="button" data-copy-current-url>Скопировать поиск</button>
-    <a class="button secondary" href="/predict-page?city={{ city.slug }}">Оценить ссылку</a>
+    <a class="button secondary" href="/predict-page{% if city.slug != 'both' %}?city={{ city.slug }}{% endif %}">Оценить ссылку</a>
   </div>
 </div>
 
 <section class="panel">
   <div class="toolbar">
     <div>
-      <h2>Фильтр по району</h2>
+      <h2>{% if city.slug == "both" %}Рейтинг двух городов{% else %}Фильтр по району{% endif %}</h2>
       <p class="muted">
         Показано {{ items|length }} из {{ total }} вариантов.
         Активных объявлений в базе: {{ active_listings }}.
@@ -33,6 +33,11 @@
 
   <form id="filter-form" method="get" action="/undervalued-page">
     <input type="hidden" name="city" value="{{ city.slug }}">
+    {% if city.slug == "both" %}
+    <div class="combined-city-note">
+      Районы отличаются между городами. Выберите «Астана» или «Алматы» в верхней панели, чтобы включить фильтр по району.
+    </div>
+    {% else %}
     <div class="check-grid" aria-label="Фильтр по району">
       {% for option in district_options %}
       <label class="check-chip {% if option.slug in selected_districts %}active{% endif %}">
@@ -46,6 +51,7 @@
       </label>
       {% endfor %}
     </div>
+    {% endif %}
 
     <input id="map-polygon" type="hidden" name="map_polygon" value="{{ selected_polygon }}">
 
@@ -310,6 +316,7 @@
         lat: {{ item.lat }},
         lon: {{ item.lon }},
         title: {{ item.short_title | tojson }},
+        city: {{ item.city_label | tojson }},
         url: {{ item.url | tojson }}
       },
       {% endfor %}
@@ -317,7 +324,7 @@
     const markerGroup = L.featureGroup();
     listings.forEach((item) => {
       L.marker([item.lat, item.lon])
-        .bindPopup(`<strong>${item.title}</strong><br><a href="${item.url}" target="_blank" rel="noreferrer">Открыть на Krisha</a>`)
+        .bindPopup(`<strong>${item.title}</strong><br>${item.city}<br><a href="${item.url}" target="_blank" rel="noreferrer">Открыть на Krisha</a>`)
         .addTo(markerGroup);
     });
     markerGroup.addTo(map);

@@ -10,7 +10,7 @@
     </p>
     <div class="hero-actions">
       <a class="button" href="#cities">Выбрать город</a>
-      <a class="button secondary" href="#cities">Смотреть рейтинги квартир</a>
+      <a class="button secondary" href="/undervalued-page?city=both">Смотреть рейтинги квартир</a>
       <a class="button secondary" href="/predict-page">Оценить квартиру по ссылке</a>
     </div>
     <div class="hero-stats" aria-label="Текущая статистика сервиса">
@@ -180,13 +180,14 @@
       </p>
     </div>
     <div class="toolbar-actions">
+      <a class="button secondary" href="/undervalued-page?city=both">Оба города</a>
       <a class="button" href="/undervalued-page?city=astana">Рейтинг Астаны</a>
       <a class="button" href="/undervalued-page?city=almaty">Рейтинг Алматы</a>
     </div>
   </div>
   <div class="section">{% include "_undervalued_table.html" %}</div>
   <div class="ranking-footer">
-    <a class="button secondary" href="#cities">Выбрать город и открыть весь рейтинг</a>
+    <a class="button secondary" href="/undervalued-page?city=both">Открыть весь рейтинг Астаны и Алматы</a>
   </div>
 </section>
 {% endblock %}

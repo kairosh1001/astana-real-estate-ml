@@ -28,7 +28,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from app.cities import CITY_OPTIONS, city_config, district_options, normalize_city_slug
+from app.cities import (
+    BOTH_CITIES,
+    CITY_OPTIONS,
+    city_config,
+    city_scope_config,
+    district_options,
+    normalize_city_scope,
+    normalize_city_slug,
+)
 from app.database import (
     APARTMENT_CONDITION_OPTIONS,
     connect,
@@ -83,8 +91,21 @@ ASTANA_TZ = timezone(timedelta(hours=5), name="Asia/Astana")
 
 def _city_template_context(request: Request) -> dict:
     neutral_home = request.url.path == "/"
-    selected_city = city_config(request.query_params.get("city"))
+    selected_scope = (
+        normalize_city_scope(request.query_params.get("city"))
+        if request.url.path == "/undervalued-page"
+        else normalize_city_slug(request.query_params.get("city"))
+    )
+    selected_city = city_scope_config(selected_scope)
     city_choices = []
+    if request.url.path == "/undervalued-page":
+        city_choices.append(
+            {
+                "slug": "both",
+                "label": BOTH_CITIES["name"],
+                "url": "/undervalued-page?city=both",
+            }
+        )
     for option in CITY_OPTIONS:
         if neutral_home:
             city_choices.append(
@@ -570,8 +591,12 @@ def undervalued(
     sort: str = "q10_discount",
     include_stale: bool = False,
 ) -> dict:
-    city_slug = normalize_city_slug(city)
-    selected_districts = valid_district_slugs(district, city=city_slug)
+    city_scope = normalize_city_scope(city)
+    selected_districts = (
+        []
+        if city_scope == "both"
+        else valid_district_slugs(district, city=city_scope)
+    )
     selected_rooms = _parse_optional_int(rooms, allowed={1, 2, 3, 4, 5})
     selected_max_price = _parse_optional_positive_float(max_price)
     selected_min_year = _parse_optional_int(min_year)
@@ -592,7 +617,7 @@ def undervalued(
     with connect(DB_PATH) as db_connection:
         items = fetch_undervalued(
             db_connection,
-            city=city_slug,
+            city=city_scope,
             limit=safe_limit,
             offset=offset,
             districts=selected_districts,
@@ -614,7 +639,7 @@ def undervalued(
         )
         total = count_undervalued(
             db_connection,
-            city=city_slug,
+            city=city_scope,
             districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
@@ -634,7 +659,7 @@ def undervalued(
         )
     return {
         "items": items,
-        "city": city_slug,
+        "city": city_scope,
         "total": total,
         "page": safe_page,
         "limit": safe_limit,
@@ -677,8 +702,12 @@ def undervalued_page(
     sort: str = "q10_discount",
     include_stale: bool = False,
 ) -> HTMLResponse:
-    city_slug = normalize_city_slug(city)
-    selected_districts = valid_district_slugs(district, city=city_slug)
+    city_scope = normalize_city_scope(city)
+    selected_districts = (
+        []
+        if city_scope == "both"
+        else valid_district_slugs(district, city=city_scope)
+    )
     selected_rooms = _parse_optional_int(rooms, allowed={1, 2, 3, 4, 5})
     selected_max_price = _parse_optional_positive_float(max_price)
     selected_min_year = _parse_optional_int(min_year)
@@ -695,7 +724,7 @@ def undervalued_page(
     with connect(DB_PATH) as db_connection:
         total = count_undervalued(
             db_connection,
-            city=city_slug,
+            city=city_scope,
             districts=selected_districts,
             rooms=selected_rooms,
             max_price=selected_max_price,
@@ -720,7 +749,7 @@ def undervalued_page(
         offset = (safe_page - 1) * UNDERVALUED_PAGE_SIZE
         items = fetch_undervalued(
             db_connection,
-            city=city_slug,
+            city=city_scope,
             limit=UNDERVALUED_PAGE_SIZE,
             offset=offset,
             districts=selected_districts,
@@ -739,14 +768,25 @@ def undervalued_page(
             sort=sort,
             include_stale=include_stale,
         )
-        status_summary = fetch_status_summary(db_connection, city=city_slug)
+        if city_scope == "both":
+            active_listings = sum(
+                (fetch_status_summary(db_connection, city=option["slug"]).get("active_listings") or 0)
+                for option in CITY_OPTIONS
+            )
+        else:
+            active_listings = (
+                fetch_status_summary(db_connection, city=city_scope).get("active_listings")
+                or 0
+            )
     return templates.TemplateResponse(
         request,
         "undervalued.html",
         {
             "request": request,
             "items": items,
-            "district_options": district_options(city_slug),
+            "district_options": (
+                [] if city_scope == "both" else district_options(city_scope)
+            ),
             "selected_districts": selected_districts,
             "selected_rooms": selected_rooms,
             "selected_max_price": selected_max_price,
@@ -763,7 +803,7 @@ def undervalued_page(
             "selected_min_discount_pct": selected_min_discount_pct,
             "selected_sort": sort,
             "filter_query": _build_filter_query(
-                city=city_slug,
+                city=city_scope,
                 districts=selected_districts,
                 rooms=selected_rooms,
                 max_price=selected_max_price,
@@ -779,7 +819,7 @@ def undervalued_page(
                 min_discount_pct=selected_min_discount_pct,
                 sort=sort,
             ),
-            "active_listings": status_summary.get("active_listings") or 0,
+            "active_listings": active_listings,
             "page": safe_page,
             "page_size": UNDERVALUED_PAGE_SIZE,
             "total": total,
@@ -1829,7 +1869,7 @@ def _filter_params(
     sort: str | None = None,
     page: int | None = None,
 ) -> list[tuple[str, str]]:
-    params: list[tuple[str, str]] = [("city", normalize_city_slug(city))]
+    params: list[tuple[str, str]] = [("city", normalize_city_scope(city))]
     if page and page > 1:
         params.append(("page", str(page)))
     for district in districts or []:

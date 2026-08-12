@@ -19,7 +19,7 @@ from app.database import (
     upsert_listing_prediction,
 )
 from app.prediction_service import PredictionService
-from app.cities import city_config, normalize_city_slug
+from app.cities import city_config, infer_listing_city, normalize_city_slug
 from scrape import ApartmentScraper
 
 
@@ -140,6 +140,12 @@ def run_refresh(
                     print(f"[WARN] Failed to parse listing: {url}")
                     continue
                 raw_listing["scrape_city"] = city_slug
+                listing_city = infer_listing_city(raw_listing, default=city_slug)
+                if listing_city != city_slug:
+                    print(
+                        f"[WARN] Skipping cross-city listing from {listing_city}: {url}"
+                    )
+                    continue
 
                 try:
                     prediction = prediction_service.predict_raw_listing(

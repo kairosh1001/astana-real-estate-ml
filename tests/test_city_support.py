@@ -22,6 +22,7 @@ from app.database import (
     upsert_telegram_subscriber,
     upsert_listing_prediction,
 )
+from app.cities import infer_listing_city
 from app.prediction_service import ListingPrediction
 
 
@@ -81,6 +82,38 @@ class CityDatabaseTest(unittest.TestCase):
         self.assertEqual(
             len(fetch_home_match_candidates(self.connection, city="almaty")), 1
         )
+        combined = fetch_undervalued(self.connection, city="both")
+        self.assertEqual(len(combined), 2)
+        self.assertEqual({item["city"] for item in combined}, {"astana", "almaty"})
+
+    def test_listing_page_city_wins_over_search_page_city(self) -> None:
+        self.assertEqual(
+            infer_listing_city(
+                {
+                    "scrape_city": "almaty",
+                    "Город": "Астана, Алматы р-н",
+                    "lat": 51.15,
+                    "lon": 71.50,
+                }
+            ),
+            "astana",
+        )
+
+    def test_init_quarantines_existing_cross_city_rows(self) -> None:
+        astana_url = _prediction("astana").url
+        self.connection.execute(
+            "UPDATE listings SET city = 'almaty', status = 'active' WHERE url = ?",
+            (astana_url,),
+        )
+        self.connection.commit()
+
+        init_db(self.connection)
+
+        row = self.connection.execute(
+            "SELECT city, status FROM listings WHERE url = ?",
+            (astana_url,),
+        ).fetchone()
+        self.assertEqual(dict(row), {"city": "astana", "status": "stale"})
 
     def test_stale_accounting_is_city_scoped(self) -> None:
         mark_refresh_started(self.connection, city="almaty")

@@ -157,13 +157,7 @@ class PredictionService:
                 raise RuntimeError("Universal v2 model bundle is incomplete.")
             return self.routing_mode
 
-        city_values = [
-            raw_listing.get("scrape_city"),
-            raw_listing.get("city"),
-            raw_listing.get("Город"),
-        ]
-        city_text = " ".join(str(value).casefold() for value in city_values if value)
-        if "алмат" in city_text or "almaty" in city_text:
+        if infer_listing_city(raw_listing) == "almaty":
             if self._v2_bundle_complete("almaty_v2"):
                 return "almaty_v2"
             if self._v2_bundle_complete("universal_v2"):

@@ -255,6 +255,12 @@ p {
   color: var(--teal-dark);
 }
 
+.site-nav .telegram-nav-link {
+  border-color: color-mix(in srgb, var(--teal) 42%, var(--line));
+  background: color-mix(in srgb, var(--teal) 10%, transparent);
+  color: var(--teal-dark);
+}
+
 .header-actions {
   display: flex;
   position: static;
@@ -2557,7 +2563,38 @@ html[data-theme="light"] .site-footer {
     linear-gradient(90deg, rgba(3, 8, 23, 0.98) 0%, rgba(5, 15, 36, 0.9) 50%, rgba(11, 32, 52, 0.7) 100%),
     radial-gradient(circle at 82% 24%, rgba(49, 216, 255, 0.32), transparent 24%),
     radial-gradient(circle at 72% 82%, rgba(122, 108, 255, 0.28), transparent 30%),
-    linear-gradient(145deg, #061023, #10294a 54%, #0d3443);
+    url("/static/astana-hero.jpg") center 45% / cover;
+}
+
+.combined-city-note {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--soft);
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+@media (min-width: 761px) and (max-width: 1600px) {
+  .site-header-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .header-actions {
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: flex-end;
+  }
+
+  .site-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }
 
 .city-market-section {

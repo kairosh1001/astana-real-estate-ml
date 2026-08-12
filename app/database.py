@@ -9,7 +9,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
-from app.cities import city_config, district_options, infer_listing_city, normalize_city_slug
+from app.cities import (
+    city_config,
+    coordinates_match_city,
+    district_options,
+    infer_listing_city,
+    normalize_city_scope,
+    normalize_city_slug,
+)
 from app.prediction_service import ListingPrediction
 
 
@@ -181,6 +188,7 @@ def init_db(connection: sqlite3.Connection) -> None:
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_refresh_runs_city_id ON refresh_runs(city, id DESC)"
     )
+    _quarantine_misclassified_listings(connection)
     connection.commit()
 
 
@@ -195,6 +203,35 @@ def _ensure_column(
     }
     if column not in columns:
         connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _quarantine_misclassified_listings(connection: sqlite3.Connection) -> int:
+    """Remove cross-city cards until their correct city refresh predicts them again."""
+    rows = connection.execute(
+        "SELECT url, city, raw_json FROM listings WHERE status = 'active'"
+    ).fetchall()
+    mismatches: list[tuple[str, str]] = []
+    for row in rows:
+        raw_listing = _load_raw_listing(row["raw_json"])
+        detected_city = infer_listing_city(raw_listing, default=str(row["city"]))
+        stored_city = normalize_city_slug(row["city"])
+        if detected_city != stored_city:
+            mismatches.append((detected_city, str(row["url"])))
+    if not mismatches:
+        return 0
+    connection.executemany(
+        """
+        UPDATE listings
+        SET city = ?, status = 'stale', missed_refreshes = 3
+        WHERE url = ?
+        """,
+        mismatches,
+    )
+    connection.executemany(
+        "UPDATE listing_price_history SET status = 'stale' WHERE url = ?",
+        [(url,) for _, url in mismatches],
+    )
+    return len(mismatches)
 
 
 def fetch_cached_prediction(
@@ -773,6 +810,9 @@ def fetch_undervalued(
     include_stale: bool = False,
 ) -> list[dict]:
     status_clause = "" if include_stale else "AND status = 'active'"
+    city_scope = normalize_city_scope(city)
+    city_clause = "city IN ('astana', 'almaty')" if city_scope == "both" else "city = ?"
+    city_params: tuple[str, ...] = () if city_scope == "both" else (city_scope,)
     rows = connection.execute(
         f"""
         SELECT
@@ -794,12 +834,12 @@ def fetch_undervalued(
             discount_vs_asking_pct_median,
             interval_width_pct
         FROM listings
-        WHERE city = ?
+        WHERE {city_clause}
           AND discount_vs_asking_pct_conservative > 0
           {status_clause}
         ORDER BY discount_vs_asking_pct_conservative DESC
         """,
-        (normalize_city_slug(city),),
+        city_params,
     ).fetchall()
     items = [_prepare_undervalued_item(dict(row)) for row in rows]
     if districts:
@@ -1949,8 +1989,14 @@ def _prepare_undervalued_item(row: dict) -> dict:
     row["furnished_label"] = _format_furnished_label(row["furnished"])
     row["building_type"] = _clean_text(raw_listing.get("Тип дома"))
     row["address"] = _extract_address(raw_listing)
-    row["lat"] = _extract_float(raw_listing.get("lat"))
-    row["lon"] = _extract_float(raw_listing.get("lon"))
+    latitude = _extract_float(raw_listing.get("lat"))
+    longitude = _extract_float(raw_listing.get("lon"))
+    if coordinates_match_city(latitude, longitude, city_slug):
+        row["lat"] = latitude
+        row["lon"] = longitude
+    else:
+        row["lat"] = None
+        row["lon"] = None
     row["short_title"] = _short_listing_title(row.get("title"), row.get("area_m2"))
     row["listing_summary"] = _listing_summary_with_district(
         row["short_title"],

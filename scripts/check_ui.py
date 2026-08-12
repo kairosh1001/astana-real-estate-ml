@@ -461,9 +461,9 @@ def main() -> None:
     nav_end = home.text.index("</nav>", nav_start)
     home_nav = home.text[nav_start:nav_end]
     nav_links = [
-        'href="#cities">Подобрать квартиру</a>',
+        'href="/find-home-page?city=astana">Подобрать квартиру</a>',
         'href="/predict-page">Оценить по ссылке</a>',
-        'href="#cities">Квартиры ниже рынка</a>',
+        'href="/undervalued-page?city=both">Квартиры ниже рынка</a>',
         'href="#cities">Анализ рынка</a>',
     ]
     nav_positions = [home_nav.index(link) for link in nav_links]
@@ -499,6 +499,21 @@ def main() -> None:
     assert_contains(almaty_rating.text, "Квартиры ниже рынка в Алматы")
     assert_contains(almaty_rating.text, "Бостандык")
     assert_not_contains(almaty_rating.text, "Есиль")
+    assert_contains(almaty_rating.text, "43.238")
+    assert_contains(almaty_rating.text, "76.945")
+
+    combined_rating = client.get("/undervalued-page?city=both")
+    if combined_rating.status_code != 200:
+        raise SystemExit(f"Combined rating returned {combined_rating.status_code}")
+    for needle in [
+        "Квартиры ниже рынка в Астане и Алматы",
+        "Рейтинг двух городов",
+        "Астана и Алматы",
+        "Районы отличаются между городами",
+        "Test ЖК",
+        "Test Almaty ЖК",
+    ]:
+        assert_contains(combined_rating.text, needle)
 
     home_finder = client.get("/find-home-page")
     if home_finder.status_code != 200:
