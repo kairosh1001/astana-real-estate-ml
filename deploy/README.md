@@ -122,6 +122,17 @@ docker compose --profile tools run --rm refresh \
   python scripts/refresh_listings.py --city almaty --kind manual --pages 1 --max-listings 3 --min-delay 0 --max-delay 0
 ```
 
+One-time Almaty recovery/backfill after deploying city support:
+
+```bash
+docker compose --profile tools run --rm refresh \
+  python scripts/refresh_listings.py --city almaty --kind manual --pages 200
+```
+
+Watch the final line in the command output. `pages`, `urls`, `processed`, and
+`failed` show whether Krisha pages were actually parsed; the page limit alone does
+not guarantee that every response contained listings.
+
 Admin endpoint smoke test:
 
 ```bash
@@ -237,6 +248,9 @@ Start the website, HTTPS proxy, and bot:
 ```bash
 docker compose --profile https --profile bot up -d --build
 ```
+
+In the bot, subscribers choose `Астана`, `Алматы`, or `Оба города`. The same
+choices are available as `/astana`, `/almaty`, and `/both`.
 
 Check logs:
 

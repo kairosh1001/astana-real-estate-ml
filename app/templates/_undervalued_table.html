@@ -48,9 +48,10 @@
         <td class="listing-cell" data-label="Объявление">
           <strong>{{ item.short_title }}</strong>
           <span>{{ "{:,.0f}".format(item.listed_price or 0) }} тг</span>
+          <span class="listing-city-label">{{ item.city_label }}</span>
         </td>
-        <td data-label="Район">{% if item.district_slug %}<a class="entity-link" href="/district/{{ item.district_slug }}?city={{ item.city }}" title="Открыть аналитику района {{ item.district_label }} в {{ city.in_name }}">{{ item.district_label }}</a>{% else %}—{% endif %}</td>
-        <td data-label="Жилой комплекс">{% if item.residential_complex %}<a class="entity-link" href="/complex-page?city={{ item.city }}&name={{ item.residential_complex | urlencode }}" title="Открыть аналитику ЖК {{ item.residential_complex }} в {{ city.in_name }}">{{ item.residential_complex }}</a>{% else %}—{% endif %}</td>
+        <td data-label="Район">{% if item.district_slug %}<a class="entity-link" href="/district/{{ item.district_slug }}?city={{ item.city }}" title="Открыть аналитику района {{ item.district_label }}, {{ item.city_label }}">{{ item.district_label }}</a>{% else %}—{% endif %}</td>
+        <td data-label="Жилой комплекс">{% if item.residential_complex %}<a class="entity-link" href="/complex-page?city={{ item.city }}&name={{ item.residential_complex | urlencode }}" title="Открыть аналитику ЖК {{ item.residential_complex }}, {{ item.city_label }}">{{ item.residential_complex }}</a>{% else %}—{% endif %}</td>
         <td data-label="Krisha"><a href="{{ item.url }}" target="_blank" rel="noreferrer">Открыть</a></td>
         <td data-label="Цена/м²">{{ "{:,.0f}".format(item.listed_price_per_m2 or 0) }}</td>
         <td data-label="Нижняя оценка">{{ "{:,.0f}".format(item.pred_price_per_m2_q10 or 0) }}</td>

@@ -1,32 +1,71 @@
 {% extends "base.html" %}
-{% block title %}Kvartiry-ai.kz — ИИ-подбор квартир в {{ city.in_name }}{% endblock %}
+{% block title %}Kvartiry-ai.kz — подбор квартир в Астане и Алматы{% endblock %}
 {% block content %}
-<section class="hero hero-{{ city.slug }}" data-spotlight>
+<section class="hero hero-neutral" data-spotlight>
   <div>
     <span class="hero-eyebrow">Подбор квартир Krisha.kz с помощью ИИ</span>
     <h1>Kvartiry-ai.kz</h1>
     <p>
-      Найдите нужную вам квартиру в {{ city.in_name }} по выгодной цене с помощью искусственного интеллекта, быстро и бесплатно!
+      Найдите нужную вам квартиру в Астане или Алматы по выгодной цене с помощью искусственного интеллекта. Быстро, бесплатно, эффективно.
     </p>
     <div class="hero-actions">
-      <a class="button" href="/undervalued-page?city={{ city.slug }}">Смотреть рейтинг квартир</a>
-      <a class="button secondary" href="/find-home-page?city={{ city.slug }}">Подобрать квартиру</a>
-      <a class="button secondary" href="/predict-page?city={{ city.slug }}">Оценить квартиру по ссылке</a>
+      <a class="button" href="#cities">Выбрать город</a>
+      <a class="button secondary" href="#cities">Смотреть рейтинги квартир</a>
+      <a class="button secondary" href="/predict-page">Оценить квартиру по ссылке</a>
     </div>
     <div class="hero-stats" aria-label="Текущая статистика сервиса">
       <div class="hero-stat">
         <strong>{{ active_listings }}</strong>
-        <span>активных объявлений</span>
+        <span>объявлений в двух городах</span>
       </div>
       <div class="hero-stat">
         <strong>{{ total_undervalued }}</strong>
         <span>вариантов ниже рынка</span>
       </div>
       <div class="hero-stat">
-        <strong>q10–q90</strong>
-        <span>диапазон оценки ИИ</span>
+        <strong>2</strong>
+        <span>локальные ИИ-модели</span>
       </div>
     </div>
+  </div>
+</section>
+
+<section class="section city-market-section" id="cities">
+  <div class="section-heading centered-heading">
+    <span class="hero-eyebrow">Выберите рынок</span>
+    <h2>Астана и Алматы</h2>
+    <p class="muted">У каждого города — своя модель, районы, рейтинг выгодных квартир и аналитика рынка.</p>
+  </div>
+  <div class="city-market-grid">
+    {% for card in city_cards %}
+    <article class="city-market-card city-market-card-{{ card.slug }}" data-spotlight>
+      <div class="city-market-card-head">
+        <div>
+          <span class="city-kicker">Рынок квартир</span>
+          <h3>{{ card.name }}</h3>
+        </div>
+        <span class="market-live-dot">{{ card.active_listings }} активных</span>
+      </div>
+      <div class="city-market-metrics">
+        <div>
+          <strong>{{ card.undervalued }}</strong>
+          <span>ниже рынка</span>
+        </div>
+        <div>
+          <strong>{{ "{:,.0f}".format(card.market.city.median_price_per_m2) }} тг</strong>
+          <span>медиана за м²</span>
+        </div>
+      </div>
+      <p class="muted">
+        {% if card.latest_refresh and card.latest_refresh.finished_at %}Данные обновлены {{ card.latest_refresh.finished_at | astana_time }}.{% else %}Первое обновление данных ещё не завершено.{% endif %}
+      </p>
+      <div class="city-market-actions">
+        <a class="button" href="/find-home-page?city={{ card.slug }}">Подобрать квартиру</a>
+        <a class="button secondary" href="/undervalued-page?city={{ card.slug }}">Рейтинг</a>
+        <a class="text-link" href="/market-page?city={{ card.slug }}">Анализ рынка →</a>
+      </div>
+    </article>
+    {% endfor %}
   </div>
 </section>
 
@@ -43,28 +82,23 @@
       <button class="metric-button is-active" type="button" data-quantile="q10"
               data-copy="Осторожная нижняя оценка. Именно она используется для строгого отбора объявлений ниже рынка."
               aria-pressed="true">
-        <span>Низкая оценка</span>
-        <strong>q10</strong>
+        <span>Низкая оценка</span><strong>q10</strong>
       </button>
       <button class="metric-button" type="button" data-quantile="q50"
               data-copy="Медианная оценка — центральный ориентир наиболее вероятной рыночной цены."
               aria-pressed="false">
-        <span>Медианная оценка</span>
-        <strong>q50</strong>
+        <span>Медианная оценка</span><strong>q50</strong>
       </button>
       <button class="metric-button" type="button" data-quantile="q90"
               data-copy="Верхняя оценка показывает более оптимистичную границу диапазона стоимости."
               aria-pressed="false">
-        <span>Высокая оценка</span>
-        <strong>q90</strong>
+        <span>Высокая оценка</span><strong>q90</strong>
       </button>
     </div>
     <p class="quantile-explainer" data-quantile-copy>
       Осторожная нижняя оценка. Именно она используется для строгого отбора объявлений ниже рынка.
     </p>
-    <p>
-      Рейтинг строится по низкой оценке q10: если q10 выше цены объявления, вариант попадает в базу.
-    </p>
+    <p>Рейтинг строится по низкой оценке q10: если q10 выше цены объявления, вариант попадает в базу.</p>
     <a class="button secondary" href="/model-page">Подробнее об ИИ модели</a>
   </section>
 
@@ -72,42 +106,14 @@
     <section class="panel" data-spotlight>
       <span class="hero-eyebrow">Проверка за минуту</span>
       <h2>Уже нашли квартиру?</h2>
-      <p class="muted">
-        Вставьте ссылку на объявление Krisha и получите диапазон рыночной оценки,
-        медианный ориентир и расчёт потенциальной выгоды.
-      </p>
+      <p class="muted">Вставьте ссылку на объявление Krisha из Астаны или Алматы и получите диапазон рыночной оценки и расчёт потенциальной выгоды.</p>
       <a class="button" href="/predict-page">Оценить объявление</a>
     </section>
-
     <section class="panel market-mini" data-spotlight>
-      <div class="market-mini-head">
-        <div>
-          <span class="hero-eyebrow">Рынок квартир</span>
-          <h2>{{ city.name }} в цифрах</h2>
-        </div>
-        <span class="market-live-dot">{{ market_brief.city.count }} объектов</span>
-      </div>
-      <div class="market-mini-value">
-        <strong>{{ "{:,.0f}".format(market_brief.city.median_price_per_m2) }} тг</strong>
-        <span>медианная цена за м²</span>
-      </div>
-      <div class="market-mini-range">
-        {% if market_brief.lowest_district %}
-        <div>
-          <span>Ниже</span>
-          <strong>{{ market_brief.lowest_district.name }}</strong>
-          <small>{{ "{:,.0f}".format(market_brief.lowest_district.median_price_per_m2) }} тг/м²</small>
-        </div>
-        {% endif %}
-        {% if market_brief.highest_district %}
-        <div>
-          <span>Выше</span>
-          <strong>{{ market_brief.highest_district.name }}</strong>
-          <small>{{ "{:,.0f}".format(market_brief.highest_district.median_price_per_m2) }} тг/м²</small>
-        </div>
-        {% endif %}
-      </div>
-      <a class="button secondary" href="/market-page?city={{ city.slug }}">Открыть аналитику рынка</a>
+      <span class="hero-eyebrow">Два города · две модели</span>
+      <h2>Локальная оценка вместо усреднения</h2>
+      <p class="muted">Объявления Астаны и Алматы не смешиваются: для каждого рынка используются собственная модель и городские признаки.</p>
+      <a class="button secondary" href="#cities">Перейти к выбору города</a>
     </section>
   </div>
 </section>
@@ -116,12 +122,12 @@
   <div class="toolbar">
     <div>
       <h2>Новые выгодные квартиры за 24 часа</h2>
-      <p class="muted">
-        Свежие объявления, которые впервые попали в базу за последние сутки и проходят
-        строгий фильтр ниже рынка по q10.
-      </p>
+      <p class="muted">Свежие объявления Астаны и Алматы, которые проходят строгий фильтр ниже рынка по q10.</p>
     </div>
-    <a class="button secondary" href="/undervalued-page?city={{ city.slug }}&new_since_hours=24">Открыть все новые квартиры</a>
+    <div class="toolbar-actions">
+      <a class="button secondary" href="/undervalued-page?city=astana&new_since_hours=24">Астана</a>
+      <a class="button secondary" href="/undervalued-page?city=almaty&new_since_hours=24">Алматы</a>
+    </div>
   </div>
   <div class="section">
     {% set top_items = items %}
@@ -139,25 +145,18 @@
     <div>
       <h2>Топ-10 квартир ниже рынка</h2>
       <p class="muted">
-        Сейчас в базе: {{ total_undervalued }} активных вариантов ниже рынка.
-        Активных объявлений в базе: {{ active_listings }}.
-        {% if latest_refresh %}Последнее обновление: {{ latest_refresh.finished_at | astana_time }}.{% endif %}
+        В общей базе двух городов: {{ total_undervalued }} активных вариантов ниже рынка.
         Сортировка идёт от самой высокой выгоды по низкой оценке q10 к более низкой.
       </p>
     </div>
-    <a class="button" href="/undervalued-page?city={{ city.slug }}">Открыть весь рейтинг</a>
+    <div class="toolbar-actions">
+      <a class="button" href="/undervalued-page?city=astana">Рейтинг Астаны</a>
+      <a class="button" href="/undervalued-page?city=almaty">Рейтинг Алматы</a>
+    </div>
   </div>
-  <div class="districts" aria-label="Фильтр по району">
-    <a class="chip active" href="/undervalued-page?city={{ city.slug }}">Все районы</a>
-    {% for option in district_options %}
-    <a class="chip" href="/undervalued-page?city={{ city.slug }}&district={{ option.slug }}">{{ option.label }}</a>
-    {% endfor %}
-  </div>
-  <div class="section">
-    {% include "_undervalued_table.html" %}
-  </div>
+  <div class="section">{% include "_undervalued_table.html" %}</div>
   <div class="ranking-footer">
-    <a class="button" href="/undervalued-page?city={{ city.slug }}">Смотреть весь рейтинг</a>
+    <a class="button secondary" href="#cities">Выбрать город и открыть весь рейтинг</a>
   </div>
 </section>
 {% endblock %}

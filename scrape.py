@@ -51,6 +51,11 @@ class ApartmentScraper:
             return response.text
         except requests.exceptions.RequestException:
             return None
+
+    def reset_session(self) -> None:
+        """Drop cookies and rotate the browser identity after a blocked page."""
+        self.session.close()
+        self.session = self._create_session()
     
     def safe_get_text(self, soup, selector: str, default: str = "N/A") -> str:
         try:

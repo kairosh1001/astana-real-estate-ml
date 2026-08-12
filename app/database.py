@@ -162,12 +162,19 @@ def init_db(connection: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             notifications_enabled INTEGER NOT NULL DEFAULT 1,
+            notification_city TEXT NOT NULL DEFAULT 'astana',
             last_digest_date TEXT
         );
         """
     )
     _ensure_column(connection, "refresh_runs", "city", "TEXT NOT NULL DEFAULT 'astana'")
     _ensure_column(connection, "listings", "city", "TEXT NOT NULL DEFAULT 'astana'")
+    _ensure_column(
+        connection,
+        "telegram_subscribers",
+        "notification_city",
+        "TEXT NOT NULL DEFAULT 'astana'",
+    )
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_listings_city_status ON listings(city, status)"
     )
@@ -405,19 +412,60 @@ def upsert_telegram_subscriber(
     *,
     chat_id: int,
     notifications_enabled: bool = True,
+    notification_city: str | None = None,
 ) -> None:
+    now = utc_now()
+    selected_city = valid_notification_city(notification_city) if notification_city else None
+    connection.execute(
+        """
+        INSERT INTO telegram_subscribers (
+            chat_id, created_at, updated_at, notifications_enabled,
+            notification_city
+        )
+        VALUES (?, ?, ?, ?, COALESCE(?, 'astana'))
+        ON CONFLICT(chat_id) DO UPDATE SET
+            updated_at = excluded.updated_at,
+            notifications_enabled = excluded.notifications_enabled,
+            notification_city = COALESCE(?, telegram_subscribers.notification_city)
+        """,
+        (
+            chat_id,
+            now,
+            now,
+            int(notifications_enabled),
+            selected_city,
+            selected_city,
+        ),
+    )
+    connection.commit()
+
+
+def valid_notification_city(value: object) -> str:
+    cleaned = str(value or "").strip().casefold()
+    return cleaned if cleaned in {"astana", "almaty", "both"} else "astana"
+
+
+def set_telegram_notification_city(
+    connection: sqlite3.Connection,
+    *,
+    chat_id: int,
+    notification_city: str,
+) -> None:
+    selected_city = valid_notification_city(notification_city)
     now = utc_now()
     connection.execute(
         """
         INSERT INTO telegram_subscribers (
-            chat_id, created_at, updated_at, notifications_enabled
+            chat_id, created_at, updated_at, notifications_enabled,
+            notification_city
         )
-        VALUES (?, ?, ?, ?)
+        VALUES (?, ?, ?, 1, ?)
         ON CONFLICT(chat_id) DO UPDATE SET
             updated_at = excluded.updated_at,
-            notifications_enabled = excluded.notifications_enabled
+            notifications_enabled = 1,
+            notification_city = excluded.notification_city
         """,
-        (chat_id, now, now, int(notifications_enabled)),
+        (chat_id, now, now, selected_city),
     )
     connection.commit()
 
@@ -446,7 +494,7 @@ def fetch_telegram_subscribers_for_digest(
 ) -> list[dict]:
     rows = connection.execute(
         """
-        SELECT chat_id, last_digest_date
+        SELECT chat_id, notification_city, last_digest_date
         FROM telegram_subscribers
         WHERE notifications_enabled = 1
           AND (last_digest_date IS NULL OR last_digest_date != ?)

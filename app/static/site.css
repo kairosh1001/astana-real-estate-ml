@@ -1618,7 +1618,13 @@ html[data-theme="light"] .site-footer {
   50% { transform: translate3d(-18px, 12px, 0) rotate(8deg); }
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 1400px) {
+  .brand-copy > span {
+    display: none;
+  }
+}
+
+@media (max-width: 1120px) {
   .analytics-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -2544,6 +2550,148 @@ html[data-theme="light"] .site-footer {
     linear-gradient(90deg, rgba(3, 8, 23, 0.98) 0%, rgba(5, 17, 38, 0.9) 48%, rgba(12, 35, 51, 0.46) 100%),
     radial-gradient(ellipse at 78% 82%, rgba(52, 211, 153, 0.24), transparent 28%),
     linear-gradient(155deg, #071225 0 54%, #173b4a 54% 62%, #315963 62% 68%, #0b1b2f 68%);
+}
+
+.hero.hero-neutral {
+  background:
+    linear-gradient(90deg, rgba(3, 8, 23, 0.98) 0%, rgba(5, 15, 36, 0.9) 50%, rgba(11, 32, 52, 0.7) 100%),
+    radial-gradient(circle at 82% 24%, rgba(49, 216, 255, 0.32), transparent 24%),
+    radial-gradient(circle at 72% 82%, rgba(122, 108, 255, 0.28), transparent 30%),
+    linear-gradient(145deg, #061023, #10294a 54%, #0d3443);
+}
+
+.city-market-section {
+  scroll-margin-top: 100px;
+}
+
+.centered-heading {
+  max-width: 760px;
+  margin: 0 auto 24px;
+  text-align: center;
+}
+
+.centered-heading .hero-eyebrow {
+  margin-inline: auto;
+}
+
+.centered-heading h2 {
+  margin: 12px 0 7px;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+}
+
+.city-market-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.city-market-card {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(22px, 4vw, 34px);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.city-market-card::after {
+  position: absolute;
+  top: -70px;
+  right: -55px;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(49, 216, 255, 0.16), transparent 68%);
+  content: "";
+  pointer-events: none;
+}
+
+.city-market-card-almaty::after {
+  background: radial-gradient(circle, rgba(52, 211, 153, 0.18), transparent 68%);
+}
+
+.city-market-card-head,
+.city-market-actions,
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.city-market-card-head {
+  justify-content: space-between;
+}
+
+.city-market-card h3 {
+  margin: 5px 0 0;
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+}
+
+.city-kicker {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.city-market-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 24px 0 16px;
+}
+
+.city-market-metrics > div {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--surface-soft);
+}
+
+.city-market-metrics strong,
+.city-market-metrics span {
+  display: block;
+}
+
+.city-market-metrics strong {
+  color: var(--strong);
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+}
+
+.city-market-metrics span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.73rem;
+}
+
+.city-market-actions {
+  margin-top: 20px;
+}
+
+.city-market-actions .text-link {
+  margin-left: auto;
+  font-weight: 750;
+}
+
+.listing-city-label {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+  .city-market-grid { grid-template-columns: 1fr; }
+  .city-market-actions .text-link { width: 100%; margin-left: 0; }
 }
 
 @media (max-width: 760px) {

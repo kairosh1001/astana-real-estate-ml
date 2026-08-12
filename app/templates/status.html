@@ -14,6 +14,27 @@
   </dl>
 </section>
 
+<h2>Покрытие по городам</h2>
+<section class="city-market-grid">
+  {% for item in city_summaries %}
+  <article class="panel">
+    <h3>{{ item.city.name }}</h3>
+    <dl>
+      <dt>Активных объявлений</dt>
+      <dd>{{ item.summary.active_listings or 0 }}</dd>
+      <dt>Квартир ниже рынка</dt>
+      <dd>{{ item.summary.below_market_active or 0 }}</dd>
+      {% if item.summary.latest_refresh %}
+      <dt>Последний запуск</dt>
+      <dd>#{{ item.summary.latest_refresh.id }} · {{ item.summary.latest_refresh.status }}</dd>
+      <dt>Страницы / URL / обработано / ошибок</dt>
+      <dd>{{ item.summary.latest_refresh.pages_seen }} / {{ item.summary.latest_refresh.urls_seen }} / {{ item.summary.latest_refresh.listings_processed }} / {{ item.summary.latest_refresh.listings_failed }}</dd>
+      {% endif %}
+    </dl>
+  </article>
+  {% endfor %}
+</section>
+
 <h2>Последнее обновление</h2>
 <section class="panel">
   {% if not summary.latest_refresh %}
@@ -33,6 +54,7 @@
     <dt>Статус</dt>
     <dd>
       {% if refresh.status == "completed" %}завершено
+      {% elif refresh.status == "partial" %}завершено частично
       {% elif refresh.status == "running" %}выполняется
       {% elif refresh.status == "failed" %}ошибка
       {% else %}{{ refresh.status }}{% endif %}

@@ -25,6 +25,7 @@ from app.database import (
     fetch_undervalued,
     init_db,
     mark_telegram_digest_sent,
+    set_telegram_notification_city,
     set_telegram_notifications,
     store_cached_prediction,
     upsert_telegram_subscriber,
@@ -38,6 +39,14 @@ from app.prediction_service import (
 
 ASTANA_TZ = timezone(timedelta(hours=5), name="Asia/Astana")
 KRISHA_URL_RE = re.compile(r"https?://(?:www\.)?krisha\.kz/[^\s]+", re.IGNORECASE)
+CITY_SELECTIONS = {
+    "/astana": ("astana", "Астана"),
+    "астана": ("astana", "Астана"),
+    "/almaty": ("almaty", "Алматы"),
+    "алматы": ("almaty", "Алматы"),
+    "/both": ("both", "Астана и Алматы"),
+    "оба города": ("both", "Астана и Алматы"),
+}
 
 
 class TelegramBot:
@@ -106,7 +115,11 @@ class TelegramBot:
         command = text.split(maxsplit=1)[0].lower()
         if command in {"/start", "/help"}:
             self.subscribe(chat_id)
-            self.send_message(chat_id, self.help_text())
+            self.send_message(
+                chat_id,
+                self.help_text(),
+                reply_markup=city_reply_keyboard(),
+            )
             return
         if command in {"/off", "/stop", "/notifications_off"}:
             self.set_notifications(chat_id, enabled=False)
@@ -121,6 +134,26 @@ class TelegramBot:
             self.send_message(
                 chat_id,
                 "Уведомления включены. Я буду отправлять новые выгодные объявления за 24 часа.",
+                reply_markup=city_reply_keyboard(),
+            )
+            return
+
+        if command in {"/city", "/cities"}:
+            self.send_message(
+                chat_id,
+                "Выберите город для ежедневной подборки:",
+                reply_markup=city_reply_keyboard(),
+            )
+            return
+
+        selection = CITY_SELECTIONS.get(command) or CITY_SELECTIONS.get(text.casefold())
+        if selection:
+            city_scope, city_label = selection
+            self.set_notification_city(chat_id, city_scope)
+            self.send_message(
+                chat_id,
+                f"Готово. Ежедневная подборка: <b>{city_label}</b>.",
+                reply_markup=city_reply_keyboard(),
             )
             return
 
@@ -165,6 +198,14 @@ class TelegramBot:
             )
             set_telegram_notifications(connection, chat_id=int(chat_id), enabled=enabled)
 
+    def set_notification_city(self, chat_id: int, notification_city: str) -> None:
+        with connect(self.db_path) as connection:
+            set_telegram_notification_city(
+                connection,
+                chat_id=int(chat_id),
+                notification_city=notification_city,
+            )
+
     def predict_url(self, url: str) -> ListingPrediction:
         normalized_url = normalize_krisha_url(url)
         validate_krisha_url(normalized_url)
@@ -198,8 +239,18 @@ class TelegramBot:
                 connection,
                 digest_date=digest_date,
             )
-            listings = fetch_undervalued(
+            astana_listings = fetch_undervalued(
                 connection,
+                city="astana",
+                limit=10,
+                new_since=(datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(
+                    timespec="seconds"
+                ),
+                include_stale=False,
+            )
+            almaty_listings = fetch_undervalued(
+                connection,
+                city="almaty",
                 limit=10,
                 new_since=(datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(
                     timespec="seconds"
@@ -210,9 +261,19 @@ class TelegramBot:
         if not subscribers:
             return
 
-        message = format_digest(listings, self.public_url)
         for subscriber in subscribers:
             chat_id = int(subscriber["chat_id"])
+            notification_city = subscriber.get("notification_city") or "astana"
+            listings = select_digest_listings(
+                astana_listings,
+                almaty_listings,
+                notification_city,
+            )
+            message = format_digest(
+                listings,
+                self.public_url,
+                notification_city=notification_city,
+            )
             try:
                 self.send_message(chat_id, message, disable_web_page_preview=True)
                 with connect(self.db_path) as connection:
@@ -230,15 +291,19 @@ class TelegramBot:
         text: str,
         *,
         disable_web_page_preview: bool = False,
+        reply_markup: dict | None = None,
     ) -> None:
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": disable_web_page_preview,
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
         response = requests.post(
             f"{self.api_url}/sendMessage",
-            json={
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": disable_web_page_preview,
-            },
+            json=payload,
             timeout=15,
         )
         response.raise_for_status()
@@ -250,6 +315,8 @@ class TelegramBot:
             "выгодные варианты за 24 часа.\n\n"
             "Что можно отправить:\n"
             "• ссылку на объявление Krisha — я дам оценку;\n"
+            "• Астана / Алматы / Оба города — выбрать город ежедневной подборки;\n"
+            "• /city — снова показать выбор города;\n"
             "• /off — выключить ежедневные уведомления;\n"
             "• /on — включить уведомления;\n"
             "• /help — показать справку."
@@ -300,14 +367,50 @@ def format_prediction(prediction: ListingPrediction, public_url: str) -> str:
     )
 
 
-def format_digest(listings: list[dict], public_url: str) -> str:
+def city_reply_keyboard() -> dict:
+    return {
+        "keyboard": [[{"text": "Астана"}, {"text": "Алматы"}], [{"text": "Оба города"}]],
+        "resize_keyboard": True,
+        "one_time_keyboard": False,
+        "input_field_placeholder": "Выберите город или отправьте ссылку Krisha",
+    }
+
+
+def select_digest_listings(
+    astana_listings: list[dict],
+    almaty_listings: list[dict],
+    notification_city: str,
+) -> list[dict]:
+    if notification_city == "almaty":
+        return almaty_listings[:10]
+    if notification_city == "both":
+        combined = [*astana_listings[:5], *almaty_listings[:5]]
+        return sorted(
+            combined,
+            key=lambda item: item.get("discount_vs_asking_pct_conservative") or 0,
+            reverse=True,
+        )
+    return astana_listings[:10]
+
+
+def format_digest(
+    listings: list[dict],
+    public_url: str,
+    *,
+    notification_city: str = "astana",
+) -> str:
+    scope_label = {
+        "astana": "Астана",
+        "almaty": "Алматы",
+        "both": "Астана и Алматы",
+    }.get(notification_city, "Астана")
     if not listings:
         return (
-            "<b>Новые выгодные квартиры за 24 часа</b>\n\n"
+            f"<b>Новые выгодные квартиры за 24 часа · {scope_label}</b>\n\n"
             "За последние 24 часа новых объявлений ниже рынка не найдено."
         )
 
-    lines = ["<b>Новые выгодные квартиры за 24 часа</b>", ""]
+    lines = [f"<b>Новые выгодные квартиры за 24 часа · {scope_label}</b>", ""]
     for index, item in enumerate(listings, start=1):
         details_url = (
             f"{public_url.rstrip('/')}/listing-details?url={quote(item['url'], safe='')}"
@@ -320,8 +423,11 @@ def format_digest(listings: list[dict], public_url: str) -> str:
             or item.get("title")
             or "Объявление"
         )
+        item_city = item.get("city_label") or (
+            "Алматы" if item.get("city") == "almaty" else "Астана"
+        )
         lines.append(
-            f"{index}. <b>{html.escape(listing_title)}</b>\n"
+            f"{index}. <b>{html.escape(listing_title)}</b> · {item_city}\n"
             f"   {item.get('listed_price') or 0:,.0f} тг · "
             f"{item.get('listed_price_per_m2') or 0:,.0f} тг/м² · "
             f"q10 выгода {item.get('discount_vs_asking_pct_conservative') or 0:.1%}\n"
@@ -329,7 +435,7 @@ def format_digest(listings: list[dict], public_url: str) -> str:
             f"<a href=\"{html.escape(item['url'])}\">Krisha</a>"
         )
     lines.append("")
-    lines.append("Чтобы выключить уведомления, отправьте /off.")
+    lines.append("Город подборки: Астана / Алматы / Оба города. Выключить: /off.")
     return "\n".join(lines)
 
 

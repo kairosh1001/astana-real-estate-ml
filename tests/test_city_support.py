@@ -13,10 +13,13 @@ from app.database import (
     connect,
     fetch_home_match_candidates,
     fetch_market_dashboard,
+    fetch_telegram_subscribers_for_digest,
     fetch_undervalued,
     init_db,
     mark_refresh_started,
     normalize_district,
+    set_telegram_notification_city,
+    upsert_telegram_subscriber,
     upsert_listing_prediction,
 )
 from app.prediction_service import ListingPrediction
@@ -97,6 +100,24 @@ class CityDatabaseTest(unittest.TestCase):
         dashboard = fetch_market_dashboard(self.connection, city="almaty")
         self.assertEqual(dashboard["city"]["name"], "Алматы")
         self.assertEqual(dashboard["districts"][0]["slug"], "bostandyk")
+
+    def test_telegram_city_preference_is_migrated_and_preserved(self) -> None:
+        upsert_telegram_subscriber(self.connection, chat_id=42)
+        set_telegram_notification_city(
+            self.connection,
+            chat_id=42,
+            notification_city="both",
+        )
+        upsert_telegram_subscriber(
+            self.connection,
+            chat_id=42,
+            notifications_enabled=True,
+        )
+        subscribers = fetch_telegram_subscribers_for_digest(
+            self.connection,
+            digest_date="2026-08-12",
+        )
+        self.assertEqual(subscribers[0]["notification_city"], "both")
 
 
 if __name__ == "__main__":

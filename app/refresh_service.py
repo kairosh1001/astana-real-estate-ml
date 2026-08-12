@@ -46,6 +46,8 @@ def run_refresh(
     max_delay: float = 2.0,
     stale_after_missed: int = 3,
     max_listings: int = 0,
+    empty_page_retries: int = 3,
+    max_consecutive_empty_pages: int = 3,
 ) -> RefreshResult:
     root_path = Path(root)
     city_slug = normalize_city_slug(city)
@@ -81,6 +83,7 @@ def run_refresh(
     failed = 0
     status = "completed"
     error = None
+    consecutive_empty_pages = 0
 
     try:
         for page in range(start_page, end_page + 1):
@@ -90,11 +93,36 @@ def run_refresh(
                 f"{selected_city['krisha_slug']}/?page={page}"
             )
             print(f"[INFO] Page {page}: {page_url}")
-            urls = iter_unique_urls(scraper.get_listing_urls(page_url))
+            urls = []
+            for attempt in range(1, max(empty_page_retries, 1) + 1):
+                urls = iter_unique_urls(scraper.get_listing_urls(page_url))
+                if urls:
+                    break
+                if attempt < max(empty_page_retries, 1):
+                    retry_delay = min(10 * attempt, 30)
+                    print(
+                        f"[WARN] No URLs on page {page}; retry "
+                        f"{attempt}/{empty_page_retries} in {retry_delay}s."
+                    )
+                    scraper.reset_session()
+                    time.sleep(retry_delay)
             if not urls:
-                print(f"[WARN] No URLs found on page {page}; stopping refresh.")
-                break
+                consecutive_empty_pages += 1
+                print(
+                    f"[WARN] Page {page} remained empty after retries "
+                    f"({consecutive_empty_pages}/{max_consecutive_empty_pages} consecutive)."
+                )
+                if consecutive_empty_pages >= max(max_consecutive_empty_pages, 1):
+                    print("[WARN] Too many consecutive empty pages; stopping refresh.")
+                    status = "partial"
+                    error = (
+                        "Refresh остановлен после нескольких пустых страниц Krisha; "
+                        f"последняя страница: {page}."
+                    )
+                    break
+                continue
 
+            consecutive_empty_pages = 0
             pages_seen += 1
             urls_seen += len(urls)
             print(f"[INFO] Found {len(urls)} listing URLs.")

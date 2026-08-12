@@ -82,9 +82,18 @@ ASTANA_TZ = timezone(timedelta(hours=5), name="Asia/Astana")
 
 
 def _city_template_context(request: Request) -> dict:
+    neutral_home = request.url.path == "/"
     selected_city = city_config(request.query_params.get("city"))
     city_choices = []
     for option in CITY_OPTIONS:
+        if neutral_home:
+            city_choices.append(
+                {
+                    **option,
+                    "url": f"/find-home-page?city={option['slug']}",
+                }
+            )
+            continue
         params = [
             (key, value)
             for key, value in request.query_params.multi_items()
@@ -92,7 +101,11 @@ def _city_template_context(request: Request) -> dict:
         ]
         params.append(("city", option["slug"]))
         city_choices.append({**option, "url": f"{request.url.path}?{urlencode(params)}"})
-    return {"city": selected_city, "city_options": city_choices}
+    return {
+        "city": selected_city,
+        "city_options": city_choices,
+        "neutral_home": neutral_home,
+    }
 
 
 templates = Jinja2Templates(
@@ -179,27 +192,63 @@ def health() -> dict:
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, city: str = "astana") -> HTMLResponse:
-    city_slug = normalize_city_slug(city)
+def home(request: Request) -> HTMLResponse:
+    city_cards = []
+    preview_items = []
+    fresh_items = []
+    total_undervalued = 0
+    active_listings = 0
+    latest_refreshes = []
     with connect(DB_PATH) as db_connection:
-        preview_items = fetch_undervalued(
-            db_connection,
-            city=city_slug,
-            limit=HOME_UNDERVALUED_LIMIT,
-            include_stale=False,
-        )
-        fresh_items = fetch_undervalued(
-            db_connection,
-            city=city_slug,
-            limit=5,
-            new_since=_new_since_threshold(24),
-            include_stale=False,
-        )
-        total_undervalued = count_undervalued(
-            db_connection, city=city_slug, include_stale=False
-        )
-        status_summary = fetch_status_summary(db_connection, city=city_slug)
-        market_brief = fetch_market_brief(db_connection, city=city_slug)
+        for option in CITY_OPTIONS:
+            city_slug = option["slug"]
+            selected_city = city_config(city_slug)
+            city_preview = fetch_undervalued(
+                db_connection,
+                city=city_slug,
+                limit=HOME_UNDERVALUED_LIMIT,
+                include_stale=False,
+            )
+            city_fresh = fetch_undervalued(
+                db_connection,
+                city=city_slug,
+                limit=5,
+                new_since=_new_since_threshold(24),
+                include_stale=False,
+            )
+            city_total = count_undervalued(
+                db_connection, city=city_slug, include_stale=False
+            )
+            status_summary = fetch_status_summary(db_connection, city=city_slug)
+            market_brief = fetch_market_brief(db_connection, city=city_slug)
+            city_active = status_summary.get("active_listings") or 0
+            latest_refresh = status_summary.get("latest_refresh")
+            preview_items.extend(city_preview)
+            fresh_items.extend(city_fresh)
+            total_undervalued += city_total
+            active_listings += city_active
+            if latest_refresh:
+                latest_refreshes.append(latest_refresh)
+            city_cards.append(
+                {
+                    **selected_city,
+                    "active_listings": city_active,
+                    "undervalued": city_total,
+                    "market": market_brief,
+                    "latest_refresh": latest_refresh,
+                }
+            )
+
+    sort_key = lambda item: item.get("discount_vs_asking_pct_conservative") or 0
+    preview_items = sorted(preview_items, key=sort_key, reverse=True)[
+        :HOME_UNDERVALUED_LIMIT
+    ]
+    fresh_items = sorted(fresh_items, key=sort_key, reverse=True)[:10]
+    latest_refresh = max(
+        latest_refreshes,
+        key=lambda item: item.get("finished_at") or item.get("started_at") or "",
+        default=None,
+    )
 
     return templates.TemplateResponse(
         request,
@@ -211,10 +260,9 @@ def home(request: Request, city: str = "astana") -> HTMLResponse:
             "items": preview_items,
             "fresh_items": fresh_items,
             "total_undervalued": total_undervalued,
-            "active_listings": status_summary.get("active_listings") or 0,
-            "latest_refresh": status_summary.get("latest_refresh"),
-            "market_brief": market_brief,
-            "district_options": district_options(city_slug),
+            "active_listings": active_listings,
+            "latest_refresh": latest_refresh,
+            "city_cards": city_cards,
             "start_rank": 1,
             "is_preview": True,
         },
@@ -964,6 +1012,13 @@ def refresh_runs(
 def status_summary(_: bool = Depends(require_admin_api_session)) -> dict:
     with connect(DB_PATH) as db_connection:
         summary = fetch_status_summary(db_connection)
+        summary["cities"] = {
+            option["slug"]: fetch_status_summary(
+                db_connection,
+                city=option["slug"],
+            )
+            for option in CITY_OPTIONS
+        }
     return summary
 
 
@@ -977,10 +1032,24 @@ def status_page(
 
     with connect(DB_PATH) as db_connection:
         summary = fetch_status_summary(db_connection)
+        city_summaries = [
+            {
+                "city": city_config(option["slug"]),
+                "summary": fetch_status_summary(
+                    db_connection,
+                    city=option["slug"],
+                ),
+            }
+            for option in CITY_OPTIONS
+        ]
     return templates.TemplateResponse(
         request,
         "status.html",
-        {"request": request, "summary": summary},
+        {
+            "request": request,
+            "summary": summary,
+            "city_summaries": city_summaries,
+        },
     )
 
 

@@ -398,22 +398,20 @@ def main() -> None:
     assert_contains(home.text, "Подбор квартир Krisha.kz с помощью ИИ")
     assert_contains(
         home.text,
-        "Найдите нужную вам квартиру в Астане по выгодной цене с помощью искусственного интеллекта, быстро и бесплатно!",
+        "Найдите нужную вам квартиру в Астане или Алматы по выгодной цене с помощью искусственного интеллекта. Быстро, бесплатно, эффективно.",
     )
     assert_contains(home.text, "Как работает ИИ модель")
     assert_contains(home.text, "Модель машинного обучения оценивает цену за м²")
     assert_contains(home.text, "Светлая тема")
     assert_contains(home.text, 'savedTheme === "light" ? "light" : "dark"')
-    assert_contains(home.text, "Смотреть весь рейтинг")
-    assert_contains(home.text, "Астана в цифрах")
-    assert_contains(home.text, "Открыть аналитику рынка")
-    assert_contains(home.text, "медианная цена за м²")
+    assert_contains(home.text, "Астана и Алматы")
+    assert_contains(home.text, "Выберите рынок")
+    assert_contains(home.text, "медиана за м²")
     assert_not_contains(home.text, "CatBoost")
     assert_contains(home.text, "Топ-10 квартир ниже рынка")
     assert_contains(home.text, "Новые выгодные квартиры за 24 часа")
-    assert_contains(home.text, "Открыть все новые квартиры")
-    assert_contains(home.text, "Активных объявлений в базе: 1")
-    assert_contains(home.text, "Последнее обновление: 2026-06-29 05:05")
+    assert_contains(home.text, "объявлений в двух городах")
+    assert_contains(home.text, "Данные обновлены 2026-06-29 05:05")
     assert_contains(home.text, "Медианная оценка")
     assert_contains(home.text, "3-комнатная квартира · 40 м²")
     assert_contains(home.text, "Есиль")
@@ -425,7 +423,7 @@ def main() -> None:
     assert_contains(home.text, "Telegram")
     assert_contains(home.text, "Оценить по ссылке")
     assert_contains(home.text, "Оценить квартиру по ссылке")
-    assert_contains(home.text, "Смотреть рейтинг квартир")
+    assert_contains(home.text, "Смотреть рейтинги квартир")
     assert_contains(home.text, "Подобрать квартиру")
     assert_contains(home.text, "Создатель - Kairat Zharkynbay")
     assert_contains(home.text, "kairosh1001@gmail.com")
@@ -454,28 +452,30 @@ def main() -> None:
     nav_end = home.text.index("</nav>", nav_start)
     home_nav = home.text[nav_start:nav_end]
     nav_links = [
-        'href="/find-home-page?city=astana">Подобрать квартиру</a>',
-        'href="/predict-page?city=astana">Оценить по ссылке</a>',
-        'href="/undervalued-page?city=astana">Квартиры ниже рынка</a>',
-        'href="/market-page?city=astana">Анализ рынка</a>',
+        'href="#cities">Подобрать квартиру</a>',
+        'href="/predict-page">Оценить по ссылке</a>',
+        'href="#cities">Квартиры ниже рынка</a>',
+        'href="#cities">Анализ рынка</a>',
     ]
     nav_positions = [home_nav.index(link) for link in nav_links]
     if nav_positions != sorted(nav_positions):
         raise SystemExit("Main navigation links are not in the expected order")
 
-    almaty_home = client.get("/?city=almaty")
-    if almaty_home.status_code != 200:
-        raise SystemExit(f"Almaty home page returned {almaty_home.status_code}")
+    neutral_home_with_legacy_query = client.get("/?city=almaty")
+    if neutral_home_with_legacy_query.status_code != 200:
+        raise SystemExit(
+            f"Neutral home with legacy city query returned {neutral_home_with_legacy_query.status_code}"
+        )
     for needle in [
-        "Найдите нужную вам квартиру в Алматы",
-        "Алматы в цифрах",
-        'href="/?city=almaty"',
+        "Найдите нужную вам квартиру в Астане или Алматы",
+        "Астана и Алматы",
+        'href="/find-home-page?city=almaty"',
         'href="/undervalued-page?city=almaty"',
         "Бостандык",
         "Test Almaty ЖК",
     ]:
-        assert_contains(almaty_home.text, needle)
-    assert_not_contains(almaty_home.text, "Test ЖК")
+        assert_contains(neutral_home_with_legacy_query.text, needle)
+    assert_contains(neutral_home_with_legacy_query.text, "Test ЖК")
 
     almaty_market = client.get("/market-page?city=almaty")
     if almaty_market.status_code != 200:

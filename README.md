@@ -180,13 +180,23 @@ Typical scheduled refreshes:
 .\.venv\Scripts\python.exe scripts\refresh_listings.py --city almaty --kind weekly --pages 200
 ```
 
+The production refresh retries temporarily empty Krisha result pages with a fresh
+session and only stops after three consecutive pages remain empty. This prevents a
+single blocked or incomplete response from truncating a 100-page city refresh.
+
+Telegram subscribers can choose the daily digest market with the bot buttons or
+commands `/astana`, `/almaty`, and `/both`. Existing subscribers keep Astana as
+their default until they choose another option.
+
 The personal home finder uses a compact local OpenStreetMap POI snapshot. Refresh it manually when city infrastructure changes:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\refresh_poi_catalog.py
 ```
 
-The generated `app/data/astana_pois.json` file is deployed with the app, so page views do not call an external maps API.
+The generated `app/data/kazakhstan_pois.json` file contains separate Astana and
+Almaty POIs and is deployed with the app, so page views do not call an external
+maps API.
 
 The deployed VPS uses cron and Docker Compose; see [`deploy/README.md`](deploy/README.md).
 

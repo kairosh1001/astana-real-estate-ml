@@ -37,6 +37,7 @@
         </td>
         <td>
           {% if item.status == "completed" %}завершено
+          {% elif item.status == "partial" %}завершено частично
           {% elif item.status == "running" %}выполняется
           {% elif item.status == "failed" %}ошибка
           {% else %}{{ item.status }}{% endif %}
