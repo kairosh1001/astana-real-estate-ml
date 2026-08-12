@@ -799,6 +799,7 @@ def find_home_page(
     city: str = "astana",
     district: list[str] | None = Query(default=None),
     room: list[str] | None = Query(default=None),
+    min_price: str | None = None,
     max_price: str | None = None,
     min_area: str | None = None,
     max_area: str | None = None,
@@ -846,6 +847,7 @@ def find_home_page(
     preferences = HomeSearchPreferences(
         districts=selected_districts,
         rooms=selected_rooms,
+        min_price=_parse_optional_positive_float(min_price),
         max_price=_parse_optional_positive_float(max_price),
         min_area=_parse_optional_positive_float(min_area),
         max_area=_parse_optional_positive_float(max_area),
@@ -869,6 +871,7 @@ def find_home_page(
     if preferences.rooms:
         preserved_filters["room"] = preferences.rooms
     for key, value in (
+        ("min_price", preferences.min_price),
         ("max_price", preferences.max_price),
         ("min_area", preferences.min_area),
         ("max_area", preferences.max_area),
@@ -924,6 +927,7 @@ def find_home_page(
             "selected_preset": selected_preset,
             "selected_districts": selected_districts,
             "selected_rooms": selected_rooms,
+            "selected_min_price": preferences.min_price,
             "selected_max_price": preferences.max_price,
             "selected_min_area": preferences.min_area,
             "selected_max_area": preferences.max_area,

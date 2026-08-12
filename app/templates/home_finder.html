@@ -86,6 +86,10 @@
 
       <div class="finder-filter-grid">
         <label>
+          Бюджет от, тг
+          <input name="min_price" type="number" min="0" step="1000000" value="{% if selected_min_price %}{{ selected_min_price|int }}{% endif %}" placeholder="Например, 20 000 000">
+        </label>
+        <label>
           Бюджет до, тг
           <input name="max_price" type="number" min="0" step="1000000" value="{% if selected_max_price %}{{ selected_max_price|int }}{% endif %}" placeholder="Например, 45 000 000">
         </label>

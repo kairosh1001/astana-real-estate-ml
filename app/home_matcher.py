@@ -91,6 +91,7 @@ PRIORITY_LABELS = {
 class HomeSearchPreferences:
     districts: tuple[str, ...] = ()
     rooms: tuple[int, ...] = ()
+    min_price: float | None = None
     max_price: float | None = None
     min_area: float | None = None
     max_area: float | None = None
@@ -187,6 +188,11 @@ def _passes_hard_filters(item: dict, preferences: HomeSearchPreferences) -> bool
     if preferences.districts and item.get("district_slug") not in preferences.districts:
         return False
     if preferences.rooms and item.get("rooms") not in preferences.rooms:
+        return False
+    if preferences.min_price is not None and (
+        item.get("listed_price") is None
+        or float(item["listed_price"]) < preferences.min_price
+    ):
         return False
     if preferences.max_price is not None and (
         item.get("listed_price") is None

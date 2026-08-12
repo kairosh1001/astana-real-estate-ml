@@ -31,38 +31,68 @@
 </section>
 
 <section class="section city-market-section" id="cities">
-  <div class="section-heading centered-heading">
-    <span class="hero-eyebrow">Выберите рынок</span>
-    <h2>Астана и Алматы</h2>
-    <p class="muted">У каждого города — своя модель, районы, рейтинг выгодных квартир и аналитика рынка.</p>
+  <div class="home-search-heading">
+    <div>
+      <span class="hero-eyebrow">Поиск по базе сервиса</span>
+      <h2>Какая квартира вам нужна?</h2>
+    </div>
+    <p>Начните с главного. На следующей странице можно выбрать район, площадь, состояние квартиры и личные приоритеты.</p>
   </div>
-  <div class="city-market-grid">
+
+  <form class="home-search-bar" method="get" action="/find-home-page#finder-results" data-home-search>
+    <label class="home-search-field home-search-city">
+      <span>Город</span>
+      <select name="city" aria-label="Город">
+        {% for card in city_cards %}
+        <option value="{{ card.slug }}">{{ card.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="home-search-field home-search-rooms">
+      <span>Комнатность</span>
+      <select name="room" aria-label="Количество комнат">
+        <option value="">Любая</option>
+        <option value="1">1-комнатная</option>
+        <option value="2">2-комнатная</option>
+        <option value="3">3-комнатная</option>
+        <option value="4">4-комнатная</option>
+        <option value="5">5-комнатная</option>
+      </select>
+    </label>
+    <label class="home-search-field home-search-price">
+      <span>Цена от, тг</span>
+      <input name="min_price" type="number" min="0" step="1000000" placeholder="20 000 000">
+    </label>
+    <label class="home-search-field home-search-price">
+      <span>Цена до, тг</span>
+      <input name="max_price" type="number" min="0" step="1000000" placeholder="50 000 000">
+    </label>
+    <label class="home-search-check">
+      <input name="housing_type" type="checkbox" value="new">
+      <span class="home-search-check-box" aria-hidden="true"></span>
+      <span>Только новостройки</span>
+    </label>
+    <button class="button home-search-submit" type="submit">Найти квартиру</button>
+  </form>
+
+  <div class="city-market-strip" aria-label="Статистика рынков Астаны и Алматы">
     {% for card in city_cards %}
-    <article class="city-market-card city-market-card-{{ card.slug }}" data-spotlight>
-      <div class="city-market-card-head">
-        <div>
-          <span class="city-kicker">Рынок квартир</span>
-          <h3>{{ card.name }}</h3>
-        </div>
+    <article class="city-market-summary city-market-summary-{{ card.slug }}">
+      <div class="city-market-summary-name">
         <span class="market-live-dot">{{ card.active_listings }} активных</span>
+        <h3>{{ card.name }}</h3>
       </div>
-      <div class="city-market-metrics">
-        <div>
-          <strong>{{ card.undervalued }}</strong>
-          <span>ниже рынка</span>
-        </div>
-        <div>
-          <strong>{{ "{:,.0f}".format(card.market.city.median_price_per_m2) }} тг</strong>
-          <span>медиана за м²</span>
-        </div>
+      <div class="city-market-summary-metric">
+        <strong>{{ card.undervalued }}</strong>
+        <span>вариантов ниже рынка</span>
       </div>
-      <p class="muted">
-        {% if card.latest_refresh and card.latest_refresh.finished_at %}Данные обновлены {{ card.latest_refresh.finished_at | astana_time }}.{% else %}Первое обновление данных ещё не завершено.{% endif %}
-      </p>
-      <div class="city-market-actions">
-        <a class="button" href="/find-home-page?city={{ card.slug }}">Подобрать квартиру</a>
-        <a class="button secondary" href="/undervalued-page?city={{ card.slug }}">Рейтинг</a>
-        <a class="text-link" href="/market-page?city={{ card.slug }}">Анализ рынка →</a>
+      <div class="city-market-summary-metric">
+        <strong>{{ "{:,.0f}".format(card.market.city.median_price_per_m2) }} тг</strong>
+        <span>медиана за м²</span>
+      </div>
+      <div class="city-market-summary-links">
+        <a href="/undervalued-page?city={{ card.slug }}">Рейтинг</a>
+        <a href="/market-page?city={{ card.slug }}">Аналитика →</a>
       </div>
     </article>
     {% endfor %}

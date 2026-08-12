@@ -404,14 +404,23 @@ def main() -> None:
     assert_contains(home.text, "Модель машинного обучения оценивает цену за м²")
     assert_contains(home.text, "Светлая тема")
     assert_contains(home.text, 'savedTheme === "light" ? "light" : "dark"')
-    assert_contains(home.text, "Астана и Алматы")
-    assert_contains(home.text, "Выберите рынок")
+    assert_contains(home.text, "Какая квартира вам нужна?")
+    assert_contains(home.text, "Поиск по базе сервиса")
+    assert_contains(home.text, 'class="home-search-bar"')
+    assert_contains(home.text, 'action="/find-home-page#finder-results"')
+    assert_contains(home.text, 'name="city"')
+    assert_contains(home.text, 'name="room"')
+    assert_contains(home.text, 'name="min_price"')
+    assert_contains(home.text, 'name="max_price"')
+    assert_contains(home.text, 'name="housing_type" type="checkbox" value="new"')
+    assert_contains(home.text, "Только новостройки")
+    assert_contains(home.text, "Найти квартиру")
     assert_contains(home.text, "медиана за м²")
     assert_not_contains(home.text, "CatBoost")
     assert_contains(home.text, "Топ-10 квартир ниже рынка")
     assert_contains(home.text, "Новые выгодные квартиры за 24 часа")
     assert_contains(home.text, "объявлений в двух городах")
-    assert_contains(home.text, "Данные обновлены 2026-06-29 05:05")
+    assert_contains(home.text, "1 активных")
     assert_contains(home.text, "Медианная оценка")
     assert_contains(home.text, "3-комнатная квартира · 40 м²")
     assert_contains(home.text, "Есиль")
@@ -468,7 +477,7 @@ def main() -> None:
         )
     for needle in [
         "Найдите нужную вам квартиру в Астане или Алматы",
-        "Астана и Алматы",
+        "Какая квартира вам нужна?",
         'href="/find-home-page?city=almaty"',
         'href="/undervalued-page?city=almaty"',
         "Бостандык",
@@ -528,7 +537,7 @@ def main() -> None:
     assert_contains(family_home_finder.text, 'aria-current="true"')
 
     filtered_home_finder = client.get(
-        "/find-home-page?district=yesil&room=3&max_price=21000000"
+        "/find-home-page?district=yesil&room=3&min_price=19000000&max_price=21000000"
         "&housing_type=new&condition=fresh_repair&furnished_only=1"
         "&priority_park=2&priority_value=2"
     )
@@ -538,10 +547,21 @@ def main() -> None:
         )
     assert_contains(filtered_home_finder.text, "3-комнатная квартира · 40 м²")
     assert_contains(filtered_home_finder.text, 'name="room" value="3" checked')
+    assert_contains(filtered_home_finder.text, 'name="min_price" type="number" min="0" step="1000000" value="19000000"')
     assert_contains(filtered_home_finder.text, 'name="furnished_only" value="1" checked')
     assert_contains(
         filtered_home_finder.text,
         'href="/find-home-page?district=yesil&amp;room=3',
+    )
+
+    below_minimum_home_finder = client.get("/find-home-page?min_price=21000000")
+    if below_minimum_home_finder.status_code != 200:
+        raise SystemExit(
+            f"Minimum-price home finder returned {below_minimum_home_finder.status_code}"
+        )
+    assert_contains(
+        below_minimum_home_finder.text,
+        "По выбранным обязательным условиям квартир не найдено",
     )
 
     empty_home_finder = client.get("/find-home-page?room=1")
