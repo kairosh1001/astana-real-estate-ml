@@ -544,6 +544,9 @@ def main() -> None:
         "Выбран",
         'action="/find-home-page#finder-results"',
         'aria-label="Город подбора"',
+        "Выберите город",
+        "Настроить фильтры",
+        'id="finder-settings"',
     ]:
         assert_contains(home_finder.text, needle)
     assert_not_contains(
@@ -583,7 +586,7 @@ def main() -> None:
     assert_contains(filtered_home_finder.text, 'name="furnished_only" value="1" checked')
     assert_contains(
         filtered_home_finder.text,
-        'href="/find-home-page?district=yesil&amp;room=3',
+        'data-url="/find-home-page?district=yesil&amp;room=3',
     )
 
     below_minimum_home_finder = client.get("/find-home-page?min_price=21000000")

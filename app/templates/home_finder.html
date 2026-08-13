@@ -13,13 +13,7 @@
   </div>
 </section>
 
-<nav class="page-city-tabs" aria-label="Город подбора">
-  {% for option in city_options %}
-  <a href="{{ option.url }}" class="page-city-tab {% if option.slug == city.slug %}active{% endif %}" {% if option.slug == city.slug %}aria-current="page"{% endif %}>{{ option.label }}</a>
-  {% endfor %}
-</nav>
-
-<section class="section panel finder-panel">
+<section class="section panel finder-panel" id="finder-settings">
   <div class="toolbar finder-toolbar">
     <div>
       <span class="eyebrow">Быстрый старт</span>
@@ -52,10 +46,27 @@
   </div>
 
   <form id="home-finder-form" method="get" action="/find-home-page#finder-results">
-    <input type="hidden" name="city" value="{{ city.slug }}">
     <div class="finder-form-section">
       <div class="finder-section-head">
         <span class="finder-section-number">01</span>
+        <div>
+          <h3>Выберите город</h3>
+          <p class="muted">Город определяет доступные районы и объявления в подборке.</p>
+        </div>
+      </div>
+      <label class="finder-city-field">
+        <span>Город поиска</span>
+        <select name="city" aria-label="Город подбора" data-finder-city-select>
+          {% for option in city_options %}
+          <option value="{{ option.slug }}" data-url="{{ option.url }}" {% if option.slug == city.slug %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <div class="finder-form-section">
+      <div class="finder-section-head">
+        <span class="finder-section-number">02</span>
         <div>
           <h3>Обязательные условия</h3>
           <p class="muted">Квартиры, которые не проходят эти фильтры, не попадут в рейтинг.</p>
@@ -151,7 +162,7 @@
 
     <div class="finder-form-section">
       <div class="finder-section-head">
-        <span class="finder-section-number">02</span>
+        <span class="finder-section-number">03</span>
         <div>
           <h3>Личные приоритеты</h3>
           <p class="muted">Они влияют на порядок вариантов, но ничего не исключают.</p>
@@ -198,7 +209,10 @@
       <h2>Лучшие совпадения в {{ city.in_name }}</h2>
       <p>Показано {{ items|length }} из {{ total }} квартир, прошедших обязательные условия.</p>
     </div>
-    <button class="button secondary" type="button" data-copy-current-url>Скопировать подборку</button>
+    <div class="finder-results-actions">
+      <a class="button secondary" href="#finder-settings">Настроить фильтры</a>
+      <button class="button secondary" type="button" data-copy-current-url>Скопировать подборку</button>
+    </div>
   </div>
 
   {% if not items %}
@@ -309,4 +323,16 @@
     </details>
   </div>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const finderCitySelect = document.querySelector("[data-finder-city-select]");
+  finderCitySelect?.addEventListener("change", () => {
+    const selectedOption = finderCitySelect.selectedOptions[0];
+    if (selectedOption?.dataset.url) {
+      window.location.assign(`${selectedOption.dataset.url}#finder-settings`);
+    }
+  });
+</script>
 {% endblock %}

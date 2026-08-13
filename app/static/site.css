@@ -47,7 +47,7 @@ html[data-theme="light"] {
   --danger: #cc3158;
   --shadow: 0 24px 80px rgba(36, 55, 82, 0.14);
   --glow: 0 0 0 1px rgba(28, 91, 139, 0.07), 0 22px 70px rgba(45, 65, 94, 0.14);
-  --header-bg: rgba(220, 226, 233, 0.94);
+  --header-bg: rgba(204, 212, 221, 0.96);
 }
 
 html[data-theme="light"] body {
@@ -2024,6 +2024,7 @@ html[data-theme="light"] .site-footer {
 
 .finder-panel {
   padding: 28px;
+  scroll-margin-top: 92px;
 }
 
 .finder-toolbar {
@@ -2036,6 +2037,29 @@ html[data-theme="light"] .site-footer {
 .finder-toolbar h2,
 .finder-results-head h2 {
   margin: 5px 0 0;
+}
+
+.finder-city-field {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.42fr) minmax(220px, 0.58fr);
+  align-items: center;
+  gap: 18px;
+  max-width: 680px;
+  padding: 16px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--surface-soft), var(--soft));
+}
+
+.finder-city-field > span {
+  color: var(--strong);
+  font-weight: 800;
+}
+
+.finder-city-field select {
+  width: 100%;
+  min-height: 46px;
+  padding: 9px 12px;
 }
 
 .finder-presets {
@@ -2290,6 +2314,18 @@ html[data-theme="light"] .site-footer {
 
 .finder-results-head {
   align-items: center;
+}
+
+.finder-results {
+  scroll-margin-top: 92px;
+}
+
+.finder-results-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .finder-results.reveal {
@@ -2565,6 +2601,8 @@ html[data-theme="light"] .site-footer {
   .finder-toolbar,
   .finder-submit-row,
   .finder-results-head { align-items: stretch; flex-direction: column; }
+  .finder-city-field { grid-template-columns: 1fr; }
+  .finder-results-actions { justify-content: flex-start; }
   .finder-presets { justify-content: flex-start; }
   .finder-preset-status { grid-template-columns: 1fr; }
   .finder-filter-grid,
