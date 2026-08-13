@@ -770,7 +770,7 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="/static/site.css?v=20260812-city-ranking-fix">
+    <link rel="stylesheet" href="/static/site.css?v=20260813-content-cleanup">
   </head>
   <body>
     <div class="scroll-progress" aria-hidden="true"><span data-scroll-progress></span></div>
@@ -786,11 +786,6 @@
           </span>
         </a>
         <div class="header-actions">
-          <div class="city-switch" aria-label="Выбор города">
-            {% for option in city_options %}
-            <a href="{{ option.url }}" class="city-switch-option {% if not neutral_home and option.slug == city.slug %}active{% endif %}" {% if not neutral_home and option.slug == city.slug %}aria-current="true"{% endif %}>{{ option.label }}</a>
-            {% endfor %}
-          </div>
           <button class="theme-toggle" type="button" data-theme-toggle aria-label="Включить светлую тему" aria-pressed="false">
             <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
             <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
@@ -801,6 +796,7 @@
           </button>
         </div>
         <nav class="site-nav" data-site-nav aria-label="Основная навигация">
+          {% set nav_city_slug = city.slug if city.slug in ["astana", "almaty"] else "astana" %}
           {% if not neutral_home %}
           <a class="primary-nav" href="/">Вернуться на главную</a>
           {% endif %}
@@ -811,11 +807,11 @@
           <a href="#cities">Анализ рынка</a>
           <a href="/model-page">О модели</a>
           {% else %}
-          <a href="/find-home-page?city={{ city.slug }}">Подобрать квартиру</a>
-          <a href="/predict-page?city={{ city.slug }}">Оценить по ссылке</a>
+          <a href="/find-home-page?city={{ nav_city_slug }}">Подобрать квартиру</a>
+          <a href="/predict-page?city={{ nav_city_slug }}">Оценить по ссылке</a>
           <a href="/undervalued-page?city={{ city.slug }}">Квартиры ниже рынка</a>
-          <a href="/market-page?city={{ city.slug }}">Анализ рынка</a>
-          <a href="/model-page?city={{ city.slug }}">О модели</a>
+          <a href="/market-page?city={{ nav_city_slug }}">Анализ рынка</a>
+          <a href="/model-page?city={{ nav_city_slug }}">О модели</a>
           {% endif %}
           {% if telegram_bot_url %}
           <a class="telegram-nav-link" href="{{ telegram_bot_url }}" target="_blank" rel="noreferrer">Telegram бот</a>

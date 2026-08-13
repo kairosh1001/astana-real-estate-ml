@@ -19,6 +19,12 @@
   </div>
 </div>
 
+<nav class="page-city-tabs" aria-label="Город рейтинга">
+  {% for option in city_options %}
+  <a href="{{ option.url }}" class="page-city-tab {% if option.slug == city.slug %}active{% endif %}" {% if option.slug == city.slug %}aria-current="page"{% endif %}>{{ option.label }}</a>
+  {% endfor %}
+</nav>
+
 <section class="panel">
   <div class="toolbar">
     <div>
@@ -35,7 +41,7 @@
     <input type="hidden" name="city" value="{{ city.slug }}">
     {% if city.slug == "both" %}
     <div class="combined-city-note">
-      Районы отличаются между городами. Выберите «Астана» или «Алматы» в верхней панели, чтобы включить фильтр по району.
+      Районы отличаются между городами. Выберите «Астана» или «Алматы» в переключателе выше, чтобы включить фильтр по району.
     </div>
     {% else %}
     <div class="check-grid" aria-label="Фильтр по району">

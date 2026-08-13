@@ -400,8 +400,9 @@ def main() -> None:
         home.text,
         "Найдите нужную вам квартиру в Астане или Алматы по выгодной цене с помощью искусственного интеллекта. Быстро, бесплатно, эффективно.",
     )
-    assert_contains(home.text, "Как работает ИИ модель")
-    assert_contains(home.text, "Модель машинного обучения оценивает цену за м²")
+    assert_not_contains(home.text, "Как работает ИИ модель")
+    assert_not_contains(home.text, "Локальная оценка вместо усреднения")
+    assert_not_contains(home.text, "Уже нашли квартиру?")
     assert_contains(home.text, "Светлая тема")
     assert_contains(home.text, 'savedTheme === "light" ? "light" : "dark"')
     assert_contains(home.text, "Какая квартира вам нужна?")
@@ -453,10 +454,11 @@ def main() -> None:
         home.text,
         "Если список пуст, новых вариантов с запасом по низкой оценке за сутки не найдено",
     )
-    assert_contains(
+    assert_not_contains(
         home.text,
         "Рейтинг строится по низкой оценке q10: если q10 выше цены объявления, вариант попадает в базу",
     )
+    assert_not_contains(home.text, 'class="city-switch"')
     nav_start = home.text.index('<nav class="site-nav"')
     nav_end = home.text.index("</nav>", nav_start)
     home_nav = home.text[nav_start:nav_end]
@@ -478,7 +480,7 @@ def main() -> None:
     for needle in [
         "Найдите нужную вам квартиру в Астане или Алматы",
         "Какая квартира вам нужна?",
-        'href="/find-home-page?city=almaty"',
+        '<option value="almaty">Алматы</option>',
         'href="/undervalued-page?city=almaty"',
         "Бостандык",
         "Test Almaty ЖК",
@@ -492,6 +494,7 @@ def main() -> None:
     assert_contains(almaty_market.text, "Рынок квартир в Алматы")
     assert_contains(almaty_market.text, "Бостандык")
     assert_not_contains(almaty_market.text, "Есиль")
+    assert_contains(almaty_market.text, 'aria-label="Город анализа рынка"')
 
     almaty_rating = client.get("/undervalued-page?city=almaty")
     if almaty_rating.status_code != 200:
@@ -501,6 +504,7 @@ def main() -> None:
     assert_not_contains(almaty_rating.text, "Есиль")
     assert_contains(almaty_rating.text, "43.238")
     assert_contains(almaty_rating.text, "76.945")
+    assert_contains(almaty_rating.text, 'aria-label="Город рейтинга"')
 
     combined_rating = client.get("/undervalued-page?city=both")
     if combined_rating.status_code != 200:
@@ -536,8 +540,18 @@ def main() -> None:
         "Цена важнее всего",
         "Выбран",
         'action="/find-home-page#finder-results"',
+        'aria-label="Город подбора"',
     ]:
         assert_contains(home_finder.text, needle)
+    assert_not_contains(
+        home_finder.text,
+        "Задайте обязательные условия и расставьте приоритеты",
+    )
+    first_finder_card = home_finder.text.index('class="finder-card"')
+    distance_method = home_finder.text.index("Откуда берутся расстояния?")
+    match_method = home_finder.text.index("Как рассчитывается процент совпадения?")
+    if not (first_finder_card < distance_method < match_method):
+        raise SystemExit("Finder methodology must appear after listing results")
 
     family_home_finder = client.get(
         "/find-home-page?priority_park=2&priority_education=2"
@@ -658,6 +672,11 @@ def main() -> None:
         "Данные получены из открытых объявлений на сайте krisha.kz",
         "Как пользоваться",
         "Что важно помнить",
+        "Почему Астана и Алматы оцениваются отдельно",
+        "Частые вопросы",
+        "Это официальная оценка Krisha.kz?",
+        "Может ли оценка ошибаться?",
+        "Что означает процент совпадения в подборе квартиры?",
     ]:
         assert_contains(model_page.text, needle)
     assert_not_contains(model_page.text, "Она не заменяет проверку документов")

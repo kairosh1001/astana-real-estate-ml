@@ -24,7 +24,7 @@
       </div>
       <div class="hero-stat">
         <strong>2</strong>
-        <span>локальные ИИ-модели</span>
+        <span>города в одном сервисе</span>
       </div>
     </div>
   </div>
@@ -36,7 +36,6 @@
       <span class="hero-eyebrow">Поиск по базе сервиса</span>
       <h2>Какая квартира вам нужна?</h2>
     </div>
-    <p>Начните с главного. На следующей странице можно выбрать район, площадь, состояние квартиры и личные приоритеты.</p>
   </div>
 
   <form class="home-search-bar" method="get" action="/find-home-page#finder-results" data-home-search>
@@ -99,60 +98,11 @@
   </div>
 </section>
 
-<section class="section grid-2">
-  <section class="panel info-panel" data-spotlight>
-    <span class="status-pill">ИИ-анализ активен</span>
-    <h2>Как работает ИИ модель</h2>
-    <p>
-      Модель машинного обучения оценивает цену за м² по параметрам квартиры, району,
-      жилому комплексу, этажности, площади и географическим признакам.
-      Это аналитический ориентир, позволяющий приблизительно оценить стоимость недвижимости.
-    </p>
-    <div class="metric-grid" aria-label="Оценки модели">
-      <button class="metric-button is-active" type="button" data-quantile="q10"
-              data-copy="Осторожная нижняя оценка. Именно она используется для строгого отбора объявлений ниже рынка."
-              aria-pressed="true">
-        <span>Низкая оценка</span><strong>q10</strong>
-      </button>
-      <button class="metric-button" type="button" data-quantile="q50"
-              data-copy="Медианная оценка — центральный ориентир наиболее вероятной рыночной цены."
-              aria-pressed="false">
-        <span>Медианная оценка</span><strong>q50</strong>
-      </button>
-      <button class="metric-button" type="button" data-quantile="q90"
-              data-copy="Верхняя оценка показывает более оптимистичную границу диапазона стоимости."
-              aria-pressed="false">
-        <span>Высокая оценка</span><strong>q90</strong>
-      </button>
-    </div>
-    <p class="quantile-explainer" data-quantile-copy>
-      Осторожная нижняя оценка. Именно она используется для строгого отбора объявлений ниже рынка.
-    </p>
-    <p>Рейтинг строится по низкой оценке q10: если q10 выше цены объявления, вариант попадает в базу.</p>
-    <a class="button secondary" href="/model-page">Подробнее об ИИ модели</a>
-  </section>
-
-  <div class="home-side-stack">
-    <section class="panel" data-spotlight>
-      <span class="hero-eyebrow">Проверка за минуту</span>
-      <h2>Уже нашли квартиру?</h2>
-      <p class="muted">Вставьте ссылку на объявление Krisha из Астаны или Алматы и получите диапазон рыночной оценки и расчёт потенциальной выгоды.</p>
-      <a class="button" href="/predict-page">Оценить объявление</a>
-    </section>
-    <section class="panel market-mini" data-spotlight>
-      <span class="hero-eyebrow">Два города · две модели</span>
-      <h2>Локальная оценка вместо усреднения</h2>
-      <p class="muted">Объявления Астаны и Алматы не смешиваются: для каждого рынка используются собственная модель и городские признаки.</p>
-      <a class="button secondary" href="#cities">Перейти к выбору города</a>
-    </section>
-  </div>
-</section>
-
 <section class="section panel" data-spotlight>
   <div class="toolbar">
     <div>
       <h2>Новые выгодные квартиры за 24 часа</h2>
-      <p class="muted">Свежие объявления Астаны и Алматы, которые проходят строгий фильтр ниже рынка по q10.</p>
+      <p class="muted">Свежие объявления Астаны и Алматы с выгодной модельной оценкой.</p>
     </div>
     <div class="toolbar-actions">
       <a class="button secondary" href="/undervalued-page?city=astana&new_since_hours=24">Астана</a>
@@ -176,7 +126,6 @@
       <h2>Топ-10 квартир ниже рынка</h2>
       <p class="muted">
         В общей базе двух городов: {{ total_undervalued }} активных вариантов ниже рынка.
-        Сортировка идёт от самой высокой выгоды по низкой оценке q10 к более низкой.
       </p>
     </div>
     <div class="toolbar-actions">

@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Рынок квартир в {{ city.in_name }} — аналитика{% endblock %}
 {% block content %}
+<nav class="page-city-tabs" aria-label="Город анализа рынка">
+  {% for option in city_options %}
+  <a href="{{ option.url }}" class="page-city-tab {% if option.slug == city.slug %}active{% endif %}" {% if option.slug == city.slug %}aria-current="page"{% endif %}>{{ option.label }}</a>
+  {% endfor %}
+</nav>
 <div class="page-head market-page-head">
   <div>
     <span class="hero-eyebrow">Аналитика объявлений Krisha</span>

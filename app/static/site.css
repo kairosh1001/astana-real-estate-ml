@@ -261,6 +261,77 @@ p {
   color: var(--teal-dark);
 }
 
+.page-city-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin: 0 0 22px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  box-shadow: var(--shadow-soft);
+}
+
+.page-city-tab {
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  text-decoration: none;
+  transition: 180ms ease;
+}
+
+.page-city-tab:hover,
+.page-city-tab:focus-visible {
+  background: var(--soft);
+  color: var(--strong);
+}
+
+.page-city-tab.active {
+  background: linear-gradient(135deg, var(--teal), var(--blue));
+  box-shadow: 0 7px 22px rgba(15, 118, 110, 0.24);
+  color: #fff;
+}
+
+.faq-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.faq-list details,
+.finder-methodology-footer details {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--soft);
+}
+
+.faq-list summary,
+.finder-methodology-footer summary {
+  padding: 15px 18px;
+  color: var(--strong);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.faq-list details p,
+.finder-methodology-footer details p {
+  margin: 0;
+  padding: 0 18px 17px;
+  color: var(--muted);
+}
+
+.finder-methodology-footer {
+  display: grid;
+  gap: 10px;
+  margin-top: 34px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
 .header-actions {
   display: flex;
   position: static;
@@ -2575,7 +2646,7 @@ html[data-theme="light"] .site-footer {
   line-height: 1.55;
 }
 
-@media (min-width: 761px) and (max-width: 1600px) {
+@media (min-width: 761px) and (max-width: 1320px) {
   .site-header-inner {
     grid-template-columns: minmax(0, 1fr) auto;
   }
@@ -2594,6 +2665,26 @@ html[data-theme="light"] .site-footer {
   .site-nav {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+}
+
+@media (max-width: 540px) {
+  .page-city-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .page-city-tabs:has(.page-city-tab:nth-child(3)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-city-tabs:has(.page-city-tab:nth-child(3)) .page-city-tab:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .page-city-tab {
+    text-align: center;
   }
 }
 
