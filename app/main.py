@@ -73,6 +73,7 @@ from app.home_matcher import (
     rank_home_candidates,
 )
 from app.model_service import MODEL_FILENAMES
+from app.mortgage import analyze_otbasy_mortgage
 from app.prediction_service import (
     ListingPrediction,
     PredictionService,
@@ -1541,6 +1542,7 @@ def _prediction_context(request: Request, prediction: object) -> dict:
     )
     risk_flags = _build_risk_flags(prediction, listing, price_history, complex_stats)
     price_chart_points = _price_chart_points(price_history)
+    mortgage = analyze_otbasy_mortgage(prediction.listed_price)
 
     return {
         "request": request,
@@ -1550,6 +1552,7 @@ def _prediction_context(request: Request, prediction: object) -> dict:
         "complex_stats": complex_stats,
         "risk_flags": risk_flags,
         "price_chart_points": price_chart_points,
+        "mortgage": mortgage,
         "city": selected_city,
     }
 
@@ -1650,7 +1653,7 @@ def _parse_optional_positive_float(value: str | None) -> float | None:
     if value is None or value.strip() == "":
         return None
     try:
-        parsed = float(value)
+        parsed = float(re.sub(r"[\s\u00a0]+", "", value))
     except ValueError:
         return None
     return parsed if parsed > 0 else None

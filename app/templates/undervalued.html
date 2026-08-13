@@ -83,14 +83,21 @@
     </label>
     <label>
       Максимальная цена, тг
-      <input
-        name="max_price"
-        type="number"
-        min="0"
-        step="1000000"
-        value="{% if selected_max_price %}{{ selected_max_price|int }}{% endif %}"
-        placeholder="Например, 45000000"
-      >
+      <span class="price-input-control" data-price-control>
+        <input
+          name="max_price"
+          type="text"
+          inputmode="numeric"
+          data-price-input
+          value="{% if selected_max_price %}{{ '{:,.0f}'.format(selected_max_price).replace(',', ' ') }}{% endif %}"
+          placeholder="Например, 45 000 000"
+          autocomplete="off"
+        >
+        <span class="price-step-controls">
+          <button type="button" data-price-delta="5000000" aria-label="Увеличить максимальную цену на 5 миллионов">↑</button>
+          <button type="button" data-price-delta="-1000000" aria-label="Уменьшить максимальную цену на 1 миллион">↓</button>
+        </span>
+      </span>
     </label>
     <label>
       Год постройки от

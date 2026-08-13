@@ -472,7 +472,7 @@ def main() -> None:
         'href="/find-home-page?city=astana">Подобрать квартиру</a>',
         'href="/predict-page">Оценить по ссылке</a>',
         'href="/undervalued-page?city=astana">Квартиры ниже рынка</a>',
-        'href="#cities">Анализ рынка</a>',
+        'href="/market-page?city=astana">Анализ рынка</a>',
     ]
     nav_positions = [home_nav.index(link) for link in nav_links]
     if nav_positions != sorted(nav_positions):
@@ -579,7 +579,7 @@ def main() -> None:
         )
     assert_contains(filtered_home_finder.text, "3-комнатная квартира · 40 м²")
     assert_contains(filtered_home_finder.text, 'name="room" value="3" checked')
-    assert_contains(filtered_home_finder.text, 'name="min_price" type="number" min="0" step="1000000" value="19000000"')
+    assert_contains(filtered_home_finder.text, 'name="min_price" type="text" inputmode="numeric" data-price-input value="19 000 000"')
     assert_contains(filtered_home_finder.text, 'name="furnished_only" value="1" checked')
     assert_contains(
         filtered_home_finder.text,
@@ -653,6 +653,13 @@ def main() -> None:
         "Выгода к цене по q10",
         "Ширина интервала",
         "CatBoost",
+        "Ипотечный анализ Отбасы банка",
+        "Жилищный заём",
+        "Промежуточный заём",
+        "Нужно накопить 50%",
+        "8,5% годовых",
+        "hcsbk.kz/ru/most-important/zhilzaim/",
+        "hcsbk.kz/ru/to-get-a-loan/secondary-housing/",
     ]:
         assert_contains(result_page.text, needle)
 

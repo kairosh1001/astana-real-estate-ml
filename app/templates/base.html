@@ -770,7 +770,7 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="/static/site.css?v=20260813-city-switches">
+    <link rel="stylesheet" href="/static/site.css?v=20260813-mortgage-search">
   </head>
   <body>
     <div class="scroll-progress" aria-hidden="true"><span data-scroll-progress></span></div>
@@ -804,7 +804,7 @@
           <a href="/find-home-page?city=astana">Подобрать квартиру</a>
           <a href="/predict-page">Оценить по ссылке</a>
           <a href="/undervalued-page?city=astana">Квартиры ниже рынка</a>
-          <a href="#cities">Анализ рынка</a>
+          <a href="/market-page?city=astana">Анализ рынка</a>
           <a href="/model-page">О модели</a>
           {% else %}
           <a href="/find-home-page?city={{ nav_city_slug }}">Подобрать квартиру</a>
@@ -1025,6 +1025,40 @@
             renderTheme();
           });
         }
+
+        function formatPrice(value) {
+          const digits = String(value || "").replace(/\D/g, "");
+          if (!digits) return "";
+          return String(Number(digits)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+        }
+
+        document.querySelectorAll("[data-price-control]").forEach(function (control) {
+          const input = control.querySelector("[data-price-input]");
+          if (!input) return;
+
+          function setPrice(value) {
+            input.value = formatPrice(Math.max(0, Number(value) || 0));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+
+          input.value = formatPrice(input.value);
+          input.addEventListener("input", function () {
+            input.value = formatPrice(input.value);
+          });
+          input.addEventListener("keydown", function (event) {
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            const current = Number(input.value.replace(/\D/g, "")) || 0;
+            setPrice(current + (event.key === "ArrowUp" ? 5000000 : -1000000));
+          });
+          control.querySelectorAll("[data-price-delta]").forEach(function (button) {
+            button.addEventListener("click", function () {
+              const current = Number(input.value.replace(/\D/g, "")) || 0;
+              setPrice(current + Number(button.dataset.priceDelta || 0));
+              input.focus();
+            });
+          });
+        });
 
         if (navToggle && navigation) {
           navToggle.addEventListener("click", function () {

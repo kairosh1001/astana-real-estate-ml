@@ -255,6 +255,25 @@ p {
   color: var(--teal-dark);
 }
 
+html[data-theme="light"] .brand strong,
+html[data-theme="light"] .site-nav a {
+  color: #07111f;
+}
+
+html[data-theme="light"] .site-nav a:hover,
+html[data-theme="light"] .site-nav a:focus-visible {
+  border-color: rgba(9, 122, 82, 0.28);
+  background: rgba(9, 122, 82, 0.09);
+  color: #087a52;
+}
+
+html[data-theme="light"] .brand-mark {
+  border-color: rgba(85, 220, 255, 0.42);
+  background: linear-gradient(145deg, #133651, #2d2c69);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.2), 0 0 32px rgba(49, 216, 255, 0.18);
+  color: #fff;
+}
+
 .page-city-tabs {
   display: inline-flex;
   align-items: center;
@@ -2812,6 +2831,57 @@ html[data-theme="light"] .home-search-check {
   font: 700 0.88rem/1 "Manrope", sans-serif;
 }
 
+.price-input-control {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.price-input-control > input {
+  width: 100%;
+  padding-right: 43px !important;
+}
+
+.price-step-controls {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  display: grid;
+  width: 34px;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.price-step-controls button {
+  display: grid;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 800 0.68rem/1 "Manrope", sans-serif;
+  cursor: pointer;
+  place-items: center;
+}
+
+.price-step-controls button + button {
+  border-top: 1px solid var(--line);
+}
+
+.price-step-controls button:hover,
+.price-step-controls button:focus-visible {
+  background: color-mix(in srgb, var(--success) 13%, transparent);
+  color: var(--success);
+}
+
+html[data-theme="light"] .price-step-controls {
+  border-color: rgba(15, 38, 66, 0.2);
+  background: #e8edf2;
+}
+
 html[data-theme="light"] .home-search-field input,
 html[data-theme="light"] .home-search-field select {
   border-color: rgba(89, 58, 7, 0.2);
@@ -3142,9 +3212,139 @@ html[data-theme="light"] .home-search-check {
   text-transform: uppercase;
 }
 
+.mortgage-analysis {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(75, 246, 183, 0.1), transparent 24rem),
+    var(--surface);
+}
+
+.mortgage-heading {
+  align-items: end;
+}
+
+.mortgage-heading h2 {
+  margin: 12px 0 4px;
+}
+
+.mortgage-heading p {
+  max-width: 720px;
+  margin: 0;
+}
+
+.mortgage-term-control {
+  display: grid;
+  gap: 7px;
+  min-width: 190px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.mortgage-term-control select {
+  min-height: 44px;
+  padding: 0 38px 0 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: var(--surface-strong);
+  color: var(--text);
+  font-weight: 800;
+}
+
+.mortgage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.mortgage-card {
+  padding: 20px;
+  border: 1px solid color-mix(in srgb, var(--success) 32%, var(--line));
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-strong) 91%, transparent);
+}
+
+.mortgage-card-secondary {
+  border-color: color-mix(in srgb, var(--teal) 35%, var(--line));
+}
+
+.mortgage-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.mortgage-card h3 {
+  margin: 5px 0 0;
+  font-size: 1.35rem;
+}
+
+.mortgage-kicker {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mortgage-fit {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--success) 38%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--success) 11%, transparent);
+  color: var(--success);
+  font-size: 0.66rem;
+  font-weight: 850;
+}
+
+.mortgage-fit.warning {
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--line));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.mortgage-metrics {
+  margin-top: 18px;
+}
+
+.mortgage-payment-row dd {
+  color: var(--success);
+  font-weight: 900;
+}
+
+.mortgage-card .subtle {
+  min-height: 88px;
+  margin: 16px 0;
+  line-height: 1.55;
+}
+
+.mortgage-card .text-link {
+  font-weight: 800;
+}
+
+.mortgage-disclaimer {
+  margin: 17px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.6;
+}
+
+html[data-theme="light"] .mortgage-card {
+  box-shadow: 0 12px 32px rgba(29, 55, 76, 0.08);
+}
+
 @media (max-width: 760px) {
   .city-market-grid { grid-template-columns: 1fr; }
   .city-market-actions .text-link { width: 100%; margin-left: 0; }
+  .mortgage-grid { grid-template-columns: 1fr; }
+  .mortgage-heading { align-items: stretch; }
+  .mortgage-term-control { width: 100%; }
+  .mortgage-card .subtle { min-height: 0; }
 }
 
 @media (max-width: 760px) {

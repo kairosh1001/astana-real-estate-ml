@@ -60,11 +60,23 @@
     </label>
     <label class="home-search-field home-search-price">
       <span>Цена от, тг</span>
-      <input name="min_price" type="number" min="0" step="1000000" placeholder="20 000 000">
+      <span class="price-input-control" data-price-control>
+        <input name="min_price" type="text" inputmode="numeric" data-price-input placeholder="20 000 000" autocomplete="off">
+        <span class="price-step-controls">
+          <button type="button" data-price-delta="5000000" aria-label="Увеличить цену от на 5 миллионов">↑</button>
+          <button type="button" data-price-delta="-1000000" aria-label="Уменьшить цену от на 1 миллион">↓</button>
+        </span>
+      </span>
     </label>
     <label class="home-search-field home-search-price">
       <span>Цена до, тг</span>
-      <input name="max_price" type="number" min="0" step="1000000" placeholder="50 000 000">
+      <span class="price-input-control" data-price-control>
+        <input name="max_price" type="text" inputmode="numeric" data-price-input placeholder="50 000 000" autocomplete="off">
+        <span class="price-step-controls">
+          <button type="button" data-price-delta="5000000" aria-label="Увеличить цену до на 5 миллионов">↑</button>
+          <button type="button" data-price-delta="-1000000" aria-label="Уменьшить цену до на 1 миллион">↓</button>
+        </span>
+      </span>
     </label>
     <label class="home-search-check">
       <input name="housing_type" type="checkbox" value="new">
