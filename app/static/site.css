@@ -262,15 +262,15 @@ html[data-theme="light"] .site-nav a {
 
 html[data-theme="light"] .site-nav a:hover,
 html[data-theme="light"] .site-nav a:focus-visible {
-  border-color: rgba(9, 122, 82, 0.28);
-  background: rgba(9, 122, 82, 0.09);
-  color: #087a52;
+  border-color: rgba(0, 127, 169, 0.3);
+  background: rgba(0, 127, 169, 0.1);
+  color: var(--teal-dark);
 }
 
 html[data-theme="light"] .brand-mark {
-  border-color: rgba(85, 220, 255, 0.42);
-  background: linear-gradient(145deg, #133651, #2d2c69);
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.2), 0 0 32px rgba(49, 216, 255, 0.18);
+  border-color: rgba(76, 205, 241, 0.58);
+  background: linear-gradient(145deg, #1b6487, #514f9f);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.28), 0 0 34px rgba(30, 169, 215, 0.24);
   color: #fff;
 }
 
@@ -2656,7 +2656,10 @@ html[data-theme="light"] .hero.hero-neutral {
     radial-gradient(circle at 82% 24%, rgba(49, 216, 255, 0.28), transparent 24%),
     radial-gradient(circle at 72% 82%, rgba(122, 108, 255, 0.24), transparent 30%),
     url("/static/astana-hero.jpg") center 45% / cover;
-  box-shadow: 0 22px 60px rgba(20, 37, 62, 0.28);
+  box-shadow:
+    inset 0 -1px rgba(111, 224, 255, 0.28),
+    0 20px 62px rgba(0, 122, 176, 0.24),
+    0 0 90px rgba(49, 216, 255, 0.11);
 }
 
 html[data-theme="light"] .hero.hero-neutral p {
@@ -2715,28 +2718,6 @@ html[data-theme="light"] .hero.hero-neutral .hero-eyebrow {
   background: var(--soft);
   color: var(--muted);
   line-height: 1.55;
-}
-
-@media (min-width: 761px) and (max-width: 1320px) {
-  .site-header-inner {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .brand {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .header-actions {
-    grid-column: 2;
-    grid-row: 1;
-    justify-content: flex-end;
-  }
-
-  .site-nav {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
 }
 
 @media (max-width: 540px) {
