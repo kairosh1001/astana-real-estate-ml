@@ -82,9 +82,9 @@ class CityDatabaseTest(unittest.TestCase):
         self.assertEqual(
             len(fetch_home_match_candidates(self.connection, city="almaty")), 1
         )
-        combined = fetch_undervalued(self.connection, city="both")
-        self.assertEqual(len(combined), 2)
-        self.assertEqual({item["city"] for item in combined}, {"astana", "almaty"})
+        legacy_combined = fetch_undervalued(self.connection, city="both")
+        self.assertEqual(len(legacy_combined), 1)
+        self.assertEqual(legacy_combined[0]["city"], "astana")
 
     def test_listing_page_city_wins_over_search_page_city(self) -> None:
         self.assertEqual(
@@ -134,7 +134,7 @@ class CityDatabaseTest(unittest.TestCase):
         self.assertEqual(dashboard["city"]["name"], "Алматы")
         self.assertEqual(dashboard["districts"][0]["slug"], "bostandyk")
 
-    def test_telegram_city_preference_is_migrated_and_preserved(self) -> None:
+    def test_invalid_telegram_city_preference_defaults_to_astana(self) -> None:
         upsert_telegram_subscriber(self.connection, chat_id=42)
         set_telegram_notification_city(
             self.connection,
@@ -150,7 +150,7 @@ class CityDatabaseTest(unittest.TestCase):
             self.connection,
             digest_date="2026-08-12",
         )
-        self.assertEqual(subscribers[0]["notification_city"], "both")
+        self.assertEqual(subscribers[0]["notification_city"], "astana")
 
 
 if __name__ == "__main__":

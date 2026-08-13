@@ -14,7 +14,6 @@ from app.cities import (
     coordinates_match_city,
     district_options,
     infer_listing_city,
-    normalize_city_scope,
     normalize_city_slug,
 )
 from app.prediction_service import ListingPrediction
@@ -181,6 +180,13 @@ def init_db(connection: sqlite3.Connection) -> None:
         "telegram_subscribers",
         "notification_city",
         "TEXT NOT NULL DEFAULT 'astana'",
+    )
+    connection.execute(
+        """
+        UPDATE telegram_subscribers
+        SET notification_city = 'astana'
+        WHERE notification_city NOT IN ('astana', 'almaty')
+        """
     )
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_listings_city_status ON listings(city, status)"
@@ -479,7 +485,7 @@ def upsert_telegram_subscriber(
 
 def valid_notification_city(value: object) -> str:
     cleaned = str(value or "").strip().casefold()
-    return cleaned if cleaned in {"astana", "almaty", "both"} else "astana"
+    return cleaned if cleaned in {"astana", "almaty"} else "astana"
 
 
 def set_telegram_notification_city(
@@ -810,9 +816,7 @@ def fetch_undervalued(
     include_stale: bool = False,
 ) -> list[dict]:
     status_clause = "" if include_stale else "AND status = 'active'"
-    city_scope = normalize_city_scope(city)
-    city_clause = "city IN ('astana', 'almaty')" if city_scope == "both" else "city = ?"
-    city_params: tuple[str, ...] = () if city_scope == "both" else (city_scope,)
+    city_slug = normalize_city_slug(city)
     rows = connection.execute(
         f"""
         SELECT
@@ -834,12 +838,12 @@ def fetch_undervalued(
             discount_vs_asking_pct_median,
             interval_width_pct
         FROM listings
-        WHERE {city_clause}
+        WHERE city = ?
           AND discount_vs_asking_pct_conservative > 0
           {status_clause}
         ORDER BY discount_vs_asking_pct_conservative DESC
         """,
-        city_params,
+        (city_slug,),
     ).fetchall()
     items = [_prepare_undervalued_item(dict(row)) for row in rows]
     if districts:

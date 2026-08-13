@@ -770,7 +770,7 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="/static/site.css?v=20260813-content-cleanup">
+    <link rel="stylesheet" href="/static/site.css?v=20260813-city-switches">
   </head>
   <body>
     <div class="scroll-progress" aria-hidden="true"><span data-scroll-progress></span></div>
@@ -803,7 +803,7 @@
           {% if neutral_home %}
           <a href="/find-home-page?city=astana">Подобрать квартиру</a>
           <a href="/predict-page">Оценить по ссылке</a>
-          <a href="/undervalued-page?city=both">Квартиры ниже рынка</a>
+          <a href="/undervalued-page?city=astana">Квартиры ниже рынка</a>
           <a href="#cities">Анализ рынка</a>
           <a href="/model-page">О модели</a>
           {% else %}
@@ -814,7 +814,7 @@
           <a href="/model-page?city={{ nav_city_slug }}">О модели</a>
           {% endif %}
           {% if telegram_bot_url %}
-          <a class="telegram-nav-link" href="{{ telegram_bot_url }}" target="_blank" rel="noreferrer">Telegram бот</a>
+          <a href="{{ telegram_bot_url }}" target="_blank" rel="noreferrer">Telegram бот</a>
           {% endif %}
         </nav>
       </div>

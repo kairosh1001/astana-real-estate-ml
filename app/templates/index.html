@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Kvartiry-ai.kz — подбор квартир в Астане и Алматы{% endblock %}
+{% block title %}Kvartiry-ai.kz — подбор квартир с помощью ИИ{% endblock %}
 {% block content %}
 <section class="hero hero-neutral" data-spotlight>
   <div>
@@ -10,13 +10,13 @@
     </p>
     <div class="hero-actions">
       <a class="button" href="#cities">Выбрать город</a>
-      <a class="button secondary" href="/undervalued-page?city=both">Смотреть рейтинги квартир</a>
+      <a class="button secondary" href="/undervalued-page?city=astana">Смотреть рейтинги квартир</a>
       <a class="button secondary" href="/predict-page">Оценить квартиру по ссылке</a>
     </div>
     <div class="hero-stats" aria-label="Текущая статистика сервиса">
       <div class="hero-stat">
         <strong>{{ active_listings }}</strong>
-        <span>объявлений в двух городах</span>
+        <span>объявлений в базе сервиса</span>
       </div>
       <div class="hero-stat">
         <strong>{{ total_undervalued }}</strong>
@@ -24,7 +24,7 @@
       </div>
       <div class="hero-stat">
         <strong>2</strong>
-        <span>города в одном сервисе</span>
+        <span>поддерживаемых города</span>
       </div>
     </div>
   </div>
@@ -74,7 +74,7 @@
     <button class="button home-search-submit" type="submit">Найти квартиру</button>
   </form>
 
-  <div class="city-market-strip" aria-label="Статистика рынков Астаны и Алматы">
+  <div class="city-market-strip" aria-label="Статистика рынков сервиса">
     {% for card in city_cards %}
     <article class="city-market-summary city-market-summary-{{ card.slug }}">
       <div class="city-market-summary-name">
@@ -102,41 +102,71 @@
   <div class="toolbar">
     <div>
       <h2>Новые выгодные квартиры за 24 часа</h2>
-      <p class="muted">Свежие объявления Астаны и Алматы с выгодной модельной оценкой.</p>
+      <p class="muted">Свежие объявления выбранного города с выгодной оценкой.</p>
     </div>
-    <div class="toolbar-actions">
-      <a class="button secondary" href="/undervalued-page?city=astana&new_since_hours=24">Астана</a>
-      <a class="button secondary" href="/undervalued-page?city=almaty&new_since_hours=24">Алматы</a>
+    <div class="home-city-switcher" data-home-city-switcher aria-label="Город новых квартир">
+      {% for card in city_cards %}
+      <button class="home-city-switch {% if card.slug == 'astana' %}active{% endif %}" type="button" data-home-city-button="{{ card.slug }}" aria-pressed="{{ 'true' if card.slug == 'astana' else 'false' }}">{{ card.name }}</button>
+      {% endfor %}
     </div>
   </div>
-  <div class="section">
-    {% set top_items = items %}
-    {% set top_start_rank = start_rank %}
-    {% set items = fresh_items %}
+  {% for card in city_cards %}
+  <div class="section home-city-panel" data-home-city-panel="{{ card.slug }}" {% if card.slug != 'astana' %}hidden{% endif %}>
+    {% set items = card.fresh_items %}
     {% set start_rank = 1 %}
     {% include "_undervalued_table.html" %}
-    {% set items = top_items %}
-    {% set start_rank = top_start_rank %}
+    <div class="ranking-footer">
+      <a class="button secondary" href="/undervalued-page?city={{ card.slug }}&new_since_hours=24">Открыть все новые квартиры</a>
+    </div>
   </div>
+  {% endfor %}
 </section>
 
 <section class="section panel" data-spotlight>
   <div class="toolbar">
     <div>
       <h2>Топ-10 квартир ниже рынка</h2>
-      <p class="muted">
-        В общей базе двух городов: {{ total_undervalued }} активных вариантов ниже рынка.
-      </p>
+      <p class="muted">Лучшие варианты ниже рынка в выбранном городе.</p>
     </div>
-    <div class="toolbar-actions">
-      <a class="button secondary" href="/undervalued-page?city=both">Оба города</a>
-      <a class="button" href="/undervalued-page?city=astana">Рейтинг Астаны</a>
-      <a class="button" href="/undervalued-page?city=almaty">Рейтинг Алматы</a>
+    <div class="home-city-switcher" data-home-city-switcher aria-label="Город рейтинга">
+      {% for card in city_cards %}
+      <button class="home-city-switch {% if card.slug == 'astana' %}active{% endif %}" type="button" data-home-city-button="{{ card.slug }}" aria-pressed="{{ 'true' if card.slug == 'astana' else 'false' }}">{{ card.name }}</button>
+      {% endfor %}
     </div>
   </div>
-  <div class="section">{% include "_undervalued_table.html" %}</div>
-  <div class="ranking-footer">
-    <a class="button secondary" href="/undervalued-page?city=both">Открыть весь рейтинг Астаны и Алматы</a>
+  {% for card in city_cards %}
+  <div class="section home-city-panel" data-home-city-panel="{{ card.slug }}" {% if card.slug != 'astana' %}hidden{% endif %}>
+    {% set items = card.preview_items %}
+    {% set start_rank = 1 %}
+    {% include "_undervalued_table.html" %}
+    <div class="ranking-footer">
+      <a class="button secondary" href="/undervalued-page?city={{ card.slug }}">Открыть весь рейтинг</a>
+    </div>
   </div>
+  {% endfor %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll("[data-home-city-switcher]").forEach((switcher) => {
+    const section = switcher.closest("section");
+    const buttons = switcher.querySelectorAll("[data-home-city-button]");
+    const panels = section.querySelectorAll("[data-home-city-panel]");
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const selectedCity = button.dataset.homeCityButton;
+        buttons.forEach((candidate) => {
+          const isActive = candidate === button;
+          candidate.classList.toggle("active", isActive);
+          candidate.setAttribute("aria-pressed", String(isActive));
+        });
+        panels.forEach((panel) => {
+          panel.hidden = panel.dataset.homeCityPanel !== selectedCity;
+        });
+      });
+    });
+  });
+</script>
 {% endblock %}

@@ -420,7 +420,13 @@ def main() -> None:
     assert_not_contains(home.text, "CatBoost")
     assert_contains(home.text, "Топ-10 квартир ниже рынка")
     assert_contains(home.text, "Новые выгодные квартиры за 24 часа")
-    assert_contains(home.text, "объявлений в двух городах")
+    assert_contains(home.text, "объявлений в базе сервиса")
+    assert_contains(home.text, 'data-home-city-switcher')
+    assert_contains(home.text, 'data-home-city-button="astana"')
+    assert_contains(home.text, 'data-home-city-button="almaty"')
+    assert_contains(home.text, 'data-home-city-panel="almaty" hidden')
+    assert_contains(home.text, "Открыть весь рейтинг")
+    assert_not_contains(home.text, "модельной оценкой")
     assert_contains(home.text, "1 активных")
     assert_contains(home.text, "Медианная оценка")
     assert_contains(home.text, "3-комнатная квартира · 40 м²")
@@ -465,7 +471,7 @@ def main() -> None:
     nav_links = [
         'href="/find-home-page?city=astana">Подобрать квартиру</a>',
         'href="/predict-page">Оценить по ссылке</a>',
-        'href="/undervalued-page?city=both">Квартиры ниже рынка</a>',
+        'href="/undervalued-page?city=astana">Квартиры ниже рынка</a>',
         'href="#cities">Анализ рынка</a>',
     ]
     nav_positions = [home_nav.index(link) for link in nav_links]
@@ -506,18 +512,15 @@ def main() -> None:
     assert_contains(almaty_rating.text, "76.945")
     assert_contains(almaty_rating.text, 'aria-label="Город рейтинга"')
 
-    combined_rating = client.get("/undervalued-page?city=both")
-    if combined_rating.status_code != 200:
-        raise SystemExit(f"Combined rating returned {combined_rating.status_code}")
-    for needle in [
-        "Квартиры ниже рынка в Астане и Алматы",
-        "Рейтинг двух городов",
-        "Астана и Алматы",
-        "Районы отличаются между городами",
-        "Test ЖК",
-        "Test Almaty ЖК",
-    ]:
-        assert_contains(combined_rating.text, needle)
+    legacy_combined_rating = client.get("/undervalued-page?city=both")
+    if legacy_combined_rating.status_code != 200:
+        raise SystemExit(
+            f"Legacy combined rating returned {legacy_combined_rating.status_code}"
+        )
+    assert_contains(legacy_combined_rating.text, "Квартиры ниже рынка в Астане")
+    assert_contains(legacy_combined_rating.text, "Test ЖК")
+    assert_not_contains(legacy_combined_rating.text, "Test Almaty ЖК")
+    assert_not_contains(legacy_combined_rating.text, "Рейтинг двух городов")
 
     home_finder = client.get("/find-home-page")
     if home_finder.status_code != 200:
@@ -672,7 +675,7 @@ def main() -> None:
         "Данные получены из открытых объявлений на сайте krisha.kz",
         "Как пользоваться",
         "Что важно помнить",
-        "Почему Астана и Алматы оцениваются отдельно",
+        "Почему каждый город оценивается отдельно",
         "Частые вопросы",
         "Это официальная оценка Krisha.kz?",
         "Может ли оценка ошибаться?",

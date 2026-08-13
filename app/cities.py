@@ -46,16 +46,6 @@ CITIES: dict[str, dict[str, Any]] = {
     },
 }
 
-BOTH_CITIES = {
-    "slug": "both",
-    "name": "Астана и Алматы",
-    "in_name": "Астане и Алматы",
-    "genitive": "Астаны и Алматы",
-    "map_center": [47.30, 74.20],
-    "map_zoom": 5,
-    "districts": [],
-}
-
 CITY_OPTIONS = [
     {"slug": city["slug"], "label": city["name"]} for city in CITIES.values()
 ]
@@ -74,20 +64,8 @@ def normalize_city_slug(value: object, *, default: str = "astana") -> str:
     return aliases.get(cleaned, default)
 
 
-def normalize_city_scope(value: object, *, default: str = "astana") -> str:
-    cleaned = str(value or "").strip().casefold()
-    if cleaned in {"both", "all", "оба", "оба города", "астана и алматы"}:
-        return "both"
-    return normalize_city_slug(value, default=default)
-
-
 def city_config(value: object) -> dict[str, Any]:
     return CITIES[normalize_city_slug(value)]
-
-
-def city_scope_config(value: object) -> dict[str, Any]:
-    scope = normalize_city_scope(value)
-    return BOTH_CITIES if scope == "both" else city_config(scope)
 
 
 def district_options(city: object) -> list[dict[str, str]]:

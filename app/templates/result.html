@@ -106,7 +106,7 @@
       <div class="detail-row">
         <dt>
           Выгода к цене по q10
-          <span class="hint" title="(q10 - цена объявления за м²) / цена объявления за м². Положительное значение означает, что модельная нижняя оценка выше цены объявления.">?</span>
+          <span class="hint" title="(q10 - цена объявления за м²) / цена объявления за м². Положительное значение означает, что нижняя оценка выше цены объявления.">?</span>
         </dt>
         <dd class="{% if prediction.discount_vs_asking_pct_conservative > 0 %}positive{% endif %}">
           {{ "{:.2%}".format(prediction.discount_vs_asking_pct_conservative) }}
@@ -124,7 +124,7 @@
       <div class="detail-row">
         <dt>
           Ширина интервала
-          <span class="hint" title="(q90 - q10) / медиана. Чем шире интервал, тем менее уверенной является модельная оценка.">?</span>
+          <span class="hint" title="(q90 - q10) / медиана. Чем шире интервал, тем менее уверенной является оценка.">?</span>
         </dt>
         <dd>{{ "{:.2%}".format(prediction.interval_width_pct) }}</dd>
       </div>

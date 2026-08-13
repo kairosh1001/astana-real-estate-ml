@@ -44,8 +44,6 @@ CITY_SELECTIONS = {
     "астана": ("astana", "Астана"),
     "/almaty": ("almaty", "Алматы"),
     "алматы": ("almaty", "Алматы"),
-    "/both": ("both", "Астана и Алматы"),
-    "оба города": ("both", "Астана и Алматы"),
 }
 
 
@@ -315,7 +313,7 @@ class TelegramBot:
             "выгодные варианты за 24 часа.\n\n"
             "Что можно отправить:\n"
             "• ссылку на объявление Krisha — я дам оценку;\n"
-            "• Астана / Алматы / Оба города — выбрать город ежедневной подборки;\n"
+            "• Астана / Алматы — выбрать город ежедневной подборки;\n"
             "• /city — снова показать выбор города;\n"
             "• /off — выключить ежедневные уведомления;\n"
             "• /on — включить уведомления;\n"
@@ -369,7 +367,7 @@ def format_prediction(prediction: ListingPrediction, public_url: str) -> str:
 
 def city_reply_keyboard() -> dict:
     return {
-        "keyboard": [[{"text": "Астана"}, {"text": "Алматы"}], [{"text": "Оба города"}]],
+        "keyboard": [[{"text": "Астана"}, {"text": "Алматы"}]],
         "resize_keyboard": True,
         "one_time_keyboard": False,
         "input_field_placeholder": "Выберите город или отправьте ссылку Krisha",
@@ -383,13 +381,6 @@ def select_digest_listings(
 ) -> list[dict]:
     if notification_city == "almaty":
         return almaty_listings[:10]
-    if notification_city == "both":
-        combined = [*astana_listings[:5], *almaty_listings[:5]]
-        return sorted(
-            combined,
-            key=lambda item: item.get("discount_vs_asking_pct_conservative") or 0,
-            reverse=True,
-        )
     return astana_listings[:10]
 
 
@@ -402,7 +393,6 @@ def format_digest(
     scope_label = {
         "astana": "Астана",
         "almaty": "Алматы",
-        "both": "Астана и Алматы",
     }.get(notification_city, "Астана")
     if not listings:
         return (
@@ -435,7 +425,7 @@ def format_digest(
             f"<a href=\"{html.escape(item['url'])}\">Krisha</a>"
         )
     lines.append("")
-    lines.append("Город подборки: Астана / Алматы / Оба города. Выключить: /off.")
+    lines.append("Город подборки: Астана / Алматы. Выключить: /off.")
     return "\n".join(lines)
 
 

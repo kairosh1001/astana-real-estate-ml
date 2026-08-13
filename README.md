@@ -185,7 +185,7 @@ session and only stops after three consecutive pages remain empty. This prevents
 single blocked or incomplete response from truncating a 100-page city refresh.
 
 Telegram subscribers can choose the daily digest market with the bot buttons or
-commands `/astana`, `/almaty`, and `/both`. Existing subscribers keep Astana as
+commands `/astana` and `/almaty`. Existing subscribers keep Astana as
 their default until they choose another option.
 
 The personal home finder uses a compact local OpenStreetMap POI snapshot. Refresh it manually when city infrastructure changes:
