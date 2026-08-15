@@ -2,6 +2,11 @@ name: Train monthly rental model
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/train-rental-model.yml
 
 permissions:
   contents: write
