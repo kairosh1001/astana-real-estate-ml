@@ -47,7 +47,7 @@ html[data-theme="light"] {
   --danger: #cc3158;
   --shadow: 0 24px 80px rgba(36, 55, 82, 0.14);
   --glow: 0 0 0 1px rgba(28, 91, 139, 0.07), 0 22px 70px rgba(45, 65, 94, 0.14);
-  --header-bg: rgba(204, 212, 221, 0.96);
+  --header-bg: rgba(3, 7, 19, 0.76);
 }
 
 html[data-theme="light"] body {
@@ -257,14 +257,14 @@ p {
 
 html[data-theme="light"] .brand strong,
 html[data-theme="light"] .site-nav a {
-  color: #07111f;
+  color: #eaf2ff;
 }
 
 html[data-theme="light"] .site-nav a:hover,
 html[data-theme="light"] .site-nav a:focus-visible {
-  border-color: rgba(0, 127, 169, 0.3);
-  background: rgba(0, 127, 169, 0.1);
-  color: var(--teal-dark);
+  border-color: rgba(96, 215, 255, 0.32);
+  background: rgba(35, 211, 255, 0.09);
+  color: #76e6ff;
 }
 
 html[data-theme="light"] .brand-mark {
