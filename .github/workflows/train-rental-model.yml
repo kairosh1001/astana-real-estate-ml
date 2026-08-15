@@ -36,7 +36,10 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Seed the current dataset from the validated Astana snapshot
-        run: git show origin/codex/rental-data-refresh:data/rent_monthly_raw.csv > data/rent_monthly_raw.csv
+        run: |
+          mkdir -p data
+          git fetch origin codex/rental-data-refresh:refs/remotes/origin/codex/rental-data-refresh
+          git show origin/codex/rental-data-refresh:data/rent_monthly_raw.csv > data/rent_monthly_raw.csv
 
       - name: Scrape current Almaty monthly rentals
         run: >-
