@@ -48,9 +48,9 @@ jobs:
               --cities almaty \
               --rooms "$rooms" \
               --pages 100 \
-              --max-listings 700 \
-              --min-delay 0.12 \
-              --max-delay 0.28 \
+              --max-listings 450 \
+              --min-delay 0.03 \
+              --max-delay 0.08 \
               --append
           done
 
