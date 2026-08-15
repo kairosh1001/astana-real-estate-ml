@@ -227,11 +227,19 @@ def main() -> None:
     ])
     city_counts = {str(key): int(value) for key, value in frame["city"].value_counts().items()}
     room_counts = {str(int(key)): int(value) for key, value in frame["rooms"].value_counts().sort_index().items()}
+    city_room_counts = {
+        str(city): {
+            str(int(room)): int(count)
+            for room, count in group["rooms"].value_counts().sort_index().items()
+        }
+        for city, group in frame.groupby("city")
+    }
     evaluation = {
         "dataset_rows": int(len(frame)),
         "unique_urls": int(raw["url"].nunique()),
         "city_counts": city_counts,
         "room_counts": room_counts,
+        "city_room_counts": city_room_counts,
         "split_counts": {name: int(len(part)) for name, part in parts.items()},
         "target_candidates": candidates,
         "selected_target_mode": mode,
@@ -245,6 +253,11 @@ def main() -> None:
     evaluation["production_ready"] = bool(
         len(frame) >= 2_000
         and min(city_counts.get("astana", 0), city_counts.get("almaty", 0)) >= 500
+        and all(
+            city_room_counts.get(city, {}).get(room, 0) >= 75
+            for city in ("astana", "almaty")
+            for room in ("1", "2", "3")
+        )
         and evaluation["test"]["log_rmse"] < evaluation["test_baseline_city_room_median"]["log_rmse"]
         and 0.70 <= coverage <= 0.95
     )

@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: train-monthly-rental-model
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   train:
@@ -42,14 +42,17 @@ jobs:
           git show origin/codex/rental-data-refresh:data/rent_monthly_raw.csv > data/rent_monthly_raw.csv
 
       - name: Scrape current Almaty monthly rentals
-        run: >-
-          python -u scripts/scrape_rentals.py
-          --cities almaty
-          --pages 100
-          --max-listings 2500
-          --min-delay 0.12
-          --max-delay 0.28
-          --append
+        run: |
+          for rooms in 1 2 3 4 5.100; do
+            python -u scripts/scrape_rentals.py \
+              --cities almaty \
+              --rooms "$rooms" \
+              --pages 100 \
+              --max-listings 700 \
+              --min-delay 0.12 \
+              --max-delay 0.28 \
+              --append
+          done
 
       - name: Train and evaluate independent rental quantile models
         run: python -u scripts/train_rental_model.py --iterations 900
