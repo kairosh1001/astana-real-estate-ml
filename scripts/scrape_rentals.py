@@ -196,17 +196,18 @@ def main() -> None:
         scraper.session.close()
         combined = _checkpoint(previous, rows, args.output)
 
-    city_counts = (
-        combined.get("scrape_city", pd.Series(dtype="string"))
-        .value_counts(dropna=False)
-        .to_dict()
+    city_series = (
+        combined["scrape_city"]
+        if "scrape_city" in combined
+        else pd.Series(dtype="string")
     )
-    room_counts = (
-        pd.to_numeric(combined.get("rooms_structured"), errors="coerce")
-        .value_counts(dropna=False)
-        .sort_index()
-        .to_dict()
+    room_series = (
+        pd.to_numeric(combined["rooms_structured"], errors="coerce")
+        if "rooms_structured" in combined
+        else pd.Series(dtype="float64")
     )
+    city_counts = city_series.value_counts(dropna=False).to_dict()
+    room_counts = room_series.value_counts(dropna=False).sort_index().to_dict()
     status = {
         "started_at": scraped_at,
         "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

@@ -14,60 +14,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  scrape-large-apartments:
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
-    strategy:
-      fail-fast: false
-      max-parallel: 10
-      matrix:
-        include:
-          - {rooms: "4", start_page: 1}
-          - {rooms: "4", start_page: 5}
-          - {rooms: "4", start_page: 9}
-          - {rooms: "4", start_page: 13}
-          - {rooms: "4", start_page: 17}
-          - {rooms: "4", start_page: 21}
-          - {rooms: "5.100", start_page: 1}
-          - {rooms: "5.100", start_page: 4}
-          - {rooms: "5.100", start_page: 7}
-          - {rooms: "5.100", start_page: 10}
-
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install scraper dependencies
-        run: python -m pip install pandas requests beautifulsoup4
-      - name: Scrape large-apartment shard
-        run: >-
-          python -u scripts/scrape_rentals.py
-          --cities almaty
-          --rooms "${{ matrix.rooms }}"
-          --start-page "${{ matrix.start_page }}"
-          --pages 3
-          --max-listings 100
-          --min-delay 0.02
-          --max-delay 0.06
-          --output "data/augment-${{ matrix.rooms }}-${{ matrix.start_page }}.csv"
-          --status-output "data/augment-status-${{ matrix.rooms }}-${{ matrix.start_page }}.json"
-      - name: Upload large-apartment shard
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rental-augment-${{ matrix.rooms }}-${{ matrix.start_page }}
-          path: data/augment-*.csv
-          if-no-files-found: warn
-          retention-days: 7
-
   train:
-    needs: scrape-large-apartments
-    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
     steps:
       - name: Check out repository and history
         uses: actions/checkout@v4
@@ -79,7 +28,7 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
-      - name: Download completed 1–3 room shards
+      - name: Download 1–3 room shards
         uses: actions/download-artifact@v4
         with:
           pattern: rental-shard-*
@@ -88,12 +37,15 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: 31875311197
-      - name: Download current 4+ room shards
+      - name: Download 4+ room shards
         uses: actions/download-artifact@v4
         with:
           pattern: rental-augment-*
           path: data/augment-shards
           merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 31875916607
       - name: Merge all rental sources
         run: |
           mkdir -p data
@@ -113,7 +65,7 @@ jobs:
           combined.to_csv("data/rent_monthly_raw.csv", index=False)
           print(f"merged rows={len(combined)} files={len(frames)}")
           PY
-      - name: Train and evaluate independent rental quantile models
+      - name: Train and evaluate rental quantile models
         run: python -u scripts/train_rental_model.py --iterations 900
       - name: Require production-quality coverage
         run: |

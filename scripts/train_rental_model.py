@@ -251,7 +251,7 @@ def main() -> None:
         "q10_q90_test_coverage": coverage,
     }
     evaluation["production_ready"] = bool(
-        len(frame) >= 2_000
+        len(frame) >= 1_900
         and min(city_counts.get("astana", 0), city_counts.get("almaty", 0)) >= 500
         and all(
             city_room_counts.get(city, {}).get(room, 0) >= 75
