@@ -2,10 +2,8 @@ name: Finalize monthly rental model
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/finalize-rental-model.yml
+    branches: [main]
+    paths: [.github/workflows/finalize-rental-model.yml]
 
 permissions:
   actions: read
@@ -16,7 +14,57 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scrape-large-apartments:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 10
+      matrix:
+        include:
+          - {rooms: "4", start_page: 1}
+          - {rooms: "4", start_page: 5}
+          - {rooms: "4", start_page: 9}
+          - {rooms: "4", start_page: 13}
+          - {rooms: "4", start_page: 17}
+          - {rooms: "4", start_page: 21}
+          - {rooms: "5.100", start_page: 1}
+          - {rooms: "5.100", start_page: 4}
+          - {rooms: "5.100", start_page: 7}
+          - {rooms: "5.100", start_page: 10}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install scraper dependencies
+        run: python -m pip install pandas requests beautifulsoup4
+      - name: Scrape large-apartment shard
+        run: >-
+          python -u scripts/scrape_rentals.py
+          --cities almaty
+          --rooms "${{ matrix.rooms }}"
+          --start-page "${{ matrix.start_page }}"
+          --pages 3
+          --max-listings 100
+          --min-delay 0.02
+          --max-delay 0.06
+          --output "data/augment-${{ matrix.rooms }}-${{ matrix.start_page }}.csv"
+          --status-output "data/augment-status-${{ matrix.rooms }}-${{ matrix.start_page }}.json"
+      - name: Upload large-apartment shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rental-augment-${{ matrix.rooms }}-${{ matrix.start_page }}
+          path: data/augment-*.csv
+          if-no-files-found: warn
+          retention-days: 7
+
   train:
+    needs: scrape-large-apartments
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -25,27 +73,28 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
-
-      - name: Download completed rental shards
+      - name: Download completed 1–3 room shards
         uses: actions/download-artifact@v4
         with:
           pattern: rental-shard-*
-          path: data/shards
+          path: data/base-shards
           merge-multiple: true
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: 31875311197
-
-      - name: Merge Astana history and Almaty shards
+      - name: Download current 4+ room shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rental-augment-*
+          path: data/augment-shards
+          merge-multiple: true
+      - name: Merge all rental sources
         run: |
           mkdir -p data
           git fetch origin codex/rental-data-refresh:refs/remotes/origin/codex/rental-data-refresh
@@ -54,16 +103,18 @@ jobs:
           from pathlib import Path
           import pandas as pd
 
-          paths = [Path("data/rent_astana.csv"), *Path("data/shards").glob("rent-*.csv")]
+          paths = [
+              Path("data/rent_astana.csv"),
+              *Path("data/base-shards").glob("rent-*.csv"),
+              *Path("data/augment-shards").glob("augment-*.csv"),
+          ]
           frames = [pd.read_csv(path, low_memory=False) for path in paths if path.exists()]
           combined = pd.concat(frames, ignore_index=True, sort=False).drop_duplicates("url", keep="last")
           combined.to_csv("data/rent_monthly_raw.csv", index=False)
           print(f"merged rows={len(combined)} files={len(frames)}")
           PY
-
       - name: Train and evaluate independent rental quantile models
         run: python -u scripts/train_rental_model.py --iterations 900
-
       - name: Require production-quality coverage
         run: |
           python - <<'PY'
@@ -75,7 +126,6 @@ jobs:
               raise SystemExit(json.dumps(evaluation, indent=2, ensure_ascii=False))
           print(json.dumps(evaluation, indent=2, ensure_ascii=False))
           PY
-
       - name: Commit the validated model bundle
         run: |
           git config user.name "github-actions[bot]"
@@ -83,8 +133,7 @@ jobs:
           git add models/rent_monthly_v2
           git commit -m "Train production monthly rental model"
           git push
-
-      - name: Upload evaluation and model artifact
+      - name: Upload final model artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
