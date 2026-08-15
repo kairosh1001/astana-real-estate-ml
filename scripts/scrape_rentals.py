@@ -44,6 +44,7 @@ def parse_args() -> argparse.Namespace:
         default=100,
         help="Maximum pages per city/room partition; use 0 to follow pagination.",
     )
+    parser.add_argument("--start-page", type=int, default=1)
     parser.add_argument("--max-listings", type=int, default=0)
     parser.add_argument("--min-delay", type=float, default=0.35)
     parser.add_argument("--max-delay", type=float, default=0.8)
@@ -85,6 +86,8 @@ def main() -> None:
     args = parse_args()
     if args.pages < 0:
         raise ValueError("--pages must be zero or positive")
+    if args.start_page < 1:
+        raise ValueError("--start-page must be positive")
     if args.min_delay < 0 or args.max_delay < args.min_delay:
         raise ValueError("Delay bounds are invalid")
 
@@ -112,12 +115,15 @@ def main() -> None:
                 if stop_requested:
                     break
                 partition = f"{city}_rooms_{rooms}"
-                page = 1
+                page = args.start_page
+                final_page = (
+                    args.start_page + args.pages - 1 if args.pages else None
+                )
                 last_page: int | None = None
                 partition_urls: set[str] = set()
                 parsed_before = len(rows)
                 while True:
-                    if args.pages and page > args.pages:
+                    if final_page is not None and page > final_page:
                         break
                     if last_page is not None and page > last_page:
                         break
