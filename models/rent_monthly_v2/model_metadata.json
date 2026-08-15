@@ -1,0 +1,256 @@
+{
+  "market": "rent",
+  "period": "monthly",
+  "feature_profile": "optimized_compact_v2_shared_sale_features",
+  "feature_columns": [
+    "city",
+    "city_district",
+    "city_residential_complex",
+    "ceiling_height",
+    "year_of_construction",
+    "furnished",
+    "apartment_condition",
+    "building_type",
+    "is_new_build",
+    "rooms",
+    "current_floor",
+    "total_floors",
+    "area_m2",
+    "floor_ratio",
+    "h3_res_7",
+    "h3_res_8",
+    "h3_res_9",
+    "dist_to_city_center_km",
+    "dist_to_nearest_park_km",
+    "count_park_within_2km",
+    "dist_to_nearest_school_km",
+    "count_school_within_2km",
+    "dist_to_nearest_kindergarten_km",
+    "count_kindergarten_within_2km",
+    "dist_to_nearest_grocery_km",
+    "count_grocery_within_2km",
+    "dist_to_nearest_mall_km",
+    "count_mall_within_2km",
+    "dist_to_nearest_healthcare_km",
+    "count_healthcare_within_2km",
+    "dist_to_nearest_transit_km",
+    "count_transit_within_2km",
+    "dist_to_nearest_university_km",
+    "count_university_within_2km",
+    "rooms_segment",
+    "area_per_room",
+    "log_area_m2",
+    "building_age",
+    "is_first_floor",
+    "is_top_floor",
+    "floor_from_top"
+  ],
+  "categorical_features": [
+    "city",
+    "city_district",
+    "city_residential_complex",
+    "furnished",
+    "apartment_condition",
+    "building_type",
+    "h3_res_7",
+    "h3_res_8",
+    "h3_res_9",
+    "rooms_segment"
+  ],
+  "target_mode": "per_m2",
+  "target": "rent_per_m2_log",
+  "served_prediction_units": "KZT/month",
+  "poi_catalog": {
+    "schema_version": 2,
+    "generated_at": "2026-08-10T14:12:37+00:00",
+    "source": "OpenStreetMap contributors",
+    "sha256": "5475993723bca0d9d3de5c3b3e5bd03074aea36a7268d11eeb1236e88813a86b",
+    "cities": {
+      "astana": {
+        "counts": {
+          "park": 181,
+          "school": 174,
+          "kindergarten": 146,
+          "grocery": 629,
+          "mall": 58,
+          "healthcare": 161,
+          "transit": 1022,
+          "university": 44
+        },
+        "missing_categories": []
+      },
+      "almaty": {
+        "counts": {
+          "park": 289,
+          "school": 299,
+          "kindergarten": 203,
+          "grocery": 1103,
+          "mall": 76,
+          "healthcare": 351,
+          "transit": 2079,
+          "university": 70
+        },
+        "missing_categories": []
+      }
+    }
+  },
+  "model_version": "rent_monthly_v2_20260815091637",
+  "trained_at": "2026-08-15T09:16:37+00:00",
+  "quantile_calibration": {
+    "offsets_log": {
+      "q10": -0.03983401333600047,
+      "q50": -0.010762840057640943,
+      "q90": 0.05428333343181075
+    }
+  },
+  "evaluation": {
+    "dataset_rows": 1983,
+    "unique_urls": 1983,
+    "city_counts": {
+      "almaty": 1427,
+      "astana": 556
+    },
+    "room_counts": {
+      "1": 581,
+      "2": 635,
+      "3": 487,
+      "4": 196,
+      "5": 62,
+      "6": 12,
+      "7": 6,
+      "8": 3,
+      "9": 1
+    },
+    "city_room_counts": {
+      "almaty": {
+        "1": 395,
+        "2": 399,
+        "3": 398,
+        "4": 159,
+        "5": 56,
+        "6": 12,
+        "7": 5,
+        "8": 3
+      },
+      "astana": {
+        "1": 186,
+        "2": 236,
+        "3": 89,
+        "4": 37,
+        "5": 6,
+        "7": 1,
+        "9": 1
+      }
+    },
+    "split_counts": {
+      "train": 1401,
+      "validation": 303,
+      "test": 279
+    },
+    "target_candidates": [
+      {
+        "target_mode": "total",
+        "best_iteration": 883,
+        "validation": {
+          "rows": 303,
+          "log_rmse": 0.21280215848198442,
+          "rmse_kzt_month": 197943.8538348789,
+          "mae_kzt_month": 97043.25209115421,
+          "median_absolute_percentage_error": 0.10969210849727001
+        }
+      },
+      {
+        "target_mode": "per_m2",
+        "best_iteration": 897,
+        "validation": {
+          "rows": 303,
+          "log_rmse": 0.2096916854636373,
+          "rmse_kzt_month": 197160.6795231376,
+          "mae_kzt_month": 95757.49454861188,
+          "median_absolute_percentage_error": 0.11491266024547941
+        }
+      }
+    ],
+    "selected_target_mode": "per_m2",
+    "test": {
+      "rows": 279,
+      "log_rmse": 0.2257747575367891,
+      "rmse_kzt_month": 265850.5676488975,
+      "mae_kzt_month": 109102.09283547117,
+      "median_absolute_percentage_error": 0.11605727148701932
+    },
+    "test_segments": {
+      "city": {
+        "almaty": {
+          "rows": 204,
+          "log_rmse": 0.22115636265148306,
+          "rmse_kzt_month": 293167.088261947,
+          "mae_kzt_month": 116637.71927055788,
+          "median_absolute_percentage_error": 0.10921916269161117
+        },
+        "astana": {
+          "rows": 75,
+          "log_rmse": 0.23788359570933745,
+          "rmse_kzt_month": 170707.32030820637,
+          "mae_kzt_month": 88605.18893203534,
+          "median_absolute_percentage_error": 0.1355671592933295
+        }
+      },
+      "rooms": {
+        "1": {
+          "rows": 76,
+          "log_rmse": 0.19216752691851702,
+          "rmse_kzt_month": 43994.08844967174,
+          "mae_kzt_month": 31152.598759316526,
+          "median_absolute_percentage_error": 0.10810782568752537
+        },
+        "2": {
+          "rows": 91,
+          "log_rmse": 0.1783043104899314,
+          "rmse_kzt_month": 74229.84988843962,
+          "mae_kzt_month": 47489.954554672426,
+          "median_absolute_percentage_error": 0.10182663736395445
+        },
+        "3": {
+          "rows": 74,
+          "log_rmse": 0.24618194057557302,
+          "rmse_kzt_month": 261829.04519377337,
+          "mae_kzt_month": 144650.88801741565,
+          "median_absolute_percentage_error": 0.12606970396832623
+        },
+        "4": {
+          "rows": 28,
+          "log_rmse": 0.35447371397020755,
+          "rmse_kzt_month": 681750.0655201466,
+          "mae_kzt_month": 379930.4056668976,
+          "median_absolute_percentage_error": 0.2314201617521563
+        }
+      },
+      "furnished": {
+        "missing": {
+          "rows": 43,
+          "log_rmse": 0.3022146973605191,
+          "rmse_kzt_month": 447330.46297538414,
+          "mae_kzt_month": 154548.6977197169,
+          "median_absolute_percentage_error": 0.1423107143059984
+        },
+        "полностью": {
+          "rows": 215,
+          "log_rmse": 0.20405658227759013,
+          "rmse_kzt_month": 226015.2176733455,
+          "mae_kzt_month": 105179.98659105873,
+          "median_absolute_percentage_error": 0.10538392352338541
+        }
+      }
+    },
+    "test_baseline_city_room_median": {
+      "rows": 279,
+      "log_rmse": 0.4670465777281266,
+      "rmse_kzt_month": 436970.3426564162,
+      "mae_kzt_month": 198331.73835125446,
+      "median_absolute_percentage_error": 0.2500000000000006
+    },
+    "q10_q90_test_coverage": 0.7813620071684588,
+    "production_ready": true
+  }
+}
