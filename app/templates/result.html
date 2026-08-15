@@ -132,6 +132,36 @@
   </div>
 </section>
 
+{% if prediction.monthly_rent_q50 %}
+<section class="section panel rental-analysis">
+  <div class="rental-analysis-heading">
+    <div>
+      <span class="hero-eyebrow">Инвестиционный ориентир</span>
+      <h2>Оценочная аренда и доходность</h2>
+    </div>
+    <span class="rental-model-badge">Помесячная аренда</span>
+  </div>
+  <div class="rental-metric-grid">
+    <article>
+      <span>Оценочная аренда q50</span>
+      <strong>{{ "{:,.0f}".format(prediction.monthly_rent_q50).replace(',', ' ') }} тг/мес.</strong>
+      <small>диапазон {{ "{:,.0f}".format(prediction.monthly_rent_q10).replace(',', ' ') }}–{{ "{:,.0f}".format(prediction.monthly_rent_q90).replace(',', ' ') }} тг</small>
+    </article>
+    <article>
+      <span>Валовая арендная доходность</span>
+      <strong>{{ "{:.1%}".format(prediction.gross_yield_q50) }} в год</strong>
+      <small>диапазон {{ "{:.1%}".format(prediction.gross_yield_q10) }}–{{ "{:.1%}".format(prediction.gross_yield_q90) }}</small>
+    </article>
+    <article>
+      <span>Окупаемость по q50</span>
+      <strong>{{ "{:.1f}".format(prediction.payback_years_q50) }} лет</strong>
+      <small>без роста стоимости квартиры</small>
+    </article>
+  </div>
+  <p class="rental-disclaimer">Валовой расчёт: аренда × 12 / цена объявления. Не учтены простой, ремонт, налоги, коммунальные расходы и управление.</p>
+</section>
+{% endif %}
+
 <section
   class="section panel mortgage-analysis"
   data-mortgage-analysis

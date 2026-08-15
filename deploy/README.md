@@ -97,6 +97,24 @@ http://SERVER_IP:8000
 
 ## Refresh Commands
 
+After the first deployment that includes the rental model, backfill estimates for
+sale listings already stored in the database:
+
+```bash
+docker compose --profile tools run --rm refresh \
+  python scripts/backfill_rental_estimates.py
+```
+
+Rental observations are stored separately from sale listings. Refresh the current
+monthly-rent inventory with:
+
+```bash
+docker compose --profile tools run --rm refresh \
+  python scripts/refresh_rentals.py --city astana --pages 100
+docker compose --profile tools run --rm refresh \
+  python scripts/refresh_rentals.py --city almaty --pages 100
+```
+
 Daily refresh for both cities:
 
 ```bash
@@ -166,6 +184,10 @@ Example entries:
 # Weekly deeper refreshes, separated by day.
 0 15 * * 0 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city astana --kind weekly --pages 200 >> logs/weekly-astana-refresh.log 2>&1
 0 15 * * 6 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city almaty --kind weekly --pages 200 >> logs/weekly-almaty-refresh.log 2>&1
+
+# Daily monthly-rent inventory used by the investment estimate.
+30 11 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_rentals.py --city astana --pages 100 >> logs/daily-rent-astana-refresh.log 2>&1
+30 19 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_rentals.py --city almaty --pages 100 >> logs/daily-rent-almaty-refresh.log 2>&1
 ```
 
 Replace `/opt/krisha` with the actual repository path.

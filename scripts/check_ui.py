@@ -634,6 +634,14 @@ def main() -> None:
             discount_vs_asking_pct_conservative=0.10,
             discount_vs_asking_pct_median=0.24,
             interval_width_pct=0.24,
+            monthly_rent_q10=250000,
+            monthly_rent_q50=280000,
+            monthly_rent_q90=320000,
+            gross_yield_q10=0.075,
+            gross_yield_q50=0.084,
+            gross_yield_q90=0.096,
+            payback_years_q50=11.9,
+            rental_model_version="rent-test",
         )
 
     main.prediction_service.predict_by_url = fake_predict_by_url
@@ -717,6 +725,9 @@ def main() -> None:
     assert_contains(details_page.text, "/complex-page?city=astana")
     assert_contains(details_page.text, "Активных объявлений в базе")
     assert_contains(details_page.text, "2026-06-30 05:00")
+    assert_contains(details_page.text, "Оценочная аренда и доходность")
+    assert_contains(details_page.text, "280 000 тг/мес.")
+    assert_contains(details_page.text, "8.4% в год")
 
     compare_page = client.get("/compare-page?url=https://krisha.kz/a/show/123")
     if compare_page.status_code != 200:

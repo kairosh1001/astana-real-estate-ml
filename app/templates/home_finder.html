@@ -244,6 +244,14 @@
           {% if item.furnished_label %}<span>{{ item.furnished_label }}</span>{% endif %}
         </div>
 
+        {% if item.monthly_rent_q50 %}
+        <div class="finder-rental-strip">
+          <span><small>Оценочная аренда</small><strong>{{ "{:,.0f}".format(item.monthly_rent_q50).replace(',', ' ') }} тг/мес.</strong></span>
+          <span><small>Валовая доходность</small><strong>{{ "{:.1%}".format(item.gross_yield_q50) }}</strong></span>
+          <span><small>Окупаемость</small><strong>{{ "{:.1f}".format(item.payback_years_q50) }} лет</strong></span>
+        </div>
+        {% endif %}
+
         <div class="distance-grid">
           {% for key, label in [("park", "Парк"), ("education", "Школа / детсад"), ("transit", "Остановка"), ("grocery", "Продукты")] %}
           {% set poi = item.lifestyle_pois[key] %}

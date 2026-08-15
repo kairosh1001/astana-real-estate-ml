@@ -60,6 +60,24 @@
           {% endfor %}
         </tr>
         <tr>
+          <td data-label="Параметр">Оценочная аренда q50</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{% if item.monthly_rent_q50 %}{{ "{:,.0f}".format(item.monthly_rent_q50).replace(',', ' ') }} тг/мес.{% else %}—{% endif %}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td data-label="Параметр">Валовая доходность</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{% if item.gross_yield_q50 %}{{ "{:.1%}".format(item.gross_yield_q50) }}{% else %}—{% endif %}</td>
+          {% endfor %}
+        </tr>
+        <tr>
+          <td data-label="Параметр">Окупаемость</td>
+          {% for item in items %}
+          <td data-label="{{ item.short_title }}">{% if item.payback_years_q50 %}{{ "{:.1f}".format(item.payback_years_q50) }} лет{% else %}—{% endif %}</td>
+          {% endfor %}
+        </tr>
+        <tr>
           <td data-label="Параметр">Район</td>
           {% for item in items %}
           <td data-label="{{ item.short_title }}">{% if item.district_slug %}<a class="entity-link" href="/district/{{ item.district_slug }}?city={{ item.city }}" title="Открыть аналитику района {{ item.district_label }} в городе {{ item.city_label }}">{{ item.district_label }}</a>{% else %}—{% endif %}</td>

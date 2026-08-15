@@ -17,10 +17,17 @@ USER_AGENTS = [
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
 ]
 
+LISTING_CATEGORY_PATHS = {
+    "sale": "/prodazha/kvartiry/{city}/",
+    "rent_monthly": "/arenda/kvartiry/{city}/",
+    "rent_daily": "/arenda/kvartiry-posutochno/{city}/",
+}
+
 class ApartmentScraper:
-    def __init__(self, timeout: int = 15):
+    def __init__(self, timeout: int = 15, retry_total: int = 4):
         self.base_url = "https://krisha.kz"
         self.timeout = timeout
+        self.retry_total = retry_total
         self.session = self._create_session()
         self.complex_developer_cache: Dict[str, str] = {}
     
@@ -30,10 +37,10 @@ class ApartmentScraper:
             'User-Agent': random.choice(USER_AGENTS)
         })
         retry = Retry(
-            total=4,
-            connect=4,
-            read=3,
-            status=4,
+            total=self.retry_total,
+            connect=self.retry_total,
+            read=self.retry_total,
+            status=self.retry_total,
             backoff_factor=1.0,
             status_forcelist=(429, 500, 502, 503, 504),
             allowed_methods=frozenset({"GET"}),
@@ -95,6 +102,21 @@ class ApartmentScraper:
             advert_map = advert.get('map', {}) if isinstance(advert, dict) else {}
             row_data['lat'] = advert_map.get('lat')
             row_data['lon'] = advert_map.get('lon')
+            if isinstance(advert.get('price'), (int, float)):
+                row_data['price'] = advert['price']
+            row_data['listing_id'] = advert.get('id')
+            row_data['section_alias'] = advert.get('sectionAlias')
+            row_data['category_alias'] = advert.get('categoryAlias')
+            row_data['rooms_structured'] = advert.get('rooms')
+            row_data['area_m2_structured'] = advert.get('square')
+            row_data['photo_count'] = len(advert.get('photos') or [])
+            row_data['is_estate_verified'] = bool(advert.get('isEstateVerified'))
+            row_data['seller_type'] = advert.get('userType')
+            row_data['addressTitle'] = advert.get('addressTitle')
+            row_data['rental_period'] = self.rental_period_from_advert(advert)
+            row_data['description'] = self.normalize_listing_text(
+                self.safe_get_text(soup, '.offer__description', default='')
+            )
             developer = self.find_developer_name(advert)
             if not developer and advert.get('userType') == 'builder':
                 developer = self.extract_name_from_value(advert.get('ownerName'))
@@ -136,7 +158,10 @@ class ApartmentScraper:
             # so downstream filtering never has to guess from construction year.
             row_data['Новостройка'] = self.is_new_build_listing(soup, advert)
 
-            if not row_data.get('\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a'):
+            if (
+                not row_data.get('\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a')
+                and row_data.get('rental_period') is None
+            ):
                 complex_url = self.find_complex_url(soup)
                 if complex_url:
                     developer = self.fetch_complex_developer(complex_url)
@@ -184,6 +209,40 @@ class ApartmentScraper:
             if href:
                 return urljoin(self.base_url, href)
         return None
+
+    @staticmethod
+    def rental_period_from_advert(advert: Dict | None) -> Optional[str]:
+        advert = advert if isinstance(advert, dict) else {}
+        if str(advert.get('sectionAlias') or '').casefold() != 'arenda':
+            return None
+        category = str(advert.get('categoryAlias') or '').casefold()
+        if category == 'kvartiry':
+            return 'monthly'
+        if category == 'kvartiry-posutochno':
+            return 'daily'
+        return None
+
+    def category_page_url(
+        self,
+        category: str,
+        page: int,
+        *,
+        city: str = "astana",
+        rooms: str | None = None,
+    ) -> str:
+        try:
+            path = LISTING_CATEGORY_PATHS[category].format(city=city)
+        except KeyError as exc:
+            choices = ', '.join(sorted(LISTING_CATEGORY_PATHS))
+            raise ValueError(
+                f"Unknown category {category!r}; expected one of: {choices}"
+            ) from exc
+        query: list[tuple[str, object]] = [("page", page)]
+        if rooms:
+            query.append(("das[live.rooms]", rooms))
+        from urllib.parse import urlencode
+
+        return f"{self.base_url}{path}?{urlencode(query)}"
 
     def fetch_complex_developer(self, complex_url: str) -> Optional[str]:
         if complex_url in self.complex_developer_cache:
@@ -269,24 +328,48 @@ class ApartmentScraper:
                     return item.strip()
         return None
     
-    def get_listing_urls(self, page_url: str) -> List[str]:
+    def get_listing_page(self, page_url: str) -> tuple[List[str], Optional[int]]:
         html = self.fetch_page(page_url)
         if not html:
-            return []
+            raise RuntimeError(f"Could not fetch category page: {page_url}")
         
         try:
             soup = BeautifulSoup(html, 'html.parser')
             card_links = soup.select('.a-card__title[href]')
             urls = []
+            seen = set()
 
             for link in card_links:
                 href = link.get('href')
                 if href:
-                    full_url = urljoin(self.base_url, href)
-                    urls.append(full_url)
+                    parsed = urlparse(urljoin(self.base_url, href))
+                    full_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+                    if full_url not in seen:
+                        seen.add(full_url)
+                        urls.append(full_url)
 
+            page_numbers = []
+            category_path = urlparse(page_url).path.rstrip('/')
+            for link in soup.select('a[href]'):
+                parsed_link = urlparse(urljoin(self.base_url, link.get('href') or ''))
+                if parsed_link.path.rstrip('/') != category_path:
+                    continue
+                query = parse_qs(parsed_link.query)
+                for raw_page in query.get('page', []):
+                    try:
+                        page_numbers.append(int(raw_page))
+                    except (TypeError, ValueError):
+                        continue
+
+            return urls, max(page_numbers, default=None)
+        except Exception as exc:
+            raise RuntimeError(f"Could not parse category page: {page_url}") from exc
+
+    def get_listing_urls(self, page_url: str) -> List[str]:
+        try:
+            urls, _ = self.get_listing_page(page_url)
             return urls
-        except Exception:
+        except RuntimeError:
             return []
     
     def save_to_csv(self, data_list: List[Dict], filename: str = "krisha_data_raw.csv"):

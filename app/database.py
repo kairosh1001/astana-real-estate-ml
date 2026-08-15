@@ -103,6 +103,50 @@ def init_db(connection: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_price_history_url_observed
         ON listing_price_history(url, observed_at);
 
+        CREATE TABLE IF NOT EXISTS rental_refresh_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            city TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            pages_seen INTEGER NOT NULL DEFAULT 0,
+            urls_seen INTEGER NOT NULL DEFAULT 0,
+            listings_processed INTEGER NOT NULL DEFAULT 0,
+            listings_failed INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'running',
+            error TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS rental_listings (
+            url TEXT PRIMARY KEY,
+            city TEXT NOT NULL,
+            title TEXT,
+            raw_json TEXT NOT NULL,
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            last_checked_at TEXT NOT NULL,
+            missed_refreshes INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            monthly_rent REAL,
+            area_m2 REAL,
+            rent_per_m2 REAL
+        );
+
+        CREATE TABLE IF NOT EXISTS rental_price_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            monthly_rent REAL,
+            rent_per_m2 REAL,
+            status TEXT NOT NULL DEFAULT 'active',
+            FOREIGN KEY(url) REFERENCES rental_listings(url) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_rental_listings_city_status
+        ON rental_listings(city, status);
+
+        CREATE INDEX IF NOT EXISTS idx_rental_history_url_observed
+        ON rental_price_history(url, observed_at);
+
         CREATE TABLE IF NOT EXISTS model_monitoring_snapshots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TEXT NOT NULL,
@@ -790,6 +834,117 @@ def upsert_listing_prediction(
             ),
         )
     connection.commit()
+
+
+def start_rental_refresh_run(connection: sqlite3.Connection, *, city: str) -> int:
+    cursor = connection.execute(
+        "INSERT INTO rental_refresh_runs (city, started_at) VALUES (?, ?)",
+        (normalize_city_slug(city), utc_now()),
+    )
+    connection.commit()
+    return int(cursor.lastrowid)
+
+
+def finish_rental_refresh_run(
+    connection: sqlite3.Connection,
+    run_id: int,
+    *,
+    pages_seen: int,
+    urls_seen: int,
+    processed: int,
+    failed: int,
+    status: str = "complete",
+    error: str | None = None,
+) -> None:
+    connection.execute(
+        """
+        UPDATE rental_refresh_runs
+        SET finished_at = ?, pages_seen = ?, urls_seen = ?,
+            listings_processed = ?, listings_failed = ?, status = ?, error = ?
+        WHERE id = ?
+        """,
+        (utc_now(), pages_seen, urls_seen, processed, failed, status, error, run_id),
+    )
+    connection.commit()
+
+
+def upsert_rental_listing(
+    connection: sqlite3.Connection,
+    *,
+    raw_listing: dict,
+    city: str,
+) -> None:
+    from app.rental_feature_pipeline import clean_rent_price
+
+    now = utc_now()
+    url = str(raw_listing.get("url") or "")
+    if not url:
+        raise ValueError("Rental listing URL is required")
+    monthly_rent = clean_rent_price(raw_listing.get("price"))
+    area = _extract_float(raw_listing.get("area_m2_structured"))
+    if area is None:
+        title_match = re.search(r"(\d+(?:[.,]\d+)?)\s*м²", str(raw_listing.get("title") or ""))
+        area = float(title_match.group(1).replace(",", ".")) if title_match else None
+    rent_per_m2 = monthly_rent / area if area and monthly_rent > 0 else None
+    values = (
+        url,
+        normalize_city_slug(city),
+        str(raw_listing.get("title") or ""),
+        json.dumps(raw_listing, ensure_ascii=False, sort_keys=True),
+        now,
+        now,
+        now,
+        monthly_rent,
+        area,
+        rent_per_m2,
+    )
+    connection.execute(
+        """
+        INSERT INTO rental_listings (
+            url, city, title, raw_json, first_seen_at, last_seen_at,
+            last_checked_at, monthly_rent, area_m2, rent_per_m2
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(url) DO UPDATE SET
+            city = excluded.city, title = excluded.title,
+            raw_json = excluded.raw_json, last_seen_at = excluded.last_seen_at,
+            last_checked_at = excluded.last_checked_at, missed_refreshes = 0,
+            status = 'active', monthly_rent = excluded.monthly_rent,
+            area_m2 = excluded.area_m2, rent_per_m2 = excluded.rent_per_m2
+        """,
+        values,
+    )
+    day = now[:10]
+    existing = connection.execute(
+        "SELECT id FROM rental_price_history WHERE url = ? AND substr(observed_at, 1, 10) = ?",
+        (url, day),
+    ).fetchone()
+    if existing:
+        connection.execute(
+            "UPDATE rental_price_history SET observed_at=?, monthly_rent=?, rent_per_m2=?, status='active' WHERE id=?",
+            (now, monthly_rent, rent_per_m2, existing["id"]),
+        )
+    else:
+        connection.execute(
+            "INSERT INTO rental_price_history (url, observed_at, monthly_rent, rent_per_m2) VALUES (?, ?, ?, ?)",
+            (url, now, monthly_rent, rent_per_m2),
+        )
+
+
+def store_listing_rental_estimate(
+    connection: sqlite3.Connection,
+    *,
+    url: str,
+    estimate: dict,
+) -> None:
+    row = connection.execute("SELECT raw_json FROM listings WHERE url = ?", (url,)).fetchone()
+    if not row:
+        return
+    raw_listing = _load_raw_listing(row["raw_json"])
+    raw_listing["_rental_estimate"] = estimate
+    connection.execute(
+        "UPDATE listings SET raw_json = ? WHERE url = ?",
+        (json.dumps(raw_listing, ensure_ascii=False, sort_keys=True), url),
+    )
 
 
 def fetch_undervalued(
@@ -1970,6 +2125,9 @@ def fetch_monitoring_snapshots(
 
 def _prepare_undervalued_item(row: dict) -> dict:
     raw_listing = _load_raw_listing(row.get("raw_json"))
+    rental_estimate = raw_listing.get("_rental_estimate")
+    if isinstance(rental_estimate, dict):
+        row.update(rental_estimate)
     city_slug = normalize_city_slug(row.get("city") or infer_listing_city(raw_listing))
     district_slug = normalize_district(raw_listing.get("Город"), city=city_slug)
     district_label = district_label_for_slug(district_slug, city=city_slug)

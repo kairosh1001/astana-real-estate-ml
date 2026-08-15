@@ -9,3 +9,7 @@
 # Weekly deeper refreshes on separate days.
 0 15 * * 0 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city astana --kind weekly --pages 200 >> logs/weekly-astana-refresh.log 2>&1
 0 15 * * 6 cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_listings.py --city almaty --kind weekly --pages 200 >> logs/weekly-almaty-refresh.log 2>&1
+
+# Current monthly-rent inventory for investment estimates.
+30 11 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_rentals.py --city astana --pages 100 >> logs/daily-rent-astana-refresh.log 2>&1
+30 19 * * * cd /opt/krisha && flock -w 21600 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh python scripts/refresh_rentals.py --city almaty --pages 100 >> logs/daily-rent-almaty-refresh.log 2>&1

@@ -14,6 +14,9 @@ data/*_sale_raw.csv.tmp
 data/*_sale_raw.state.json.tmp
 data/universal_training_v2.csv
 data/universal_training_v2.csv.tmp
+data/rent_monthly_raw.csv
+data/rent_monthly_raw.csv.tmp
+data/rent_monthly_scrape_status.json
 Turar's code/
 models_candidate/
 # Byte-compiled / optimized / DLL files

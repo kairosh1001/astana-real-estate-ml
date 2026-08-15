@@ -18,6 +18,7 @@ from app.feature_pipeline_v2 import (
     build_model_features_v2,
 )
 from app.model_service import PriceModelService
+from app.rental_model_service import RentalModelService, rental_bundle_complete
 from scrape import ApartmentScraper
 
 
@@ -41,6 +42,14 @@ class ListingPrediction:
     discount_vs_asking_pct_median: float
     interval_width_pct: float
     city: str = "astana"
+    monthly_rent_q10: float | None = None
+    monthly_rent_q50: float | None = None
+    monthly_rent_q90: float | None = None
+    gross_yield_q10: float | None = None
+    gross_yield_q50: float | None = None
+    gross_yield_q90: float | None = None
+    payback_years_q50: float | None = None
+    rental_model_version: str | None = None
 
 
 class PredictionService:
@@ -61,6 +70,9 @@ class PredictionService:
             str, tuple[PriceModelService, UniversalFeatureConfig, PoiCatalog]
         ] = {}
         self._v2_load_lock = Lock()
+        self.rental_model_service = (
+            RentalModelService(self.root) if rental_bundle_complete(self.root) else None
+        )
 
     @property
     def available_model_bundles(self) -> list[str]:
@@ -85,6 +97,8 @@ class PredictionService:
                 except (OSError, json.JSONDecodeError):
                     versions.append(f"{bundle_name}_unknown")
         namespace = ":".join([CACHE_SCHEMA_VERSION, self.routing_mode, *versions])
+        if self.rental_model_service:
+            namespace += f":{self.rental_model_service.model_version}"
         return f"{url}#model={namespace}"
 
     def predict_by_url(self, url: str) -> ListingPrediction:
@@ -128,6 +142,20 @@ class PredictionService:
         pred_q50 = float(prediction["pred_price_per_m2_q50"])
         pred_q90 = float(prediction["pred_price_per_m2_q90"])
 
+        rental_values: dict = {}
+        if self.rental_model_service:
+            try:
+                estimate = self.rental_model_service.estimate(
+                    raw_listing,
+                    purchase_price=listed_price,
+                )
+                rental_values = estimate.to_dict()
+                rental_values["rental_model_version"] = rental_values.pop("model_version")
+                raw_listing["_rental_estimate"] = rental_values
+            except (TypeError, ValueError):
+                # A malformed optional field must not block the core sale estimate.
+                rental_values = {}
+
         return ListingPrediction(
             url=url or str(raw_listing.get("url") or ""),
             title=str(raw_listing.get("title") or ""),
@@ -146,6 +174,7 @@ class PredictionService:
             / listed_price_per_m2,
             interval_width_pct=(pred_q90 - pred_q10) / pred_q50,
             city=infer_listing_city(raw_listing),
+            **rental_values,
         )
 
     def _select_model_key(self, raw_listing: dict) -> str:

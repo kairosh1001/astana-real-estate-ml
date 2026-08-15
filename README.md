@@ -21,6 +21,8 @@ The goal is not to replace human due diligence. The app is an analytical screeni
 - Ranks active listings by conservative upside: q10 model estimate vs asking price.
 - Serves a FastAPI web app with filters, personal home matching, map-based polygon search, listing comparison, saved/hidden listings, price history, and model explanations.
 - Runs scheduled refresh jobs on a VPS using Docker Compose and cron.
+- Estimates long-term monthly rent, gross rental yield, and simple payback with a
+  separate CatBoost quantile model trained on Astana and Almaty rental listings.
 - Provides admin pages for refresh history, service status, model monitoring snapshots, and model version checks.
 
 ## Tech Stack

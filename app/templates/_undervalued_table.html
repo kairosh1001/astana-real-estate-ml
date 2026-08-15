@@ -20,6 +20,7 @@
         <th>Район</th>
         <th>Жилой комплекс</th>
         <th>Krisha</th>
+        <th>Аренда / доходность</th>
         <th>Цена/м²</th>
         <th>
           Нижняя оценка
@@ -53,6 +54,12 @@
         <td data-label="Район">{% if item.district_slug %}<a class="entity-link" href="/district/{{ item.district_slug }}?city={{ item.city }}" title="Открыть аналитику района {{ item.district_label }}, {{ item.city_label }}">{{ item.district_label }}</a>{% else %}—{% endif %}</td>
         <td data-label="Жилой комплекс">{% if item.residential_complex %}<a class="entity-link" href="/complex-page?city={{ item.city }}&name={{ item.residential_complex | urlencode }}" title="Открыть аналитику ЖК {{ item.residential_complex }}, {{ item.city_label }}">{{ item.residential_complex }}</a>{% else %}—{% endif %}</td>
         <td data-label="Krisha"><a href="{{ item.url }}" target="_blank" rel="noreferrer">Открыть</a></td>
+        <td data-label="Аренда / доходность">
+          {% if item.monthly_rent_q50 %}
+          <strong>{{ "{:,.0f}".format(item.monthly_rent_q50).replace(',', ' ') }} тг/мес.</strong>
+          <span class="rental-table-meta">{{ "{:.1%}".format(item.gross_yield_q50) }} · {{ "{:.1f}".format(item.payback_years_q50) }} лет</span>
+          {% else %}—{% endif %}
+        </td>
         <td data-label="Цена/м²">{{ "{:,.0f}".format(item.listed_price_per_m2 or 0) }}</td>
         <td data-label="Нижняя оценка">{{ "{:,.0f}".format(item.pred_price_per_m2_q10 or 0) }}</td>
         <td data-label="Медианная оценка">{{ "{:,.0f}".format(item.pred_price_per_m2_q50 or 0) }}</td>
