@@ -1,0 +1,94 @@
+name: Finalize monthly rental model
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/finalize-rental-model.yml
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: train-monthly-rental-model
+  cancel-in-progress: true
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository and history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Download completed rental shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rental-shard-*
+          path: data/shards
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: 31875311197
+
+      - name: Merge Astana history and Almaty shards
+        run: |
+          mkdir -p data
+          git fetch origin codex/rental-data-refresh:refs/remotes/origin/codex/rental-data-refresh
+          git show origin/codex/rental-data-refresh:data/rent_monthly_raw.csv > data/rent_astana.csv
+          python - <<'PY'
+          from pathlib import Path
+          import pandas as pd
+
+          paths = [Path("data/rent_astana.csv"), *Path("data/shards").glob("rent-*.csv")]
+          frames = [pd.read_csv(path, low_memory=False) for path in paths if path.exists()]
+          combined = pd.concat(frames, ignore_index=True, sort=False).drop_duplicates("url", keep="last")
+          combined.to_csv("data/rent_monthly_raw.csv", index=False)
+          print(f"merged rows={len(combined)} files={len(frames)}")
+          PY
+
+      - name: Train and evaluate independent rental quantile models
+        run: python -u scripts/train_rental_model.py --iterations 900
+
+      - name: Require production-quality coverage
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          evaluation = json.loads(Path("models/rent_monthly_v2/evaluation.json").read_text())
+          if not evaluation.get("production_ready"):
+              raise SystemExit(json.dumps(evaluation, indent=2, ensure_ascii=False))
+          print(json.dumps(evaluation, indent=2, ensure_ascii=False))
+          PY
+
+      - name: Commit the validated model bundle
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add models/rent_monthly_v2
+          git commit -m "Train production monthly rental model"
+          git push
+
+      - name: Upload evaluation and model artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finalized-monthly-rental-model
+          path: models/rent_monthly_v2
+          if-no-files-found: warn
+          retention-days: 14
