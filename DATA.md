@@ -141,3 +141,16 @@ into versioned bundles. Production uses `city_auto` routing: Astana remains on
 v1, while Almaty uses the stronger Almaty-specific v2 model. Each bundle stores its
 feature contract, validation-tail interval offsets, held-out metrics, and SHA-256
 fingerprints alongside the models.
+
+To compare the legacy Astana feature contract, an Astana-only v2 candidate, and
+the universal v2 model on exactly the same deterministic Astana holdout, run:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\compare_astana_models.py
+```
+
+The script freshly retrains the v1-style candidate so that an older production
+artifact cannot receive credit for rows it may have seen before. It writes the
+reproducible results to `reports/astana_model_comparison.json` and
+`reports/astana_model_comparison.md`; candidate model binaries remain under the
+ignored `models_candidate/` directory until a separate promotion decision.

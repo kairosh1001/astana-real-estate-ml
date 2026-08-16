@@ -1,0 +1,315 @@
+{
+  "comparison_version": 1,
+  "question": "Which sale-price model is strongest for Astana on one common property-group holdout?",
+  "dataset": {
+    "path": "data\\universal_training_v2.csv",
+    "rows": 16226,
+    "unique_listing_urls": 16226,
+    "unique_property_groups": 15190,
+    "scraped_at_known_rows": 151,
+    "scraped_at_known_pct": 0.9306052015284112,
+    "scraped_at_min": "2026-08-11T16:52:12+00:00",
+    "scraped_at_max": "2026-08-11T17:01:40+00:00",
+    "rows_by_split": {
+      "train": 11476,
+      "test": 2390,
+      "validation": 2360
+    },
+    "raw_inputs": [
+      "krisha_data_raw_orig.csv",
+      "krisha_data_raw.csv",
+      "data\\astana_sale_raw.csv"
+    ],
+    "price_per_m2_filter": [
+      100000,
+      5000000
+    ]
+  },
+  "training_parameters": {
+    "iterations": 800,
+    "depth": 7,
+    "learning_rate": 0.04,
+    "l2_leaf_reg": 7.0,
+    "early_stopping_rounds": 100,
+    "random_seed": 42,
+    "objectives": {
+      "q10": "Quantile:alpha=0.10",
+      "q50": "RMSE",
+      "q90": "Quantile:alpha=0.90"
+    }
+  },
+  "model_definitions": {
+    "astana_v1_retrained": {
+      "training_scope": "astana",
+      "features": 23,
+      "feature_contract": "legacy_astana_v1",
+      "quantile_offsets_log": {
+        "q10": -0.017118219233240417,
+        "q90": 0.019551903094437658
+      }
+    },
+    "astana_v2": {
+      "training_scope": "astana",
+      "features": 41,
+      "feature_contract": "optimized_compact_v2",
+      "quantile_offsets_log": {
+        "q10": -0.021057929470534552,
+        "q90": 0.02566111296174202
+      }
+    },
+    "universal_v2": {
+      "training_scope": "astana+almaty",
+      "features": 41,
+      "feature_contract": "optimized_compact_v2",
+      "model_version": "universal_v2_2026-08-11"
+    }
+  },
+  "overall_test_metrics": {
+    "astana_v1_retrained": {
+      "rows": 2390,
+      "log_rmse": 0.13188549155045493,
+      "approx_multiplicative_error_pct": 14.097766020375898,
+      "log_mae": 0.09810217929364119,
+      "log_r2": 0.8030111427073989,
+      "mae_kzt_per_m2": 64830.99822937769,
+      "rmse_kzt_per_m2": 95332.23290178656,
+      "median_absolute_percentage_error_pct": 7.721024019745719,
+      "q10_q90_coverage_pct": 79.9581589958159
+    },
+    "astana_v2": {
+      "rows": 2390,
+      "log_rmse": 0.1299882370120224,
+      "approx_multiplicative_error_pct": 13.881498737882852,
+      "log_mae": 0.09635893658890904,
+      "log_r2": 0.808637990251362,
+      "mae_kzt_per_m2": 63604.905236327846,
+      "rmse_kzt_per_m2": 93274.17022041632,
+      "median_absolute_percentage_error_pct": 7.310300430638078,
+      "q10_q90_coverage_pct": 80.46025104602509
+    },
+    "universal_v2": {
+      "rows": 2390,
+      "log_rmse": 0.135243732339083,
+      "approx_multiplicative_error_pct": 14.481577897755624,
+      "log_mae": 0.10105922585110885,
+      "log_r2": 0.7928514434867014,
+      "mae_kzt_per_m2": 66918.21908035997,
+      "rmse_kzt_per_m2": 97451.94001831666,
+      "median_absolute_percentage_error_pct": 7.828116740492458,
+      "q10_q90_coverage_pct": 79.2468619246862
+    }
+  },
+  "non_comparable_reference_metrics": {
+    "production_astana_v1": {
+      "rows": 2390,
+      "log_rmse": 0.11021921280970419,
+      "approx_multiplicative_error_pct": 11.652279973402376,
+      "log_mae": 0.0768271202735624,
+      "log_r2": 0.8624178074722744,
+      "mae_kzt_per_m2": 50761.86157699296,
+      "rmse_kzt_per_m2": 79977.9828191879,
+      "median_absolute_percentage_error_pct": 5.291480017238327,
+      "q10_q90_coverage_pct": 78.41004184100419,
+      "eligible_for_selection": false,
+      "reason": "Historical training membership is unavailable and may overlap the common v2 test rows.",
+      "model_version": "astana_v1_current"
+    }
+  },
+  "room_segment_test_metrics": {
+    "astana_v1_retrained": {
+      "1": {
+        "rows": 601,
+        "log_rmse": 0.11800439909048208,
+        "approx_multiplicative_error_pct": 12.52490614288905,
+        "log_mae": 0.08700489685925646,
+        "log_r2": 0.747426046691569,
+        "mae_kzt_per_m2": 51439.32522808077,
+        "rmse_kzt_per_m2": 70583.21247650839,
+        "median_absolute_percentage_error_pct": 6.463853720642436,
+        "q10_q90_coverage_pct": 78.70216306156405
+      },
+      "2": {
+        "rows": 896,
+        "log_rmse": 0.11859119993054718,
+        "approx_multiplicative_error_pct": 12.590955229276378,
+        "log_mae": 0.09033006092032836,
+        "log_r2": 0.8197072264302183,
+        "mae_kzt_per_m2": 57553.01839569584,
+        "rmse_kzt_per_m2": 77947.525927879,
+        "median_absolute_percentage_error_pct": 7.56581966570974,
+        "q10_q90_coverage_pct": 81.13839285714286
+      },
+      "3": {
+        "rows": 621,
+        "log_rmse": 0.13854495392493973,
+        "approx_multiplicative_error_pct": 14.860131454689732,
+        "log_mae": 0.10364912343306693,
+        "log_r2": 0.8162201601255099,
+        "mae_kzt_per_m2": 70733.6214428774,
+        "rmse_kzt_per_m2": 109478.13565723413,
+        "median_absolute_percentage_error_pct": 8.36648609241676,
+        "q10_q90_coverage_pct": 81.32045088566827
+      },
+      "4": {
+        "rows": 230,
+        "log_rmse": 0.17704728129678043,
+        "approx_multiplicative_error_pct": 19.36875308873141,
+        "log_mae": 0.1343773470723191,
+        "log_r2": 0.7477097393808937,
+        "mae_kzt_per_m2": 102972.5983887332,
+        "rmse_kzt_per_m2": 144543.51387123775,
+        "median_absolute_percentage_error_pct": 9.972684446329405,
+        "q10_q90_coverage_pct": 76.95652173913044
+      },
+      "5+": {
+        "rows": 42,
+        "log_rmse": 0.1871803105800461,
+        "approx_multiplicative_error_pct": 20.58446920048096,
+        "log_mae": 0.14203893895731295,
+        "log_r2": 0.7984336030689638,
+        "mae_kzt_per_m2": 115577.86376564603,
+        "rmse_kzt_per_m2": 156938.77134253262,
+        "median_absolute_percentage_error_pct": 10.432988301691767,
+        "q10_q90_coverage_pct": 69.04761904761905
+      }
+    },
+    "astana_v2": {
+      "1": {
+        "rows": 601,
+        "log_rmse": 0.1148718983937849,
+        "approx_multiplicative_error_pct": 12.17297329872059,
+        "log_mae": 0.08512189858459594,
+        "log_r2": 0.7606575329590746,
+        "mae_kzt_per_m2": 50723.03424563777,
+        "rmse_kzt_per_m2": 69887.22155532298,
+        "median_absolute_percentage_error_pct": 6.60331093531255,
+        "q10_q90_coverage_pct": 79.36772046589017
+      },
+      "2": {
+        "rows": 896,
+        "log_rmse": 0.11735546893056313,
+        "approx_multiplicative_error_pct": 12.451909025128188,
+        "log_mae": 0.08935695010274834,
+        "log_r2": 0.8234449844763612,
+        "mae_kzt_per_m2": 56860.3167203314,
+        "rmse_kzt_per_m2": 76912.22858825498,
+        "median_absolute_percentage_error_pct": 7.0778790226088715,
+        "q10_q90_coverage_pct": 81.58482142857143
+      },
+      "3": {
+        "rows": 621,
+        "log_rmse": 0.13529021452159323,
+        "approx_multiplicative_error_pct": 14.486899375029507,
+        "log_mae": 0.10096744381759368,
+        "log_r2": 0.8247535559084291,
+        "mae_kzt_per_m2": 69052.29417559072,
+        "rmse_kzt_per_m2": 106312.36249197247,
+        "median_absolute_percentage_error_pct": 8.050016756073155,
+        "q10_q90_coverage_pct": 81.64251207729468
+      },
+      "4": {
+        "rows": 230,
+        "log_rmse": 0.17527334432323502,
+        "approx_multiplicative_error_pct": 19.157188151054218,
+        "log_mae": 0.13054804898997016,
+        "log_r2": 0.7527400895177501,
+        "mae_kzt_per_m2": 97956.02004064509,
+        "rmse_kzt_per_m2": 137701.4136576962,
+        "median_absolute_percentage_error_pct": 9.555311614936999,
+        "q10_q90_coverage_pct": 77.82608695652173
+      },
+      "5+": {
+        "rows": 42,
+        "log_rmse": 0.20005762280714762,
+        "approx_multiplicative_error_pct": 22.147314084355727,
+        "log_mae": 0.15116514827783545,
+        "log_r2": 0.7697455599359151,
+        "mae_kzt_per_m2": 123166.11569971645,
+        "rmse_kzt_per_m2": 167441.88644958247,
+        "median_absolute_percentage_error_pct": 12.366906406313257,
+        "q10_q90_coverage_pct": 69.04761904761905
+      }
+    },
+    "universal_v2": {
+      "1": {
+        "rows": 601,
+        "log_rmse": 0.12218633206068286,
+        "approx_multiplicative_error_pct": 12.996463080371257,
+        "log_mae": 0.09043047037374331,
+        "log_r2": 0.7292070071598182,
+        "mae_kzt_per_m2": 53525.98344010105,
+        "rmse_kzt_per_m2": 72394.74757703725,
+        "median_absolute_percentage_error_pct": 6.881334412871923,
+        "q10_q90_coverage_pct": 78.86855241264558
+      },
+      "2": {
+        "rows": 896,
+        "log_rmse": 0.11857308645524041,
+        "approx_multiplicative_error_pct": 12.588915834259392,
+        "log_mae": 0.09128932201287838,
+        "log_r2": 0.8197622976210359,
+        "mae_kzt_per_m2": 58148.81480566548,
+        "rmse_kzt_per_m2": 77489.13220020852,
+        "median_absolute_percentage_error_pct": 7.414796534474183,
+        "q10_q90_coverage_pct": 81.47321428571429
+      },
+      "3": {
+        "rows": 621,
+        "log_rmse": 0.14558370732587522,
+        "approx_multiplicative_error_pct": 15.671455601208578,
+        "log_mae": 0.10859272981345548,
+        "log_r2": 0.7970719916974108,
+        "mae_kzt_per_m2": 74158.98507371104,
+        "rmse_kzt_per_m2": 113270.32562268458,
+        "median_absolute_percentage_error_pct": 8.50069939194855,
+        "q10_q90_coverage_pct": 77.77777777777779
+      },
+      "4": {
+        "rows": 230,
+        "log_rmse": 0.17357222734997674,
+        "approx_multiplicative_error_pct": 18.95466014655734,
+        "log_mae": 0.13222607513195953,
+        "log_r2": 0.7575163648397107,
+        "mae_kzt_per_m2": 101006.31823694149,
+        "rmse_kzt_per_m2": 140238.94996161683,
+        "median_absolute_percentage_error_pct": 10.5895672354617,
+        "q10_q90_coverage_pct": 77.82608695652173
+      },
+      "5+": {
+        "rows": 42,
+        "log_rmse": 0.22114543106863485,
+        "approx_multiplicative_error_pct": 24.750484333471192,
+        "log_mae": 0.17951243027344868,
+        "log_r2": 0.7186455762952026,
+        "mae_kzt_per_m2": 151902.53722410044,
+        "rmse_kzt_per_m2": 199802.1750617555,
+        "median_absolute_percentage_error_pct": 13.496464196098257,
+        "q10_q90_coverage_pct": 66.66666666666666
+      }
+    }
+  },
+  "paired_cluster_bootstrap": {
+    "astana_v1_retrained_minus_astana_v2": {
+      "mean_log_rmse_delta": 0.0019277653557184956,
+      "ci95_low": 7.975885460528231e-05,
+      "ci95_high": 0.003777881776109674,
+      "probability_winner_is_better": 0.98
+    },
+    "universal_v2_minus_astana_v2": {
+      "mean_log_rmse_delta": 0.005235711432098416,
+      "ci95_low": 0.002850954124619792,
+      "ci95_high": 0.0075654128444279075,
+      "probability_winner_is_better": 1.0
+    }
+  },
+  "bootstrap_replicates": 2000,
+  "winner": "astana_v2",
+  "confidence": "share_with_caveats",
+  "caveats": [
+    "Grouped holdout is not a future-period test.",
+    "Targets are public asking prices rather than transaction prices.",
+    "Target-free feature mappings and the OSM catalog predate the split.",
+    "Most legacy source rows lack scrape timestamps, limiting freshness validation.",
+    "Small 5+ room segments have higher uncertainty."
+  ]
+}
