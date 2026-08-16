@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Аккаунт — Kvartiry-ai.kz{% endblock %}
+{% block content %}
+<div class="page-head account-page-head">
+  <div>
+    <span class="hero-eyebrow">Личный кабинет</span>
+    <h1>{{ account_user.display_name }}</h1>
+    <p>{{ account_user.email }}</p>
+  </div>
+  <a class="button" href="/saved-listings">Все сохранённые · {{ watchlist_summary.total }}</a>
+</div>
+{% if request.query_params.get('password_changed') %}
+<div class="form-alert success" role="status">Пароль обновлён. Остальные активные сеансы завершены.</div>
+{% endif %}
+<section class="account-grid">
+  <div class="account-main">
+    <div class="watchlist-summary" aria-label="Сводка аккаунта">
+      <article><span>Сохранено</span><strong>{{ watchlist_summary.total }}</strong></article>
+      <article class="positive"><span>Снизили цену</span><strong>{{ watchlist_summary.price_drops }}</strong></article>
+      <article><span>Активны</span><strong>{{ watchlist_summary.active }}</strong></article>
+    </div>
+    <section class="section panel">
+      <div class="toolbar">
+        <div>
+          <span class="hero-eyebrow">Недавние</span>
+          <h2>Ваши квартиры</h2>
+        </div>
+        {% if items %}<a href="/saved-listings">Открыть весь список →</a>{% endif %}
+      </div>
+      {% with items=recent_items %}{% include "_saved_listing_cards.html" %}{% endwith %}
+    </section>
+  </div>
+  <aside class="account-sidebar">
+    <section class="panel account-profile-card">
+      <span class="hero-eyebrow">Профиль</span>
+      <h2>Данные аккаунта</h2>
+      <dl class="detail-list">
+        <div class="detail-row"><dt>Имя</dt><dd>{{ account_user.display_name }}</dd></div>
+        <div class="detail-row"><dt>Email</dt><dd>{{ account_user.email }}</dd></div>
+        <div class="detail-row"><dt>Аккаунт создан</dt><dd>{{ account_user.created_at | astana_time }}</dd></div>
+      </dl>
+    </section>
+    <section class="panel account-security-card">
+      <span class="hero-eyebrow">Безопасность</span>
+      <h2>Изменить пароль</h2>
+      {% if password_error %}<div class="form-alert error" role="alert">{{ password_error }}</div>{% endif %}
+      <form class="stack-form account-password-form" method="post" action="/account/password">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label>Текущий пароль<input name="current_password" type="password" autocomplete="current-password" required></label>
+        <label>Новый пароль<input name="new_password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>
+        <label>Повторите новый пароль<input name="new_password_confirm" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label>
+        <button class="button secondary" type="submit">Обновить пароль</button>
+      </form>
+    </section>
+  </aside>
+</section>
+{% endblock %}

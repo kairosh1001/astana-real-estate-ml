@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Сохранённые квартиры — Kvartiry-ai.kz{% endblock %}
+{% block content %}
+<div class="page-head watchlist-page-head">
+  <div>
+    <span class="hero-eyebrow">Ваш короткий список</span>
+    <h1>Сохранённые квартиры</h1>
+    <p>Следите за ценой, статусом объявления и своими заметками в одном месте.</p>
+  </div>
+  <a class="button secondary" href="/account">Настройки аккаунта</a>
+</div>
+<section class="watchlist-summary" aria-label="Сводка сохранённых квартир">
+  <article><span>Всего</span><strong data-saved-count>{{ watchlist_summary.total }}</strong></article>
+  <article><span>Активны</span><strong>{{ watchlist_summary.active }}</strong></article>
+  <article class="positive"><span>Цена снизилась</span><strong>{{ watchlist_summary.price_drops }}</strong></article>
+  <article><span>Недоступны</span><strong>{{ watchlist_summary.unavailable }}</strong></article>
+</section>
+<section class="section" data-watchlist-section>
+  {% include "_saved_listing_cards.html" %}
+</section>
+{% endblock %}

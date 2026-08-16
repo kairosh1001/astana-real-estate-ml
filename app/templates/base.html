@@ -4,6 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Kvartiry-ai.kz{% endblock %}</title>
+    <meta name="theme-color" content="#030713">
+    <meta name="description" content="ИИ-помощник для поиска, оценки и сравнения квартир в Астане и Алматы.">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <link rel="icon" type="image/png" href="/static/krisha-ai-mark.png">
     <script>
       (function () {
         document.documentElement.classList.add("js");
@@ -772,12 +776,12 @@
     </style>
     <link rel="stylesheet" href="/static/site.css?v=20260816-theme-parity">
   </head>
-  <body>
+  <body data-authenticated="{{ 'true' if current_user else 'false' }}">
     <div class="scroll-progress" aria-hidden="true"><span data-scroll-progress></span></div>
     <header class="site-header">
       <div class="site-header-inner">
-        <a class="brand" href="/">
-          <span class="brand-mark" aria-hidden="true">AI</span>
+        <a class="brand" href="/" aria-label="Kvartiry-ai.kz — на главную">
+          <span class="brand-mark" aria-hidden="true"><img src="/static/krisha-ai-mark.png" alt=""></span>
           <span class="brand-copy">
             <strong>Kvartiry-ai.kz</strong>
             {% if request.url.path == "/" %}
@@ -786,16 +790,25 @@
           </span>
         </a>
         <div class="header-actions">
+          <div class="desktop-account-actions">
+            {% if current_user %}
+            <a class="header-saved-link" href="/saved-listings">Сохранённые <span data-header-saved-count>{{ saved_count }}</span></a>
+            <a class="account-chip" href="/account" aria-label="Открыть аккаунт {{ current_user.display_name }}">{{ current_user.display_name[:1] | upper }}</a>
+            {% else %}
+            <a class="header-login-link" href="/login?next={{ request.url.path | urlencode }}">Войти</a>
+            <a class="header-register-link" href="/register?next={{ request.url.path | urlencode }}">Регистрация</a>
+            {% endif %}
+          </div>
           <button class="theme-toggle" type="button" data-theme-toggle aria-label="Включить светлую тему" aria-pressed="false">
             <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
             <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
             <span data-theme-label>Светлая тема</span>
           </button>
-          <button class="nav-toggle" type="button" data-nav-toggle aria-label="Открыть меню" aria-expanded="false">
+          <button class="nav-toggle" type="button" data-nav-toggle aria-label="Открыть меню" aria-expanded="false" aria-controls="site-navigation">
             <span></span><span></span><span></span>
           </button>
         </div>
-        <nav class="site-nav" data-site-nav aria-label="Основная навигация">
+        <nav class="site-nav" id="site-navigation" data-site-nav aria-label="Основная навигация">
           {% set nav_city_slug = city.slug if city.slug in ["astana", "almaty"] else "astana" %}
           {% if not neutral_home %}
           <a class="primary-nav" href="/">Вернуться на главную</a>
@@ -816,6 +829,19 @@
           {% if telegram_bot_url %}
           <a href="{{ telegram_bot_url }}" target="_blank" rel="noreferrer">Telegram бот</a>
           {% endif %}
+          <div class="mobile-account-nav">
+            {% if current_user %}
+            <a href="/saved-listings">Сохранённые · <span data-header-saved-count>{{ saved_count }}</span></a>
+            <a href="/account">Аккаунт</a>
+            <form method="post" action="/logout">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" data-nav-close>Выйти</button>
+            </form>
+            {% else %}
+            <a href="/login?next={{ request.url.path | urlencode }}">Войти</a>
+            <a href="/register?next={{ request.url.path | urlencode }}">Создать аккаунт</a>
+            {% endif %}
+          </div>
         </nav>
       </div>
     </header>
@@ -824,13 +850,45 @@
     </main>
     <footer class="site-footer">
       <div class="site-footer-inner">
-        <span>2026 · Данные получены из открытых объявлений на сайте krisha.kz.</span>
-        <span class="footer-creator">
-          <span>Создатель - Kairat Zharkynbay</span>
-          <a href="mailto:kairosh1001@gmail.com">kairosh1001@gmail.com</a>
-        </span>
+        <div class="footer-grid">
+          <div class="footer-brand-column">
+            <a class="footer-brand" href="/">
+              <img src="/static/krisha-ai-mark.png" alt="">
+              <strong>Kvartiry-ai.kz</strong>
+            </a>
+            <p>ИИ-помощник для поиска, оценки и сравнения квартир в Астане и Алматы.</p>
+            <p class="footer-disclaimer">Независимый сервис. Не связан с Krisha.kz, банками, агентствами или застройщиками.</p>
+          </div>
+          <div class="footer-column">
+            <h2>Сервис</h2>
+            <a href="/find-home-page?city=astana">Подобрать квартиру</a>
+            <a href="/undervalued-page?city=astana">Квартиры ниже рынка</a>
+            <a href="/predict-page">Оценить по ссылке</a>
+            <a href="/market-page?city=astana">Анализ рынка</a>
+          </div>
+          <div class="footer-column">
+            <h2>Узнать больше</h2>
+            <a href="/how-it-works">Как это работает</a>
+            <a href="/features">Возможности</a>
+            <a href="/model-page">О модели</a>
+            {% if current_user %}<a href="/saved-listings">Сохранённые</a>{% else %}<a href="/register">Создать аккаунт</a>{% endif %}
+          </div>
+          <div class="footer-column">
+            <h2>Проект</h2>
+            <a href="/about">О нас</a>
+            <a href="/contact">Контакты</a>
+            <a href="/terms">Условия использования</a>
+            <a href="/privacy">Конфиденциальность</a>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>© 2026 Kvartiry-ai.kz. Все права защищены.</span>
+          <span>Данные из открытых объявлений Krisha.kz. Оценки носят информационный характер.</span>
+        </div>
       </div>
     </footer>
+    <script id="saved-listing-state" type="application/json">{{ saved_listing_urls | tojson }}</script>
+    <div class="site-toast" role="status" aria-live="polite" aria-atomic="true" data-site-toast></div>
     <div class="compare-bar" data-compare-bar>
       <span data-compare-count>Выбрано для сравнения: 0</span>
       <div class="compare-actions">
@@ -843,6 +901,10 @@
         const savedKey = "krisha_saved_listing_urls";
         const hiddenKey = "krisha_hidden_listing_urls";
         const compareKey = "krisha_compare_listing_urls";
+        const isAuthenticated = document.body.dataset.authenticated === "true";
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+        const savedState = document.getElementById("saved-listing-state");
+        const toast = document.querySelector("[data-site-toast]");
 
         function readSet(key) {
           try {
@@ -856,9 +918,29 @@
           localStorage.setItem(key, JSON.stringify(Array.from(values)));
         }
 
-        let saved = readSet(savedKey);
+        let saved = isAuthenticated && savedState
+          ? new Set(JSON.parse(savedState.textContent || "[]"))
+          : readSet(savedKey);
         let hidden = readSet(hiddenKey);
         let compare = readSet(compareKey);
+
+        function showToast(message, isError) {
+          if (!toast) return;
+          toast.textContent = message;
+          toast.classList.toggle("is-error", Boolean(isError));
+          toast.classList.add("is-visible");
+          window.clearTimeout(showToast.timeoutId);
+          showToast.timeoutId = window.setTimeout(() => toast.classList.remove("is-visible"), 3200);
+        }
+
+        function updateSavedCount(count) {
+          document.querySelectorAll("[data-header-saved-count]").forEach((element) => {
+            element.textContent = String(count);
+          });
+          document.querySelectorAll("[data-saved-count]").forEach((element) => {
+            element.textContent = String(count);
+          });
+        }
 
         function applyState() {
           document.querySelectorAll("[data-listing-row]").forEach((row) => {
@@ -868,7 +950,13 @@
 
             const saveButton = row.querySelector("[data-save-listing]");
             if (saveButton) {
-              saveButton.textContent = saved.has(url) ? "Сохранено" : "Сохранить";
+              const isSaved = saved.has(url);
+              saveButton.classList.toggle("is-saved", isSaved);
+              saveButton.setAttribute("aria-pressed", String(isSaved));
+              saveButton.setAttribute("aria-label", isSaved ? "Убрать из сохранённых" : "Сохранить объявление");
+              saveButton.textContent = saveButton.classList.contains("save-icon-button")
+                ? (isSaved ? "★" : "☆")
+                : (isSaved ? "Сохранено" : "Сохранить");
             }
             const hideButton = row.querySelector("[data-hide-listing]");
             if (hideButton) {
@@ -896,15 +984,82 @@
           }
         }
 
-        document.addEventListener("click", (event) => {
+        document.addEventListener("click", async (event) => {
           const saveButton = event.target.closest("[data-save-listing]");
           if (saveButton) {
             const row = saveButton.closest("[data-listing-row]");
             const url = row && row.dataset.url;
             if (url) {
-              saved.has(url) ? saved.delete(url) : saved.add(url);
-              writeSet(savedKey, saved);
+              const shouldSave = !saved.has(url);
+              shouldSave ? saved.add(url) : saved.delete(url);
               applyState();
+              if (!isAuthenticated) {
+                writeSet(savedKey, saved);
+                showToast(shouldSave
+                  ? "Сохранено на этом устройстве. Войдите, чтобы синхронизировать список."
+                  : "Удалено из сохранённых на этом устройстве.");
+                return;
+              }
+              document.querySelectorAll("[data-listing-row]").forEach((listingRow) => {
+                if (listingRow.dataset.url === url) {
+                  listingRow.querySelectorAll("[data-save-listing]").forEach((button) => button.disabled = true);
+                }
+              });
+              try {
+                const response = await fetch("/api/saved-listings", {
+                  method: "PUT",
+                  credentials: "same-origin",
+                  headers: {"Content-Type": "application/json", "X-CSRF-Token": csrfToken},
+                  body: JSON.stringify({
+                    url: url,
+                    saved: shouldSave,
+                    title: row.dataset.title || null,
+                    price: row.dataset.price ? Number(row.dataset.price) : null,
+                    city: row.dataset.city || null
+                  })
+                });
+                if (!response.ok) throw new Error("save failed");
+                const result = await response.json();
+                updateSavedCount(result.count);
+                showToast(shouldSave ? "Квартира добавлена в ваш список." : "Квартира удалена из списка.");
+                if (!shouldSave && row.hasAttribute("data-watchlist-card")) {
+                  row.remove();
+                  if (!document.querySelector("[data-watchlist-card]")) window.location.reload();
+                }
+              } catch (_error) {
+                shouldSave ? saved.delete(url) : saved.add(url);
+                applyState();
+                showToast("Не удалось обновить список. Попробуйте ещё раз.", true);
+              } finally {
+                document.querySelectorAll("[data-listing-row]").forEach((listingRow) => {
+                  if (listingRow.dataset.url === url) {
+                    listingRow.querySelectorAll("[data-save-listing]").forEach((button) => button.disabled = false);
+                  }
+                });
+              }
+            }
+            return;
+          }
+
+          const noteButton = event.target.closest("[data-save-note]");
+          if (noteButton) {
+            const row = noteButton.closest("[data-listing-row]");
+            const note = row?.querySelector("[data-listing-note]")?.value || "";
+            if (!row || !isAuthenticated) return;
+            noteButton.disabled = true;
+            try {
+              const response = await fetch("/api/saved-listings/note", {
+                method: "PATCH",
+                credentials: "same-origin",
+                headers: {"Content-Type": "application/json", "X-CSRF-Token": csrfToken},
+                body: JSON.stringify({url: row.dataset.url, note: note})
+              });
+              if (!response.ok) throw new Error("note failed");
+              showToast("Заметка сохранена.");
+            } catch (_error) {
+              showToast("Не удалось сохранить заметку.", true);
+            } finally {
+              noteButton.disabled = false;
             }
             return;
           }
@@ -998,6 +1153,29 @@
         }
 
         applyState();
+
+        if (isAuthenticated) {
+          const guestSaved = readSet(savedKey);
+          if (guestSaved.size) {
+            fetch("/api/saved-listings/import", {
+              method: "POST",
+              credentials: "same-origin",
+              headers: {"Content-Type": "application/json", "X-CSRF-Token": csrfToken},
+              body: JSON.stringify({urls: Array.from(guestSaved).slice(0, 100)})
+            }).then((response) => {
+              if (!response.ok) throw new Error("import failed");
+              return response.json();
+            }).then((result) => {
+              saved = new Set(result.urls);
+              localStorage.removeItem(savedKey);
+              updateSavedCount(result.count);
+              applyState();
+              if (result.imported) showToast(`Импортировано сохранённых квартир: ${result.imported}.`);
+            }).catch(() => {
+              showToast("Старый список пока не удалось перенести в аккаунт.", true);
+            });
+          }
+        }
       })();
     </script>
     <script>
@@ -1031,6 +1209,17 @@
           if (!digits) return "";
           return String(Number(digits)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
         }
+
+        document.querySelectorAll("[data-password-toggle]").forEach(function (button) {
+          button.addEventListener("click", function () {
+            const input = button.closest(".password-control")?.querySelector("[data-password-input]");
+            if (!input) return;
+            const show = input.type === "password";
+            input.type = show ? "text" : "password";
+            button.textContent = show ? "Скрыть" : "Показать";
+            button.setAttribute("aria-label", show ? "Скрыть пароль" : "Показать пароль");
+          });
+        });
 
         document.querySelectorAll("[data-price-control]").forEach(function (control) {
           const input = control.querySelector("[data-price-input]");
@@ -1067,9 +1256,16 @@
             navToggle.setAttribute("aria-label", open ? "Закрыть меню" : "Открыть меню");
           });
           navigation.addEventListener("click", function (event) {
-            if (event.target.closest("a")) {
+            if (event.target.closest("a, [data-nav-close]")) {
               navigation.classList.remove("is-open");
               navToggle.setAttribute("aria-expanded", "false");
+            }
+          });
+          document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && navigation.classList.contains("is-open")) {
+              navigation.classList.remove("is-open");
+              navToggle.setAttribute("aria-expanded", "false");
+              navToggle.focus();
             }
           });
         }

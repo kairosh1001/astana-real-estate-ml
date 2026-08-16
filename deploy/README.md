@@ -95,6 +95,67 @@ If the server firewall allows port 8000, the app can be tested by IP first:
 http://SERVER_IP:8000
 ```
 
+## Updating an Existing VPS for Phase 3
+
+Phase 3 adds account, session, and saved-listing tables. They are created
+automatically and idempotently when the new app container starts; no manual SQL
+migration is required. Back up SQLite before the first Phase 3 start because the
+database now also contains account emails, saved URLs, and personal notes.
+
+First push the Phase 3 commit from the development machine:
+
+```bash
+git push origin main
+```
+
+Then connect to the VPS and run:
+
+```bash
+cd /opt/krisha
+git pull --ff-only origin main
+
+docker compose run --rm app \
+  python scripts/backup_db.py \
+  --db /app/data/krisha.sqlite3 \
+  --out-dir /app/backups
+```
+
+Keep the existing secrets in `.env`. For the public HTTPS deployment, add or
+update these values:
+
+```text
+APP_DOMAIN=kvartiry-ai.kz
+COOKIE_SECURE=true
+```
+
+Rebuild and recreate the application behind Caddy:
+
+```bash
+docker compose --profile https up -d --build app caddy
+docker compose ps
+docker compose logs --tail=100 app
+```
+
+Verify the new container and public endpoint:
+
+```bash
+curl -fsS https://kvartiry-ai.kz/health
+docker compose exec -T app python scripts/check_deployment.py
+docker compose exec -T app python scripts/check_ui.py
+```
+
+Finally, open these pages in a private browser window and test one account save:
+
+```text
+https://kvartiry-ai.kz/register
+https://kvartiry-ai.kz/login
+https://kvartiry-ai.kz/saved-listings
+```
+
+If the VPS repository lives somewhere other than `/opt/krisha`, use its actual
+path. `COOKIE_SECURE=true` means account login must be tested through HTTPS, not
+through a direct `http://SERVER_IP:8000` URL.
+
 ## Refresh Commands
 
 After the first deployment that includes the rental model, backfill estimates for

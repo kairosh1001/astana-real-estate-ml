@@ -92,10 +92,12 @@
         <tr>
           <td data-label="Параметр">Ссылки</td>
           {% for item in items %}
-          <td data-label="{{ item.short_title }}">
+          <td data-label="{{ item.short_title }}" data-listing-row data-url="{{ item.url }}">
             <a href="/listing-details?url={{ item.url | urlencode }}">Подробнее</a>
             ·
             <a href="{{ item.url }}" target="_blank" rel="noreferrer">Krisha</a>
+            ·
+            <button class="inline-action" type="button" data-save-listing>Сохранить</button>
           </td>
           {% endfor %}
         </tr>

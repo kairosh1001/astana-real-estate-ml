@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Вход — Kvartiry-ai.kz{% endblock %}
+{% block content %}
+<section class="auth-shell auth-shell-login">
+  <div class="auth-card panel">
+    <div class="auth-heading">
+      <span class="hero-eyebrow">С возвращением</span>
+      <h1>Войдите в аккаунт</h1>
+      <p>Откройте сохранённые квартиры и продолжите сравнение на любом устройстве.</p>
+    </div>
+    {% if error %}
+    <div class="form-alert error" role="alert">{{ error }}</div>
+    {% endif %}
+    <form class="auth-form" method="post" action="/login">
+      <input type="hidden" name="csrf_token" value="{{ auth_csrf_token }}">
+      <input type="hidden" name="next" value="{{ form.next }}">
+      <label>
+        Email
+        <input name="email" type="email" value="{{ form.email }}" autocomplete="email" maxlength="254" required autofocus>
+      </label>
+      <label>
+        Пароль
+        <span class="password-control">
+          <input name="password" type="password" autocomplete="current-password" maxlength="128" required data-password-input>
+          <button type="button" data-password-toggle aria-label="Показать пароль">Показать</button>
+        </span>
+      </label>
+      <label class="checkbox-row auth-checkbox">
+        <input name="remember_me" type="checkbox" value="yes">
+        <span>Оставаться в аккаунте на этом устройстве 30 дней</span>
+      </label>
+      <button class="button auth-submit" type="submit">Войти</button>
+    </form>
+    <p class="auth-switch">Нет аккаунта? <a href="/register?next={{ form.next | urlencode }}">Зарегистрироваться</a></p>
+    <p class="subtle auth-recovery">Восстановление пароля по email появится после подключения почтовой доставки. Пока можно <a href="/contact">связаться с нами</a>.</p>
+  </div>
+</section>
+{% endblock %}

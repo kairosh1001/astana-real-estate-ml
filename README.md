@@ -1,25 +1,25 @@
-# Astana Real Estate ML
+# Kvartiry AI — Kazakhstan Real Estate ML
 
 [![CI](https://github.com/kairosh1001/astana-real-estate-ml/actions/workflows/ci.yml/badge.svg)](https://github.com/kairosh1001/astana-real-estate-ml/actions/workflows/ci.yml)
 
-End-to-end ML web app for finding potentially undervalued apartment listings in Astana, Kazakhstan.
+End-to-end ML web app for finding and analyzing apartment listings in Astana and Almaty, Kazakhstan.
 
 Live demo: [kvartiry-ai.kz](https://kvartiry-ai.kz)
 
 ## Overview
 
-This project collects apartment listings from Krisha.kz, transforms raw listing pages into model-ready features, estimates market price per square meter with CatBoost quantile regression, and serves a public web interface for ranking listings that appear to be priced below the model's conservative estimate.
+This project collects apartment listings from Krisha.kz, transforms raw listing pages into model-ready features, estimates market price per square meter with city-routed CatBoost quantile regression, and serves a public web interface for ranking listings that appear to be priced below the model's conservative estimate.
 
 The goal is not to replace human due diligence. The app is an analytical screening tool: it helps users narrow a large real estate market into a smaller list of listings worth checking manually.
 
 ## What It Does
 
-- Scrapes apartment listings for Astana from Krisha.kz.
+- Scrapes apartment sale and long-term rental listings for Astana and Almaty from Krisha.kz.
 - Cleans and normalizes listing attributes such as price, area, rooms, district, floor, construction year, and residential complex.
 - Builds geospatial features, including H3 cells and distances to selected city landmarks.
 - Trains three CatBoost quantile models: q10, q50, and q90.
 - Ranks active listings by conservative upside: q10 model estimate vs asking price.
-- Serves a FastAPI web app with filters, personal home matching, map-based polygon search, listing comparison, saved/hidden listings, price history, and model explanations.
+- Serves a FastAPI web app with filters, personal home matching, map-based polygon search, listing comparison, account-synced watchlists, price history, and model explanations.
 - Runs scheduled refresh jobs on a VPS using Docker Compose and cron.
 - Estimates long-term monthly rent, gross rental yield, and simple payback with a
   separate CatBoost quantile model trained on Astana and Almaty rental listings.
@@ -87,7 +87,8 @@ The current feature contract is stored in [`model_metadata.json`](model_metadata
 - Map polygon search with Leaflet.
 - Listing details page with q10/q50/q90 estimates and price history.
 - Comparison page for multiple listings.
-- Browser-local saved and hidden listings.
+- Registration, secure login, account-synced saved listings, price-change tracking, and personal notes. Guest saves migrate into the account after login; hidden listings remain browser-local.
+- Explainable same-city active-listing comparables with visible similarity reasons; these are asking-price references, not completed sales.
 - Public explanation pages for non-technical users.
 
 ## Admin Features
@@ -128,6 +129,7 @@ python -m venv .venv
 Run validation checks:
 
 ```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe scripts\check_deployment.py
 .\.venv\Scripts\python.exe scripts\check_ui.py
 .\.venv\Scripts\python.exe scripts\validate_feature_pipeline.py
@@ -256,6 +258,18 @@ The validated universal v2 candidate can be promoted reproducibly with:
 `PRICE_MODEL_ROUTING=city_auto` is the production default. It routes Astana to
 `astana_v1` and Almaty to `almaty_v2`. The explicit values `astana_v1`,
 `almaty_v2`, and `universal_v2` are available for controlled QA only.
+
+## Account Security and Data
+
+The SQLite bootstrap creates the user, session, and saved-listing tables
+idempotently. Passwords use Argon2id; browser session tokens are random and only
+their SHA-256 digests are stored. All state-changing account/watchlist requests
+require a per-session CSRF token. Production cookies become `Secure` whenever
+HTTPS is detected through the request or `X-Forwarded-Proto`; `COOKIE_SECURE=true`
+can enforce this explicitly.
+
+Database backups now include account emails, saved URLs, and personal notes.
+Store backup files with restricted access and a documented retention period.
 
 ## Disclaimer
 

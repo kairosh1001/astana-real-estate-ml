@@ -13,11 +13,14 @@
   <a class="button secondary" href="/">Проверить другую ссылку</a>
 </div>
 
-<section class="result-grid">
+<section class="result-grid" data-listing-row data-url="{{ prediction.url }}" data-title="{{ prediction.title }}" data-price="{{ prediction.listed_price }}" data-city="{{ prediction.city }}">
   <div class="panel">
     <h2>Объявление</h2>
     <h3>{{ prediction.title }}</h3>
-    <p><a href="{{ prediction.url }}" target="_blank" rel="noreferrer">Открыть на Krisha</a></p>
+    <div class="detail-primary-actions">
+      <a class="button secondary" href="{{ prediction.url }}" target="_blank" rel="noreferrer">Открыть на Krisha</a>
+      <button class="button secondary" type="button" data-save-listing>Сохранить</button>
+    </div>
     <dl class="detail-list">
       <div class="detail-row">
         <dt>Цена</dt>
@@ -131,6 +134,46 @@
     </dl>
   </div>
 </section>
+
+{% if comparable_insight %}
+<section class="section panel comparable-analysis" data-spotlight>
+  <div class="toolbar comparable-heading">
+    <div>
+      <span class="hero-eyebrow">Проверяем оценку на понятных примерах</span>
+      <h2>Похожие активные объявления</h2>
+      <p class="muted">Это цены предложения, а не завершённых сделок. Кандидаты отобраны только внутри {{ city.genitive }} по прозрачным признакам сходства.</p>
+    </div>
+    <span class="comparable-scope">{{ comparable_insight.scope_label }}</span>
+  </div>
+  <div class="comparable-summary">
+    <article><span>Медиана похожих за м²</span><strong>{{ "{:,.0f}".format(comparable_insight.median_price_per_m2).replace(',', ' ') }} тг</strong></article>
+    <article><span>Ориентир на площадь этой квартиры</span><strong>{{ "{:,.0f}".format(comparable_insight.median_total_for_target_area).replace(',', ' ') }} тг</strong></article>
+    <article><span>Диапазон предложений за м²</span><strong>{{ "{:,.0f}".format(comparable_insight.min_price_per_m2).replace(',', ' ') }}–{{ "{:,.0f}".format(comparable_insight.max_price_per_m2).replace(',', ' ') }} тг</strong></article>
+  </div>
+  <div class="comparable-grid">
+    {% for item in comparable_insight.items %}
+    <article class="comparable-card" data-listing-row data-url="{{ item.url }}">
+      <div class="comparable-card-head">
+        <span>{{ item.similarity_score }}% сходства</span>
+        {% if item.asking_difference_pct is not none %}<strong class="{% if item.asking_difference_pct < 0 %}positive{% endif %}">{{ "{:+.1%}".format(item.asking_difference_pct) }} к цене за м²</strong>{% endif %}
+      </div>
+      <h3>{{ item.short_title }}</h3>
+      <p>{{ item.similarity_reasons | join(" · ") }}</p>
+      <dl>
+        <div><dt>Цена</dt><dd>{{ "{:,.0f}".format(item.listed_price or 0).replace(',', ' ') }} тг</dd></div>
+        <div><dt>За м²</dt><dd>{{ "{:,.0f}".format(item.listed_price_per_m2 or 0).replace(',', ' ') }} тг</dd></div>
+      </dl>
+      <div class="comparable-actions">
+        <a href="/listing-details?url={{ item.url | urlencode }}">Подробнее</a>
+        <a href="{{ item.url }}" target="_blank" rel="noreferrer">Krisha</a>
+        <button class="inline-action" type="button" data-save-listing>Сохранить</button>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  <p class="comparable-disclaimer">Сходство учитывает ЖК, район, комнаты, площадь, год дома и расстояние, когда данные доступны. Оно не проверяет ремонт, документы, вид из окна и фактическую цену сделки.</p>
+</section>
+{% endif %}
 
 {% if prediction.monthly_rent_q50 %}
 <section class="section panel rental-analysis">

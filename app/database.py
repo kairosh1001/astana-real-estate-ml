@@ -215,6 +215,52 @@ def init_db(connection: sqlite3.Connection) -> None:
             notification_city TEXT NOT NULL DEFAULT 'astana',
             last_digest_date TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            email_normalized TEXT NOT NULL UNIQUE,
+            display_name TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            accepted_terms_version TEXT NOT NULL,
+            accepted_terms_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_login_at TEXT,
+            disabled_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            token_hash TEXT PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            csrf_token TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            user_agent TEXT,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_user
+        ON user_sessions(user_id);
+
+        CREATE INDEX IF NOT EXISTS idx_user_sessions_expires
+        ON user_sessions(expires_at);
+
+        CREATE TABLE IF NOT EXISTS user_saved_listings (
+            user_id INTEGER NOT NULL,
+            listing_url TEXT NOT NULL,
+            saved_at TEXT NOT NULL,
+            saved_price REAL,
+            saved_title TEXT,
+            saved_city TEXT,
+            note TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY(user_id, listing_url),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_user_saved_listings_saved_at
+        ON user_saved_listings(user_id, saved_at DESC);
         """
     )
     _ensure_column(connection, "refresh_runs", "city", "TEXT NOT NULL DEFAULT 'astana'")
@@ -492,6 +538,333 @@ def delete_feedback_message(connection: sqlite3.Connection, feedback_id: int) ->
     )
     connection.commit()
     return cursor.rowcount > 0
+
+
+def create_user(
+    connection: sqlite3.Connection,
+    *,
+    email: str,
+    email_normalized: str,
+    display_name: str,
+    password_hash: str,
+    accepted_terms_version: str,
+) -> dict:
+    now = utc_now()
+    cursor = connection.execute(
+        """
+        INSERT INTO users (
+            email, email_normalized, display_name, password_hash,
+            accepted_terms_version, accepted_terms_at,
+            created_at, updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            email,
+            email_normalized,
+            display_name,
+            password_hash,
+            accepted_terms_version,
+            now,
+            now,
+            now,
+        ),
+    )
+    connection.commit()
+    user = fetch_user_by_id(connection, int(cursor.lastrowid), include_password=True)
+    if not user:
+        raise RuntimeError("Created user could not be loaded")
+    return user
+
+
+def fetch_user_by_id(
+    connection: sqlite3.Connection,
+    user_id: int,
+    *,
+    include_password: bool = False,
+) -> dict | None:
+    password_column = ", password_hash" if include_password else ""
+    row = connection.execute(
+        f"""
+        SELECT id, email, email_normalized, display_name,
+               accepted_terms_version, accepted_terms_at,
+               created_at, updated_at, last_login_at, disabled_at
+               {password_column}
+        FROM users
+        WHERE id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def fetch_user_by_email(
+    connection: sqlite3.Connection,
+    email_normalized: str,
+) -> dict | None:
+    row = connection.execute(
+        """
+        SELECT id, email, email_normalized, display_name, password_hash,
+               accepted_terms_version, accepted_terms_at,
+               created_at, updated_at, last_login_at, disabled_at
+        FROM users
+        WHERE email_normalized = ?
+        """,
+        (email_normalized,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def update_user_last_login(connection: sqlite3.Connection, user_id: int) -> None:
+    now = utc_now()
+    connection.execute(
+        "UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?",
+        (now, now, user_id),
+    )
+    connection.commit()
+
+
+def update_user_password(
+    connection: sqlite3.Connection,
+    *,
+    user_id: int,
+    password_hash: str,
+    keep_session_hash: str | None = None,
+) -> None:
+    now = utc_now()
+    connection.execute(
+        "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+        (password_hash, now, user_id),
+    )
+    if keep_session_hash:
+        connection.execute(
+            "DELETE FROM user_sessions WHERE user_id = ? AND token_hash != ?",
+            (user_id, keep_session_hash),
+        )
+    else:
+        connection.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+    connection.commit()
+
+
+def create_user_session(
+    connection: sqlite3.Connection,
+    *,
+    token_hash: str,
+    user_id: int,
+    csrf_token: str,
+    expires_at: str,
+    user_agent: str | None,
+) -> None:
+    now = utc_now()
+    connection.execute("DELETE FROM user_sessions WHERE expires_at <= ?", (now,))
+    connection.execute(
+        """
+        INSERT INTO user_sessions (
+            token_hash, user_id, csrf_token, created_at,
+            expires_at, last_seen_at, user_agent
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            token_hash,
+            user_id,
+            csrf_token,
+            now,
+            expires_at,
+            now,
+            (user_agent or "")[:220],
+        ),
+    )
+    connection.commit()
+
+
+def fetch_user_session(
+    connection: sqlite3.Connection,
+    token_hash: str,
+) -> dict | None:
+    row = connection.execute(
+        """
+        SELECT
+            s.token_hash, s.csrf_token, s.created_at AS session_created_at,
+            s.expires_at, s.last_seen_at,
+            u.id, u.email, u.email_normalized, u.display_name,
+            u.accepted_terms_version, u.created_at, u.last_login_at
+        FROM user_sessions AS s
+        JOIN users AS u ON u.id = s.user_id
+        WHERE s.token_hash = ?
+          AND s.expires_at > ?
+          AND u.disabled_at IS NULL
+        """,
+        (token_hash, utc_now()),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_user_session(connection: sqlite3.Connection, token_hash: str) -> bool:
+    cursor = connection.execute(
+        "DELETE FROM user_sessions WHERE token_hash = ?",
+        (token_hash,),
+    )
+    connection.commit()
+    return cursor.rowcount > 0
+
+
+def save_user_listing(
+    connection: sqlite3.Connection,
+    *,
+    user_id: int,
+    listing_url: str,
+    saved_price: float | None = None,
+    saved_title: str | None = None,
+    saved_city: str | None = None,
+) -> bool:
+    cursor = connection.execute(
+        """
+        INSERT INTO user_saved_listings (
+            user_id, listing_url, saved_at, saved_price, saved_title, saved_city
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, listing_url) DO NOTHING
+        """,
+        (
+            user_id,
+            listing_url,
+            utc_now(),
+            saved_price,
+            (saved_title or "")[:240] or None,
+            normalize_city_slug(saved_city) if saved_city else None,
+        ),
+    )
+    connection.commit()
+    return cursor.rowcount > 0
+
+
+def unsave_user_listing(
+    connection: sqlite3.Connection,
+    *,
+    user_id: int,
+    listing_url: str,
+) -> bool:
+    cursor = connection.execute(
+        "DELETE FROM user_saved_listings WHERE user_id = ? AND listing_url = ?",
+        (user_id, listing_url),
+    )
+    connection.commit()
+    return cursor.rowcount > 0
+
+
+def update_saved_listing_note(
+    connection: sqlite3.Connection,
+    *,
+    user_id: int,
+    listing_url: str,
+    note: str,
+) -> bool:
+    cursor = connection.execute(
+        """
+        UPDATE user_saved_listings
+        SET note = ?
+        WHERE user_id = ? AND listing_url = ?
+        """,
+        (note[:500], user_id, listing_url),
+    )
+    connection.commit()
+    return cursor.rowcount > 0
+
+
+def fetch_saved_listing_urls(
+    connection: sqlite3.Connection,
+    user_id: int,
+) -> list[str]:
+    rows = connection.execute(
+        """
+        SELECT listing_url
+        FROM user_saved_listings
+        WHERE user_id = ?
+        ORDER BY saved_at DESC
+        """,
+        (user_id,),
+    ).fetchall()
+    return [str(row["listing_url"]) for row in rows]
+
+
+def fetch_saved_listings(
+    connection: sqlite3.Connection,
+    user_id: int,
+) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT
+            s.listing_url, s.saved_at, s.saved_price, s.saved_title,
+            s.saved_city, s.note,
+            l.city AS current_city, l.title AS current_title,
+            l.raw_json, l.first_seen_at, l.last_seen_at, l.last_checked_at,
+            l.status AS current_status, l.listed_price AS current_price,
+            l.area_m2, l.listed_price_per_m2,
+            l.pred_price_per_m2_q10, l.pred_price_per_m2_q50,
+            l.pred_price_per_m2_q90, l.pred_total_q50,
+            l.discount_vs_asking_pct_conservative,
+            l.discount_vs_asking_pct_median, l.interval_width_pct
+        FROM user_saved_listings AS s
+        LEFT JOIN listings AS l ON l.url = s.listing_url
+        WHERE s.user_id = ?
+        ORDER BY s.saved_at DESC
+        """,
+        (user_id,),
+    ).fetchall()
+    items: list[dict] = []
+    for row in rows:
+        saved = dict(row)
+        item = {
+            "url": saved["listing_url"],
+            "city": saved.get("current_city") or saved.get("saved_city") or "astana",
+            "title": saved.get("current_title") or saved.get("saved_title") or "Объявление Krisha",
+            "raw_json": saved.get("raw_json") or "{}",
+            "first_seen_at": saved.get("first_seen_at"),
+            "last_seen_at": saved.get("last_seen_at"),
+            "last_checked_at": saved.get("last_checked_at"),
+            "status": saved.get("current_status") or "unavailable",
+            "listed_price": saved.get("current_price") or saved.get("saved_price"),
+            "area_m2": saved.get("area_m2"),
+            "listed_price_per_m2": saved.get("listed_price_per_m2"),
+            "pred_price_per_m2_q10": saved.get("pred_price_per_m2_q10"),
+            "pred_price_per_m2_q50": saved.get("pred_price_per_m2_q50"),
+            "pred_price_per_m2_q90": saved.get("pred_price_per_m2_q90"),
+            "pred_total_q50": saved.get("pred_total_q50"),
+            "discount_vs_asking_pct_conservative": saved.get(
+                "discount_vs_asking_pct_conservative"
+            ),
+            "discount_vs_asking_pct_median": saved.get(
+                "discount_vs_asking_pct_median"
+            ),
+            "interval_width_pct": saved.get("interval_width_pct"),
+        }
+        item = _prepare_undervalued_item(item)
+        current_price = saved.get("current_price")
+        saved_price = saved.get("saved_price")
+        price_change = (
+            float(current_price) - float(saved_price)
+            if current_price is not None and saved_price is not None
+            else None
+        )
+        item.update(
+            {
+                "saved_at": saved["saved_at"],
+                "saved_price": saved_price,
+                "current_price": current_price,
+                "price_change": price_change,
+                "price_change_pct": (
+                    price_change / float(saved_price)
+                    if price_change is not None and saved_price
+                    else None
+                ),
+                "note": saved.get("note") or "",
+                "is_available": saved.get("current_status") == "active",
+                "was_removed": saved.get("current_status") in {None, "stale"},
+            }
+        )
+        items.append(item)
+    return items
 
 
 def upsert_telegram_subscriber(
@@ -1207,6 +1580,35 @@ def fetch_listings_by_urls(
         if item:
             result.append(item)
     return result
+
+
+def fetch_comparable_candidates(
+    connection: sqlite3.Connection,
+    *,
+    city: str,
+    exclude_url: str,
+    limit: int = 300,
+) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT
+            url, city, title, raw_json, status, first_seen_at, last_seen_at,
+            listed_price, area_m2, listed_price_per_m2,
+            pred_price_per_m2_q10, pred_price_per_m2_q50,
+            pred_price_per_m2_q90, pred_total_q50,
+            discount_vs_asking_pct_conservative,
+            discount_vs_asking_pct_median, interval_width_pct
+        FROM listings
+        WHERE city = ?
+          AND status = 'active'
+          AND url != ?
+          AND listed_price_per_m2 IS NOT NULL
+        ORDER BY last_seen_at DESC, url ASC
+        LIMIT ?
+        """,
+        (normalize_city_slug(city), exclude_url, max(1, min(limit, 1000))),
+    ).fetchall()
+    return [_prepare_undervalued_item(dict(row)) for row in rows]
 
 
 def fetch_price_history(

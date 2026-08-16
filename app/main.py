@@ -10,6 +10,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
+import sqlite3
 from urllib.parse import quote, urlencode, urlparse, urlunparse
 
 from fastapi import (
@@ -28,6 +29,18 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
+from app.auth import (
+    AuthValidationError,
+    hash_password,
+    new_csrf_token,
+    new_session_token,
+    normalize_display_name,
+    normalize_email,
+    session_token_hash,
+    validate_password,
+    verify_password,
+)
+
 from app.cities import (
     CITY_OPTIONS,
     city_config,
@@ -39,9 +52,13 @@ from app.database import (
     connect,
     count_undervalued,
     create_feedback_message,
+    create_user,
+    create_user_session,
     delete_feedback_message,
+    delete_user_session,
     fetch_complex_stats,
     fetch_complex_analytics,
+    fetch_comparable_candidates,
     fetch_cached_prediction,
     fetch_feedback_messages,
     fetch_home_match_candidates,
@@ -55,11 +72,20 @@ from app.database import (
     fetch_refresh_runs,
     fetch_running_refresh,
     fetch_status_summary,
+    fetch_saved_listing_urls,
+    fetch_saved_listings,
     fetch_traffic_summary,
     fetch_undervalued,
+    fetch_user_by_email,
+    fetch_user_session,
     init_db,
     record_request_event,
+    save_user_listing,
     store_cached_prediction,
+    unsave_user_listing,
+    update_saved_listing_note,
+    update_user_last_login,
+    update_user_password,
     valid_apartment_condition_slug,
     valid_district_slug,
     valid_district_slugs,
@@ -72,6 +98,7 @@ from app.home_matcher import (
     format_distance,
     rank_home_candidates,
 )
+from app.listing_insights import build_comparable_insight
 from app.model_service import MODEL_FILENAMES
 from app.mortgage import analyze_otbasy_mortgage
 from app.prediction_service import (
@@ -114,9 +141,23 @@ def _city_template_context(request: Request) -> dict:
     }
 
 
+def _auth_template_context(request: Request) -> dict:
+    session = getattr(request.state, "user_session", None)
+    saved_urls: list[str] = []
+    if session:
+        with connect(DB_PATH) as db_connection:
+            saved_urls = fetch_saved_listing_urls(db_connection, int(session["id"]))
+    return {
+        "current_user": session,
+        "csrf_token": session.get("csrf_token") if session else "",
+        "saved_listing_urls": saved_urls,
+        "saved_count": len(saved_urls),
+    }
+
+
 templates = Jinja2Templates(
     directory=str(ROOT / "app" / "templates"),
-    context_processors=[_city_template_context],
+    context_processors=[_city_template_context, _auth_template_context],
 )
 templates.env.filters["astana_time"] = lambda value: format_astana_time(value)
 templates.env.filters["distance"] = format_distance
@@ -126,6 +167,13 @@ templates.env.globals["telegram_bot_url"] = (
 )
 ADMIN_SESSION_COOKIE = "krisha_admin_session"
 ADMIN_SESSION_TTL_SECONDS = 60 * 60 * 12
+USER_SESSION_COOKIE = "krisha_user_session"
+AUTH_CSRF_COOKIE = "krisha_auth_csrf"
+USER_SESSION_TTL_SECONDS = 60 * 60 * 24
+REMEMBERED_SESSION_TTL_SECONDS = 60 * 60 * 24 * 30
+TERMS_VERSION = "2026-08-16"
+AUTH_RATE_LIMIT_BUCKETS: dict[str, list[float]] = {}
+DUMMY_PASSWORD_HASH = hash_password("krisha-ai-dummy-password")
 HOME_UNDERVALUED_LIMIT = 10
 UNDERVALUED_PAGE_SIZE = 10
 PREDICTION_CACHE_TTL_SECONDS = int(
@@ -147,6 +195,7 @@ with connect(DB_PATH) as db_connection:
 async def traffic_middleware(request: Request, call_next):
     started = time.perf_counter()
     status_code = 500
+    request.state.user_session = _resolve_user_session(request)
     try:
         response = await call_next(request)
         status_code = response.status_code
@@ -184,6 +233,122 @@ class RefreshRequest(BaseModel):
     max_listings: int = 0
 
 
+class SavedListingRequest(BaseModel):
+    url: str
+    saved: bool = True
+    title: str | None = None
+    price: float | None = None
+    city: str | None = None
+
+
+class SavedListingImportRequest(BaseModel):
+    urls: list[str]
+
+
+class SavedListingNoteRequest(BaseModel):
+    url: str
+    note: str = ""
+
+
+PUBLIC_PAGES = {
+    "how-it-works": {
+        "eyebrow": "Прозрачный процесс",
+        "title": "Как работает Kvartiry-ai.kz",
+        "intro": "Сервис превращает поток объявлений в понятный короткий список, но оставляет окончательное решение за вами.",
+        "sections": [
+            {
+                "title": "1. Собираем и приводим данные к единому виду",
+                "paragraphs": [
+                    "Мы анализируем открытые объявления Krisha.kz по Астане и Алматы: цену, площадь, комнаты, район, этаж, год постройки, жилой комплекс и географию."
+                ],
+            },
+            {
+                "title": "2. Сравниваем квартиру с рынком",
+                "paragraphs": [
+                    "Квантильные модели оценивают нижний, медианный и верхний ориентиры цены за м². Рейтинг ниже рынка использует консервативную оценку q10, чтобы не опираться только на оптимистичный сценарий."
+                ],
+            },
+            {
+                "title": "3. Вы проверяете, сравниваете и сохраняете",
+                "paragraphs": [
+                    "Фильтры, персональный подбор, история цены, риски, ипотечный и арендный ориентиры помогают выбрать объявления для ручной проверки. С аккаунтом можно следить за изменениями цены и вести заметки."
+                ],
+            },
+        ],
+        "callout": "Оценка модели — аналитический ориентир по ценам предложения, а не отчёт оценщика, юридическая проверка или гарантия сделки.",
+        "actions": [
+            {"label": "Подобрать квартиру", "url": "/find-home-page?city=astana"},
+            {"label": "О модели", "url": "/model-page", "secondary": True},
+        ],
+    },
+    "features": {
+        "eyebrow": "Возможности",
+        "title": "Инструменты для осознанного поиска квартиры",
+        "intro": "От первой идеи до короткого списка — без попытки скрыть неопределённость за одной красивой цифрой.",
+        "sections": [
+            {"title": "Квартиры ниже рынка", "paragraphs": ["Городской рейтинг с фильтрами, картой, сортировкой по выгоде и признаками качества данных."]},
+            {"title": "Персональный подбор", "paragraphs": ["Жёсткие условия и приоритеты по району, бюджету, площади, возрасту дома и близости к важным местам."]},
+            {"title": "Проверка по ссылке", "paragraphs": ["q10/q50/q90, история цены, технические предупреждения, аренда, валовая доходность и предварительный расчёт Отбасы банка."]},
+            {"title": "Рынок, районы и ЖК", "paragraphs": ["Медианы, диапазоны и динамика по городам, районам и жилым комплексам на основе активных объявлений."]},
+            {"title": "Сравнение и умный список", "paragraphs": ["Сравнивайте до пяти вариантов, сохраняйте их в аккаунте, отмечайте свои наблюдения и замечайте снижение цены."]},
+            {"title": "Два города, единая логика", "paragraphs": ["Отдельный городской контекст для Астаны и Алматы без смешивания похожих, но разных рынков."]},
+        ],
+        "actions": [{"label": "Открыть рейтинг", "url": "/undervalued-page?city=astana"}],
+    },
+    "about": {
+        "eyebrow": "О проекте",
+        "title": "Делаем рынок квартир понятнее",
+        "intro": "Kvartiry-ai.kz — независимый аналитический проект Кайрата Жаркынбая для покупателей, инвесторов и всех, кто следит за недвижимостью Астаны и Алматы.",
+        "sections": [
+            {"title": "Зачем существует сервис", "paragraphs": ["Поиск квартиры часто означает десятки вкладок и несопоставимые обещания. Мы собираем рыночные сигналы в одном месте и объясняем, почему вариант заслуживает внимания."]},
+            {"title": "Наш принцип", "paragraphs": ["Показывать диапазон и ограничения важнее, чем выдавать прогноз за истину. Поэтому рядом с оценкой есть q10/q50/q90, история цены, предупреждения и ссылка на исходное объявление."]},
+            {"title": "Независимый статус", "paragraphs": ["Сервис не является частью Krisha.kz, банка, агентства недвижимости или застройщика. Упоминания сторонних организаций нужны только для источника данных и контекста анализа."]},
+        ],
+        "actions": [{"label": "Написать автору", "url": "/contact"}],
+    },
+    "contact": {
+        "eyebrow": "Контакты",
+        "title": "Расскажите, что стоит улучшить",
+        "intro": "Сообщения об ошибках, идеи новых функций и предложения о сотрудничестве помогают проекту становиться полезнее.",
+        "sections": [
+            {"title": "Обратная связь", "paragraphs": ["Используйте форму — так сообщение сохранится и не потеряется. Для прямого контакта: kairosh1001@gmail.com."]},
+            {"title": "Что указать", "paragraphs": ["Если проблема связана с объявлением, приложите ссылку и город. Не отправляйте ИИН, банковские данные, пароли и документы на квартиру."]},
+        ],
+        "actions": [
+            {"label": "Открыть форму", "url": "/feedback-page"},
+            {"label": "Написать email", "url": "mailto:kairosh1001@gmail.com", "secondary": True},
+        ],
+    },
+    "terms": {
+        "eyebrow": "Правила сервиса",
+        "title": "Условия использования",
+        "intro": "Действуют с 16 августа 2026 года. Используя сервис или создавая аккаунт, вы соглашаетесь с этими условиями.",
+        "sections": [
+            {"title": "Назначение", "paragraphs": ["Сервис предоставляет информационные инструменты для поиска и анализа открытых объявлений о недвижимости. Он не оказывает риелторские, оценочные, банковские, инвестиционные или юридические услуги."]},
+            {"title": "Точность и решения", "paragraphs": ["Прогнозы основаны на ценах предложения и могут быть неполными или ошибочными. Проверяйте объект, документы, продавца, ограничения и условия финансирования самостоятельно с профильными специалистами."]},
+            {"title": "Аккаунт", "paragraphs": ["Вы отвечаете за конфиденциальность пароля и действия в своём аккаунте. Запрещены автоматизированные атаки, попытки получить чужие данные и использование сервиса в нарушение закона."]},
+            {"title": "Сторонние источники", "paragraphs": ["Права на объявления, товарные знаки и внешние сайты принадлежат их владельцам. Kvartiry-ai.kz является независимым сервисом и не гарантирует доступность внешних ссылок."]},
+            {"title": "Доступность и изменения", "paragraphs": ["Функции могут изменяться или временно быть недоступны. Существенные изменения условий будут опубликованы на этой странице с новой датой."]},
+            {"title": "Ограничение ответственности", "paragraphs": ["В пределах, допускаемых законом, проект не отвечает за сделки, упущенную выгоду или потери, возникшие из решений на основе данных сервиса."]},
+        ],
+    },
+    "privacy": {
+        "eyebrow": "Ваши данные",
+        "title": "Политика конфиденциальности",
+        "intro": "Действует с 16 августа 2026 года. Здесь описано, какие данные нужны аккаунту и работе сервиса.",
+        "sections": [
+            {"title": "Что мы храним", "paragraphs": ["При регистрации: имя, email, защищённый хеш пароля, факт принятия условий, сеансы входа, сохранённые ссылки и ваши заметки. Пароль в открытом виде не сохраняется."]},
+            {"title": "Технические данные", "paragraphs": ["Для безопасности и статистики фиксируются путь запроса, время ответа, код ответа, сокращённый необратимый идентификатор клиента, тип браузера и источник перехода. Мы не используем это для продажи рекламных профилей."]},
+            {"title": "Зачем используем", "paragraphs": ["Чтобы авторизовать вас, синхронизировать список квартир, защитить сервис, исправлять ошибки и понимать, какие функции полезны."]},
+            {"title": "Передача и срок", "paragraphs": ["Мы не продаём личные данные. Инфраструктурные подрядчики могут обрабатывать их только для работы сервиса. Данные аккаунта хранятся, пока аккаунт активен или пока этого требует безопасность и закон."]},
+            {"title": "Ваш выбор", "paragraphs": ["Вы можете запросить исправление, выгрузку или удаление данных через страницу контактов. Перед выполнением запроса потребуется подтвердить владение email."]},
+            {"title": "Безопасность", "paragraphs": ["Используются Argon2id для паролей, серверные отзываемые сеансы, CSRF-защита и защищённые cookie в HTTPS. Ни одна система не исключает риск полностью, поэтому используйте уникальный пароль."]},
+        ],
+        "actions": [{"label": "Связаться по данным", "url": "/contact"}],
+    },
+}
+
+
 @app.get("/health")
 def health() -> dict:
     return {
@@ -195,6 +360,368 @@ def health() -> dict:
         "model_routing": prediction_service.routing_mode,
         "available_model_bundles": prediction_service.available_model_bundles,
     }
+
+
+@app.get("/how-it-works", response_class=HTMLResponse)
+def how_it_works_page(request: Request) -> HTMLResponse:
+    return _public_page_response(request, "how-it-works")
+
+
+@app.get("/features", response_class=HTMLResponse)
+def features_page(request: Request) -> HTMLResponse:
+    return _public_page_response(request, "features")
+
+
+@app.get("/about", response_class=HTMLResponse)
+def about_page(request: Request) -> HTMLResponse:
+    return _public_page_response(request, "about")
+
+
+@app.get("/contact", response_class=HTMLResponse)
+def contact_page(request: Request) -> HTMLResponse:
+    return _public_page_response(request, "contact")
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms_page(request: Request) -> HTMLResponse:
+    return _public_page_response(request, "terms")
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_page(request: Request) -> HTMLResponse:
+    return _public_page_response(request, "privacy")
+
+
+@app.get("/register", response_class=HTMLResponse)
+def register_page(request: Request, next: str = "/account") -> Response:
+    if request.state.user_session:
+        return RedirectResponse("/account", status_code=status.HTTP_303_SEE_OTHER)
+    csrf_token = new_csrf_token()
+    response = templates.TemplateResponse(
+        "register.html",
+        {
+            "request": request,
+            "form": {"display_name": "", "email": "", "next": next},
+            "auth_csrf_token": csrf_token,
+        },
+    )
+    _set_auth_csrf_cookie(response, request, csrf_token)
+    return response
+
+
+@app.post("/register", response_class=HTMLResponse)
+def register(
+    request: Request,
+    display_name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+    csrf_token: str = Form(...),
+    accept_terms: str | None = Form(None),
+    remember_me: str | None = Form(None),
+    next: str = Form("/account"),
+) -> Response:
+    _verify_pre_auth_csrf(request, csrf_token)
+    _enforce_auth_rate_limit(request, "register")
+    form = {"display_name": display_name, "email": email, "next": next}
+    try:
+        normalized_name = normalize_display_name(display_name)
+        normalized_email = normalize_email(email)
+        validate_password(password)
+        if password != password_confirm:
+            raise AuthValidationError("Пароли не совпадают.")
+        if accept_terms != "yes":
+            raise AuthValidationError(
+                "Подтвердите согласие с условиями использования и политикой конфиденциальности."
+            )
+        with connect(DB_PATH) as db_connection:
+            user = create_user(
+                db_connection,
+                email=normalized_email,
+                email_normalized=normalized_email,
+                display_name=normalized_name,
+                password_hash=hash_password(password),
+                accepted_terms_version=TERMS_VERSION,
+            )
+            raw_token, max_age = _create_user_session(
+                db_connection,
+                request=request,
+                user_id=int(user["id"]),
+                remembered=remember_me == "yes",
+            )
+    except AuthValidationError as exc:
+        return templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "form": form,
+                "error": str(exc),
+                "auth_csrf_token": csrf_token,
+            },
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    except sqlite3.IntegrityError:
+        return templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "form": form,
+                "error": "Аккаунт с таким email уже существует. Войдите в него.",
+                "auth_csrf_token": csrf_token,
+            },
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+    response = RedirectResponse(
+        _safe_user_next_url(next),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    _set_user_session_cookie(response, request, raw_token, max_age=max_age)
+    response.delete_cookie(AUTH_CSRF_COOKIE, path="/")
+    return response
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, next: str = "/account") -> Response:
+    if request.state.user_session:
+        return RedirectResponse("/account", status_code=status.HTTP_303_SEE_OTHER)
+    csrf_token = new_csrf_token()
+    response = templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "form": {"email": "", "next": next},
+            "auth_csrf_token": csrf_token,
+        },
+    )
+    _set_auth_csrf_cookie(response, request, csrf_token)
+    return response
+
+
+@app.post("/login", response_class=HTMLResponse)
+def login(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    csrf_token: str = Form(...),
+    remember_me: str | None = Form(None),
+    next: str = Form("/account"),
+) -> Response:
+    _verify_pre_auth_csrf(request, csrf_token)
+    _enforce_auth_rate_limit(request, "login")
+    form = {"email": email, "next": next}
+    try:
+        normalized_email = normalize_email(email)
+    except AuthValidationError:
+        normalized_email = "invalid@example.invalid"
+
+    with connect(DB_PATH) as db_connection:
+        user = fetch_user_by_email(db_connection, normalized_email)
+        password_hash = user["password_hash"] if user else DUMMY_PASSWORD_HASH
+        password_valid = verify_password(password, password_hash)
+        if not user or user.get("disabled_at") or not password_valid:
+            return templates.TemplateResponse(
+                "login.html",
+                {
+                    "request": request,
+                    "form": form,
+                    "error": "Неверный email или пароль.",
+                    "auth_csrf_token": csrf_token,
+                },
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        update_user_last_login(db_connection, int(user["id"]))
+        raw_token, max_age = _create_user_session(
+            db_connection,
+            request=request,
+            user_id=int(user["id"]),
+            remembered=remember_me == "yes",
+        )
+
+    response = RedirectResponse(
+        _safe_user_next_url(next),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    _set_user_session_cookie(response, request, raw_token, max_age=max_age)
+    response.delete_cookie(AUTH_CSRF_COOKIE, path="/")
+    return response
+
+
+@app.post("/logout")
+def logout(request: Request, csrf_token: str = Form(...)) -> RedirectResponse:
+    session = require_user_session(request)
+    _require_user_csrf(session, csrf_token)
+    raw_token = request.cookies.get(USER_SESSION_COOKIE, "")
+    if raw_token:
+        with connect(DB_PATH) as db_connection:
+            delete_user_session(db_connection, session_token_hash(raw_token))
+    response = RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie(USER_SESSION_COOKIE, path="/")
+    return response
+
+
+@app.get("/account", response_class=HTMLResponse)
+def account_page(request: Request) -> Response:
+    session = _user_session_or_redirect(request)
+    if isinstance(session, RedirectResponse):
+        return session
+    with connect(DB_PATH) as db_connection:
+        items = fetch_saved_listings(db_connection, int(session["id"]))
+    return templates.TemplateResponse(
+        "account.html",
+        _watchlist_context(request, session, items),
+    )
+
+
+@app.get("/saved-listings", response_class=HTMLResponse)
+def saved_listings_page(request: Request) -> Response:
+    session = _user_session_or_redirect(request)
+    if isinstance(session, RedirectResponse):
+        return session
+    with connect(DB_PATH) as db_connection:
+        items = fetch_saved_listings(db_connection, int(session["id"]))
+    return templates.TemplateResponse(
+        "saved_listings.html",
+        _watchlist_context(request, session, items),
+    )
+
+
+@app.post("/account/password", response_class=HTMLResponse)
+def change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    new_password_confirm: str = Form(...),
+    csrf_token: str = Form(...),
+) -> Response:
+    session = require_user_session(request)
+    _require_user_csrf(session, csrf_token)
+    with connect(DB_PATH) as db_connection:
+        user = fetch_user_by_email(db_connection, str(session["email_normalized"]))
+        try:
+            if not user or not verify_password(current_password, user["password_hash"]):
+                raise AuthValidationError("Текущий пароль введён неверно.")
+            validate_password(new_password)
+            if new_password != new_password_confirm:
+                raise AuthValidationError("Новые пароли не совпадают.")
+            raw_token = request.cookies.get(USER_SESSION_COOKIE, "")
+            update_user_password(
+                db_connection,
+                user_id=int(session["id"]),
+                password_hash=hash_password(new_password),
+                keep_session_hash=session_token_hash(raw_token),
+            )
+        except AuthValidationError as exc:
+            items = fetch_saved_listings(db_connection, int(session["id"]))
+            context = _watchlist_context(request, session, items)
+            context["password_error"] = str(exc)
+            return templates.TemplateResponse(
+                "account.html",
+                context,
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+    return RedirectResponse(
+        "/account?password_changed=1",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@app.get("/api/saved-listings")
+def saved_listings_api(request: Request) -> dict:
+    session = require_user_session(request)
+    with connect(DB_PATH) as db_connection:
+        urls = fetch_saved_listing_urls(db_connection, int(session["id"]))
+    return {"urls": urls, "count": len(urls)}
+
+
+@app.put("/api/saved-listings")
+def update_saved_listing_api(
+    request: Request,
+    payload: SavedListingRequest,
+    x_csrf_token: str | None = Header(None),
+) -> dict:
+    session = require_user_session(request)
+    _require_user_csrf(session, x_csrf_token)
+    listing_url = _canonical_listing_url(payload.url)
+    with connect(DB_PATH) as db_connection:
+        listing = fetch_listing_by_url(db_connection, listing_url)
+        if payload.saved:
+            snapshot_price = payload.price if payload.price and 0 < payload.price < 1_000_000_000_000 else None
+            snapshot_city = payload.city if payload.city in {"astana", "almaty"} else None
+            save_user_listing(
+                db_connection,
+                user_id=int(session["id"]),
+                listing_url=listing_url,
+                saved_price=(listing or {}).get("listed_price") or snapshot_price,
+                saved_title=(listing or {}).get("title") or payload.title,
+                saved_city=(listing or {}).get("city") or snapshot_city,
+            )
+        else:
+            unsave_user_listing(
+                db_connection,
+                user_id=int(session["id"]),
+                listing_url=listing_url,
+            )
+        urls = fetch_saved_listing_urls(db_connection, int(session["id"]))
+    return {"url": listing_url, "saved": payload.saved, "count": len(urls)}
+
+
+@app.post("/api/saved-listings/import")
+def import_saved_listings_api(
+    request: Request,
+    payload: SavedListingImportRequest,
+    x_csrf_token: str | None = Header(None),
+) -> dict:
+    session = require_user_session(request)
+    _require_user_csrf(session, x_csrf_token)
+    if len(payload.urls) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="За один раз можно импортировать до 100 объявлений.",
+        )
+    imported = 0
+    with connect(DB_PATH) as db_connection:
+        for raw_url in dict.fromkeys(payload.urls):
+            try:
+                listing_url = _canonical_listing_url(raw_url)
+            except (ValueError, HTTPException):
+                continue
+            listing = fetch_listing_by_url(db_connection, listing_url)
+            imported += int(
+                save_user_listing(
+                    db_connection,
+                    user_id=int(session["id"]),
+                    listing_url=listing_url,
+                    saved_price=(listing or {}).get("listed_price"),
+                    saved_title=(listing or {}).get("title"),
+                    saved_city=(listing or {}).get("city"),
+                )
+            )
+        urls = fetch_saved_listing_urls(db_connection, int(session["id"]))
+    return {"imported": imported, "urls": urls, "count": len(urls)}
+
+
+@app.patch("/api/saved-listings/note")
+def update_saved_listing_note_api(
+    request: Request,
+    payload: SavedListingNoteRequest,
+    x_csrf_token: str | None = Header(None),
+) -> dict:
+    session = require_user_session(request)
+    _require_user_csrf(session, x_csrf_token)
+    listing_url = _canonical_listing_url(payload.url)
+    if len(payload.note) > 500:
+        raise HTTPException(status_code=400, detail="Заметка длиннее 500 символов.")
+    with connect(DB_PATH) as db_connection:
+        updated = update_saved_listing_note(
+            db_connection,
+            user_id=int(session["id"]),
+            listing_url=listing_url,
+            note=payload.note.strip(),
+        )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Сохранённое объявление не найдено.")
+    return {"url": listing_url, "note": payload.note.strip()}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -1528,6 +2055,7 @@ def _prediction_context(request: Request, prediction: object) -> dict:
     listing = None
     price_history = []
     complex_stats = None
+    comparable_insight = None
     with connect(DB_PATH) as db_connection:
         listing = fetch_listing_by_url(db_connection, prediction.url)
         price_history = fetch_price_history(db_connection, prediction.url)
@@ -1536,6 +2064,14 @@ def _prediction_context(request: Request, prediction: object) -> dict:
                 db_connection,
                 listing.get("residential_complex"),
                 city=listing.get("city") or prediction.city,
+            )
+            comparable_insight = build_comparable_insight(
+                listing,
+                fetch_comparable_candidates(
+                    db_connection,
+                    city=listing.get("city") or prediction.city,
+                    exclude_url=prediction.url,
+                ),
             )
     selected_city = city_config(
         (listing or {}).get("city") or getattr(prediction, "city", "astana")
@@ -1553,6 +2089,7 @@ def _prediction_context(request: Request, prediction: object) -> dict:
         "risk_flags": risk_flags,
         "price_chart_points": price_chart_points,
         "mortgage": mortgage,
+        "comparable_insight": comparable_insight,
         "city": selected_city,
     }
 
@@ -1869,6 +2406,207 @@ def _filter_params(
 
 def _format_filter_number(value: float) -> str:
     return str(int(value)) if float(value).is_integer() else str(value)
+
+
+def _public_page_response(request: Request, page_slug: str) -> HTMLResponse:
+    return templates.TemplateResponse(
+        "info_page.html",
+        {"request": request, "page": PUBLIC_PAGES[page_slug]},
+    )
+
+
+def _resolve_user_session(request: Request) -> dict | None:
+    raw_token = request.cookies.get(USER_SESSION_COOKIE)
+    if not raw_token or len(raw_token) > 160:
+        return None
+    try:
+        with connect(DB_PATH) as db_connection:
+            return fetch_user_session(db_connection, session_token_hash(raw_token))
+    except sqlite3.Error:
+        return None
+
+
+def require_user_session(request: Request) -> dict:
+    session = getattr(request.state, "user_session", None)
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Войдите в аккаунт, чтобы продолжить.",
+        )
+    return session
+
+
+def _user_session_or_redirect(request: Request) -> dict | RedirectResponse:
+    session = getattr(request.state, "user_session", None)
+    if session:
+        return session
+    next_url = request.url.path
+    if request.url.query:
+        next_url = f"{next_url}?{request.url.query}"
+    return RedirectResponse(
+        f"/login?next={quote(next_url, safe='')}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+def _create_user_session(
+    connection,
+    *,
+    request: Request,
+    user_id: int,
+    remembered: bool,
+) -> tuple[str, int | None]:
+    ttl_seconds = (
+        REMEMBERED_SESSION_TTL_SECONDS if remembered else USER_SESSION_TTL_SECONDS
+    )
+    raw_token = new_session_token()
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
+    ).isoformat(timespec="seconds")
+    create_user_session(
+        connection,
+        token_hash=session_token_hash(raw_token),
+        user_id=user_id,
+        csrf_token=new_csrf_token(),
+        expires_at=expires_at,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return raw_token, ttl_seconds if remembered else None
+
+
+def _set_user_session_cookie(
+    response: Response,
+    request: Request,
+    raw_token: str,
+    *,
+    max_age: int | None,
+) -> None:
+    response.set_cookie(
+        USER_SESSION_COOKIE,
+        raw_token,
+        max_age=max_age,
+        httponly=True,
+        secure=_request_is_secure(request),
+        samesite="lax",
+        path="/",
+    )
+
+
+def _set_auth_csrf_cookie(
+    response: Response,
+    request: Request,
+    token: str,
+) -> None:
+    response.set_cookie(
+        AUTH_CSRF_COOKIE,
+        token,
+        max_age=60 * 60,
+        httponly=True,
+        secure=_request_is_secure(request),
+        samesite="lax",
+        path="/",
+    )
+
+
+def _request_is_secure(request: Request) -> bool:
+    configured = os.getenv("COOKIE_SECURE", "").strip().lower()
+    if configured in {"1", "true", "yes", "on"}:
+        return True
+    if configured in {"0", "false", "no", "off"}:
+        return False
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0]
+    return request.url.scheme == "https" or forwarded_proto.strip().lower() == "https"
+
+
+def _verify_pre_auth_csrf(request: Request, submitted_token: str | None) -> None:
+    cookie_token = request.cookies.get(AUTH_CSRF_COOKIE)
+    if (
+        not cookie_token
+        or not submitted_token
+        or not secrets.compare_digest(cookie_token, submitted_token)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Форма устарела. Обновите страницу и попробуйте снова.",
+        )
+
+
+def _require_user_csrf(session: dict, submitted_token: str | None) -> None:
+    expected = str(session.get("csrf_token") or "")
+    if (
+        not expected
+        or not submitted_token
+        or not secrets.compare_digest(expected, submitted_token)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Не удалось подтвердить безопасность запроса. Обновите страницу.",
+        )
+
+
+def _enforce_auth_rate_limit(request: Request, action: str) -> None:
+    now = time.time()
+    window_seconds = 60 * 60 if action == "register" else 15 * 60
+    limit = 5 if action == "register" else 12
+    key = f"{action}:{_client_hash(request)}"
+    bucket = [
+        timestamp
+        for timestamp in AUTH_RATE_LIMIT_BUCKETS.get(key, [])
+        if now - timestamp < window_seconds
+    ]
+    if len(bucket) >= limit:
+        AUTH_RATE_LIMIT_BUCKETS[key] = bucket
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Слишком много попыток. Подождите и попробуйте снова.",
+        )
+    bucket.append(now)
+    AUTH_RATE_LIMIT_BUCKETS[key] = bucket
+
+
+def _safe_user_next_url(value: str, default: str = "/account") -> str:
+    parsed = urlparse(value)
+    if (
+        not value.startswith("/")
+        or value.startswith("//")
+        or parsed.scheme
+        or parsed.netloc
+        or "\\" in value
+    ):
+        return default
+    return value
+
+
+def _canonical_listing_url(value: str) -> str:
+    normalized = _normalize_prediction_url(value)
+    try:
+        validate_krisha_url(normalized)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if len(normalized) > 500:
+        raise HTTPException(status_code=400, detail="Ссылка слишком длинная.")
+    return normalized
+
+
+def _watchlist_context(
+    request: Request,
+    session: dict,
+    items: list[dict],
+) -> dict:
+    price_drops = sum(1 for item in items if (item.get("price_change") or 0) < 0)
+    unavailable = sum(1 for item in items if not item.get("is_available"))
+    return {
+        "request": request,
+        "account_user": session,
+        "items": items,
+        "recent_items": items[:3],
+        "watchlist_summary": {
+            "total": len(items),
+            "price_drops": price_drops,
+            "unavailable": unavailable,
+            "active": max(len(items) - unavailable, 0),
+        },
+    }
 
 
 def _admin_page_redirect_if_needed(request: Request) -> RedirectResponse | None:

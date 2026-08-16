@@ -10,6 +10,7 @@ services:
       PRICE_MODEL_ROUTING: ${PRICE_MODEL_ROUTING:-city_auto}
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups

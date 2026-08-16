@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} — Kvartiry-ai.kz{% endblock %}
+{% block content %}
+<article class="info-page">
+  <header class="info-page-hero panel" data-spotlight>
+    <span class="hero-eyebrow">{{ page.eyebrow }}</span>
+    <h1>{{ page.title }}</h1>
+    <p>{{ page.intro }}</p>
+  </header>
+  <div class="info-page-body">
+    {% for section in page.sections %}
+    <section class="info-section">
+      <span class="info-section-number">{{ "%02d" | format(loop.index) }}</span>
+      <div>
+        <h2>{{ section.title }}</h2>
+        {% for paragraph in section.paragraphs %}<p>{{ paragraph }}</p>{% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+  {% if page.callout %}<aside class="info-callout">{{ page.callout }}</aside>{% endif %}
+  {% if page.actions %}
+  <div class="info-actions">
+    {% for action in page.actions %}
+    <a class="button{% if action.secondary %} secondary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</article>
+{% endblock %}

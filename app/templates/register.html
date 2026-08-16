@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Регистрация — Kvartiry-ai.kz{% endblock %}
+{% block content %}
+<section class="auth-shell">
+  <div class="auth-card panel">
+    <div class="auth-heading">
+      <span class="hero-eyebrow">Личный аккаунт</span>
+      <h1>Сохраните свой поиск</h1>
+      <p>Избранные квартиры, изменения цены и личные заметки будут доступны после входа с любого устройства.</p>
+    </div>
+    {% if error %}
+    <div class="form-alert error" role="alert">{{ error }}</div>
+    {% endif %}
+    <form class="auth-form" method="post" action="/register">
+      <input type="hidden" name="csrf_token" value="{{ auth_csrf_token }}">
+      <input type="hidden" name="next" value="{{ form.next }}">
+      <label>
+        Как к вам обращаться
+        <input name="display_name" type="text" value="{{ form.display_name }}" autocomplete="name" minlength="2" maxlength="60" required autofocus>
+      </label>
+      <label>
+        Email
+        <input name="email" type="email" value="{{ form.email }}" autocomplete="email" maxlength="254" required>
+      </label>
+      <label>
+        Пароль
+        <span class="password-control">
+          <input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required data-password-input>
+          <button type="button" data-password-toggle aria-label="Показать пароль">Показать</button>
+        </span>
+        <small>Не менее 10 символов. Используйте уникальный пароль.</small>
+      </label>
+      <label>
+        Повторите пароль
+        <input name="password_confirm" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>
+      </label>
+      <label class="checkbox-row auth-checkbox">
+        <input name="remember_me" type="checkbox" value="yes">
+        <span>Оставаться в аккаунте на этом устройстве 30 дней</span>
+      </label>
+      <label class="checkbox-row auth-checkbox">
+        <input name="accept_terms" type="checkbox" value="yes" required>
+        <span>Я принимаю <a href="/terms" target="_blank">условия использования</a> и <a href="/privacy" target="_blank">политику конфиденциальности</a>.</span>
+      </label>
+      <button class="button auth-submit" type="submit">Создать аккаунт</button>
+    </form>
+    <p class="auth-switch">Уже есть аккаунт? <a href="/login?next={{ form.next | urlencode }}">Войти</a></p>
+  </div>
+  <aside class="auth-benefits panel" aria-label="Преимущества аккаунта">
+    <span class="hero-eyebrow">Что появится</span>
+    <h2>Ваш короткий список квартир</h2>
+    <ul class="benefit-list">
+      <li><strong>Синхронизация</strong><span>Сохранённые варианты не останутся в одном браузере.</span></li>
+      <li><strong>Контроль цены</strong><span>Покажем, какие продавцы снизили цену после сохранения.</span></li>
+      <li><strong>Личные заметки</strong><span>Запишите впечатления после звонка или просмотра.</span></li>
+    </ul>
+    <p class="subtle">Регистрация бесплатна. Мы не публикуем ваш email и не передаём его продавцам.</p>
+  </aside>
+</section>
+{% endblock %}

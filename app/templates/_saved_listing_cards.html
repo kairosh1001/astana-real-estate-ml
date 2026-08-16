@@ -1,0 +1,60 @@
+{% if not items %}
+<div class="empty-state watchlist-empty" data-watchlist-empty>
+  <span class="empty-icon" aria-hidden="true">☆</span>
+  <h2>Список пока пуст</h2>
+  <p>Сохраняйте интересные варианты в рейтинге или персональном подборе — здесь появятся изменения их цены и статуса.</p>
+  <a class="button" href="/undervalued-page?city=astana">Найти квартиры ниже рынка</a>
+</div>
+{% else %}
+<div class="watchlist-grid" data-watchlist-grid>
+  {% for item in items %}
+  <article class="watchlist-card{% if not item.is_available %} is-unavailable{% endif %}" data-listing-row data-watchlist-card data-url="{{ item.url }}">
+    <div class="watchlist-card-head">
+      <div>
+        <span class="status-pill {% if item.is_available %}active{% else %}muted{% endif %}">
+          {% if item.is_available %}Активно{% else %}Снято или недоступно{% endif %}
+        </span>
+        <span class="listing-city-label">{{ item.city_label }}</span>
+      </div>
+      <button class="save-icon-button is-saved" type="button" data-save-listing aria-pressed="true" aria-label="Убрать из сохранённых">★</button>
+    </div>
+    <div class="watchlist-card-copy">
+      <h3>{{ item.short_title }}</h3>
+      {% if item.address %}<p>{{ item.address }}</p>{% endif %}
+    </div>
+    <div class="watchlist-price-row">
+      <div>
+        <span>Текущая цена</span>
+        <strong>{{ "{:,.0f}".format(item.current_price or item.saved_price or 0).replace(',', ' ') }} тг</strong>
+      </div>
+      {% if item.price_change is not none and item.price_change < 0 %}
+      <span class="price-change price-down">↓ {{ "{:,.0f}".format(-item.price_change).replace(',', ' ') }} тг</span>
+      {% elif item.price_change is not none and item.price_change > 0 %}
+      <span class="price-change price-up">↑ {{ "{:,.0f}".format(item.price_change).replace(',', ' ') }} тг</span>
+      {% else %}
+      <span class="price-change price-same">Без изменений</span>
+      {% endif %}
+    </div>
+    {% if item.discount_vs_asking_pct_conservative is not none %}
+    <div class="watchlist-signal">
+      <span>Потенциал по консервативной оценке</span>
+      <strong class="{% if item.discount_vs_asking_pct_conservative > 0 %}positive{% endif %}">{{ "{:+.1%}".format(item.discount_vs_asking_pct_conservative) }}</strong>
+    </div>
+    {% endif %}
+    <label class="watchlist-note">
+      Личная заметка
+      <span class="note-editor">
+        <textarea rows="2" maxlength="500" placeholder="Например: позвонить, уточнить документы…" data-listing-note>{{ item.note }}</textarea>
+        <button class="button secondary compact-action" type="button" data-save-note>Сохранить заметку</button>
+      </span>
+    </label>
+    <div class="watchlist-actions">
+      {% if item.is_available %}<a class="button" href="/listing-details?url={{ item.url | urlencode }}">Подробнее</a>{% endif %}
+      <a class="button secondary" href="{{ item.url }}" target="_blank" rel="noreferrer">Открыть на Krisha</a>
+      {% if item.is_available %}<button class="inline-action" type="button" data-compare-listing>Сравнить</button>{% endif %}
+    </div>
+    <p class="watchlist-saved-at">Сохранено {{ item.saved_at | astana_time }}{% if item.saved_price %} при цене {{ "{:,.0f}".format(item.saved_price).replace(',', ' ') }} тг{% endif %}</p>
+  </article>
+  {% endfor %}
+</div>
+{% endif %}

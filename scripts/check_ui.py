@@ -129,6 +129,24 @@ def assert_not_contains(text: str, needle: str) -> None:
         raise SystemExit(f"Expected page not to contain: {needle}")
 
 
+def form_value(html: str, name: str) -> str:
+    from bs4 import BeautifulSoup
+
+    field = BeautifulSoup(html, "html.parser").find("input", {"name": name})
+    if not field or not field.get("value"):
+        raise SystemExit(f"Expected form field {name} to have a value")
+    return str(field["value"])
+
+
+def meta_content(html: str, name: str) -> str:
+    from bs4 import BeautifulSoup
+
+    field = BeautifulSoup(html, "html.parser").find("meta", {"name": name})
+    if not field or not field.get("content"):
+        raise SystemExit(f"Expected meta field {name} to have content")
+    return str(field["content"])
+
+
 def check_complex_developer_parser() -> None:
     from bs4 import BeautifulSoup
     from scrape import ApartmentScraper
@@ -441,8 +459,13 @@ def main() -> None:
     assert_contains(home.text, "Оценить квартиру по ссылке")
     assert_contains(home.text, "Смотреть рейтинги квартир")
     assert_contains(home.text, "Подобрать квартиру")
-    assert_contains(home.text, "Создатель - Kairat Zharkynbay")
-    assert_contains(home.text, "kairosh1001@gmail.com")
+    assert_contains(home.text, "Как это работает")
+    assert_contains(home.text, "Умный список")
+    assert_contains(home.text, "Регистрация")
+    assert_contains(home.text, "/static/krisha-ai-mark.png")
+    assert_contains(home.text, "© 2026 Kvartiry-ai.kz. Все права защищены.")
+    assert_contains(home.text, "Условия использования")
+    assert_contains(home.text, "Конфиденциальность")
     assert_contains(home.text, "/model-page")
     assert_contains(home.text, "/market-page")
     assert_contains(home.text, "/find-home-page")
@@ -603,6 +626,172 @@ def main() -> None:
     if empty_home_finder.status_code != 200:
         raise SystemExit(f"Empty home finder returned {empty_home_finder.status_code}")
     assert_contains(empty_home_finder.text, "По выбранным обязательным условиям квартир не найдено")
+
+    for path, needle in [
+        ("/how-it-works", "Как работает Kvartiry-ai.kz"),
+        ("/features", "Инструменты для осознанного поиска квартиры"),
+        ("/about", "Делаем рынок квартир понятнее"),
+        ("/contact", "Расскажите, что стоит улучшить"),
+        ("/terms", "Условия использования"),
+        ("/privacy", "Политика конфиденциальности"),
+    ]:
+        page = client.get(path)
+        if page.status_code != 200:
+            raise SystemExit(f"Public page {path} returned {page.status_code}")
+        assert_contains(page.text, needle)
+
+    auth_client = TestClient(main.app)
+    register_page = auth_client.get("/register?next=/saved-listings")
+    if register_page.status_code != 200:
+        raise SystemExit(f"Registration page returned {register_page.status_code}")
+    assert_contains(register_page.text, "Сохраните свой поиск")
+    assert_contains(register_page.text, "политику конфиденциальности")
+    registration_csrf = form_value(register_page.text, "csrf_token")
+
+    mismatched_registration = auth_client.post(
+        "/register",
+        data={
+            "display_name": "Тестовый пользователь",
+            "email": "buyer@example.com",
+            "password": "secure-password-123",
+            "password_confirm": "different-password-123",
+            "csrf_token": registration_csrf,
+            "accept_terms": "yes",
+            "next": "/saved-listings",
+        },
+    )
+    if mismatched_registration.status_code != 400:
+        raise SystemExit(
+            f"Mismatched registration returned {mismatched_registration.status_code}"
+        )
+    assert_contains(mismatched_registration.text, "Пароли не совпадают")
+
+    registered = auth_client.post(
+        "/register",
+        data={
+            "display_name": "Тестовый пользователь",
+            "email": "buyer@example.com",
+            "password": "secure-password-123",
+            "password_confirm": "secure-password-123",
+            "csrf_token": registration_csrf,
+            "accept_terms": "yes",
+            "remember_me": "yes",
+            "next": "/saved-listings",
+        },
+        follow_redirects=False,
+    )
+    if registered.status_code != 303 or registered.headers.get("location") != "/saved-listings":
+        raise SystemExit("Successful registration did not redirect to the watchlist")
+    session_cookie = registered.headers.get("set-cookie", "").lower()
+    if "httponly" not in session_cookie or "samesite=lax" not in session_cookie:
+        raise SystemExit("User session cookie is missing security attributes")
+
+    account = auth_client.get("/account")
+    if account.status_code != 200:
+        raise SystemExit(f"Account page returned {account.status_code}")
+    assert_contains(account.text, "Тестовый пользователь")
+    assert_contains(account.text, "Изменить пароль")
+    user_csrf = meta_content(account.text, "csrf-token")
+
+    missing_csrf_save = auth_client.put(
+        "/api/saved-listings",
+        json={"url": "https://krisha.kz/a/show/123", "saved": True},
+    )
+    if missing_csrf_save.status_code != 403:
+        raise SystemExit("Saved-listing API accepted a request without CSRF")
+
+    saved = auth_client.put(
+        "/api/saved-listings",
+        headers={"X-CSRF-Token": user_csrf},
+        json={"url": "https://krisha.kz/a/show/123", "saved": True},
+    )
+    if saved.status_code != 200 or saved.json().get("count") != 1:
+        raise SystemExit(f"Saving a listing failed: {saved.status_code} {saved.text}")
+
+    imported = auth_client.post(
+        "/api/saved-listings/import",
+        headers={"X-CSRF-Token": user_csrf},
+        json={
+            "urls": [
+                "https://krisha.kz/a/show/123",
+                "https://krisha.kz/a/show/456-almaty",
+            ]
+        },
+    )
+    if imported.status_code != 200 or imported.json().get("count") != 2:
+        raise SystemExit(f"Guest save import failed: {imported.status_code} {imported.text}")
+
+    note = auth_client.patch(
+        "/api/saved-listings/note",
+        headers={"X-CSRF-Token": user_csrf},
+        json={
+            "url": "https://krisha.kz/a/show/123",
+            "note": "Уточнить документы перед просмотром",
+        },
+    )
+    if note.status_code != 200:
+        raise SystemExit(f"Saved note failed: {note.status_code} {note.text}")
+
+    watchlist = auth_client.get("/saved-listings")
+    if watchlist.status_code != 200:
+        raise SystemExit(f"Watchlist page returned {watchlist.status_code}")
+    for needle in [
+        "Сохранённые квартиры",
+        "Текущая цена",
+        "Уточнить документы перед просмотром",
+        'data-header-saved-count>2</span>',
+    ]:
+        assert_contains(watchlist.text, needle)
+
+    changed_password = auth_client.post(
+        "/account/password",
+        data={
+            "current_password": "secure-password-123",
+            "new_password": "new-secure-password-456",
+            "new_password_confirm": "new-secure-password-456",
+            "csrf_token": user_csrf,
+        },
+        follow_redirects=False,
+    )
+    if changed_password.status_code != 303:
+        raise SystemExit(f"Password change returned {changed_password.status_code}")
+
+    logged_out = auth_client.post(
+        "/logout",
+        data={"csrf_token": user_csrf},
+        follow_redirects=False,
+    )
+    if logged_out.status_code != 303 or logged_out.headers.get("location") != "/":
+        raise SystemExit("Logout failed")
+    if auth_client.get("/account", follow_redirects=False).status_code != 303:
+        raise SystemExit("Logged-out account request did not redirect")
+
+    login_page = auth_client.get("/login?next=//example.com")
+    login_csrf = form_value(login_page.text, "csrf_token")
+    old_password_login = auth_client.post(
+        "/login",
+        data={
+            "email": "buyer@example.com",
+            "password": "secure-password-123",
+            "csrf_token": login_csrf,
+            "next": "//example.com",
+        },
+        follow_redirects=False,
+    )
+    if old_password_login.status_code != 400:
+        raise SystemExit("Old password still worked after password change")
+    new_password_login = auth_client.post(
+        "/login",
+        data={
+            "email": "buyer@example.com",
+            "password": "new-secure-password-456",
+            "csrf_token": login_csrf,
+            "next": "//example.com",
+        },
+        follow_redirects=False,
+    )
+    if new_password_login.status_code != 303 or new_password_login.headers.get("location") != "/account":
+        raise SystemExit("Login failed or accepted an unsafe next redirect")
 
     predict_entry = client.get("/predict-page")
     if predict_entry.status_code != 200:
