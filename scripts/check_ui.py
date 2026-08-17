@@ -892,6 +892,9 @@ def main() -> None:
         "8,5% годовых",
         "hcsbk.kz/ru/most-important/zhilzaim/",
         "hcsbk.kz/ru/to-get-a-loan/secondary-housing/",
+        "Оценочная аренда и доходность",
+        "280 000 тг/мес.",
+        "8.4% в год",
     ]:
         assert_contains(result_page.text, needle)
 
@@ -946,9 +949,20 @@ def main() -> None:
     assert_contains(details_page.text, "/complex-page?city=astana")
     assert_contains(details_page.text, "Активных объявлений в базе")
     assert_contains(details_page.text, "2026-06-30 05:00")
-    assert_contains(details_page.text, "Оценочная аренда и доходность")
-    assert_contains(details_page.text, "280 000 тг/мес.")
-    assert_contains(details_page.text, "8.4% в год")
+    assert_not_contains(details_page.text, "Оценочная аренда и доходность")
+
+    stored_details_page = client.get(
+        "/listing-details?url=https://krisha.kz/a/show/456-almaty"
+    )
+    if stored_details_page.status_code != 200:
+        raise SystemExit(
+            f"Stored listing details returned {stored_details_page.status_code}"
+        )
+    if predict_calls != ["https://krisha.kz/a/show/123"]:
+        raise SystemExit("Stored listing details unexpectedly called the Krisha parser")
+    assert_contains(stored_details_page.text, "Результат оценки")
+    assert_contains(stored_details_page.text, "Алматы")
+    assert_not_contains(stored_details_page.text, "Оценочная аренда и доходность")
 
     compare_page = client.get("/compare-page?url=https://krisha.kz/a/show/123")
     if compare_page.status_code != 200:
@@ -1353,6 +1367,7 @@ def main() -> None:
         "Посетителей за 24 часа",
         "Оценок ссылок за 24 часа",
         "Rate limit",
+        "Ошибок 5xx за 24 часа",
         "Кэш прогноза",
         "Популярные страницы",
         "Последние события",

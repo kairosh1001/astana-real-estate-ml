@@ -442,6 +442,7 @@ def fetch_traffic_summary(
                 END
             ) AS predictions_24h,
             SUM(CASE WHEN status_code = 429 THEN 1 ELSE 0 END) AS rate_limited_24h,
+            SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) AS server_errors_24h,
             AVG(duration_ms) AS avg_duration_ms_24h
         FROM request_events
         WHERE created_at >= ?
@@ -460,7 +461,11 @@ def fetch_traffic_summary(
     ).fetchone()
     top_pages = connection.execute(
         """
-        SELECT path, COUNT(*) AS requests, COUNT(DISTINCT client_hash) AS visitors
+        SELECT path,
+               COUNT(*) AS requests,
+               COUNT(DISTINCT client_hash) AS visitors,
+               SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) AS server_errors,
+               AVG(duration_ms) AS avg_duration_ms
         FROM request_events
         WHERE created_at >= ?
         GROUP BY path

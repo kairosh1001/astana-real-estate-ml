@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import re
 import secrets
 import time
@@ -108,6 +109,8 @@ from app.prediction_service import (
 )
 from app.refresh_service import run_refresh
 
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(os.getenv("APP_ROOT", Path(__file__).resolve().parents[1]))
 POI_CATALOG_PATH = ROOT / "app" / "data" / "kazakhstan_pois.json"
@@ -914,7 +917,11 @@ def predict_page(request: Request, url: str = "") -> HTMLResponse:
         )
 
     try:
-        prediction = _predict_for_request(request, url)
+        prediction = _predict_for_request(
+            request,
+            url,
+            prefer_stored=request.url.path == "/listing-details",
+        )
     except HTTPException as exc:
         return templates.TemplateResponse(
             request,
@@ -1993,9 +2000,25 @@ def _model_version_info() -> dict:
     }
 
 
-def _predict_for_request(request: Request, url: str) -> ListingPrediction:
+def _predict_for_request(
+    request: Request,
+    url: str,
+    *,
+    prefer_stored: bool = False,
+) -> ListingPrediction:
     normalized_url = _normalize_prediction_url(url)
     validate_krisha_url(normalized_url)
+
+    # Listing detail links originate from our inventory. Reusing the prediction
+    # already stored during refresh makes this route fast and independent of
+    # Krisha availability. Unknown URLs still use the normal cached scraper flow.
+    if prefer_stored:
+        with connect(DB_PATH) as db_connection:
+            stored_listing = fetch_listing_by_url(db_connection, normalized_url)
+        stored_prediction = _prediction_from_stored_listing(stored_listing)
+        if stored_prediction:
+            return stored_prediction
+
     _enforce_predict_rate_limit(request)
     cache_key = prediction_service.cache_key(normalized_url)
 
@@ -2016,6 +2039,90 @@ def _predict_for_request(request: Request, url: str) -> ListingPrediction:
             prediction=asdict(prediction),
         )
     return prediction
+
+
+def _prediction_from_stored_listing(
+    listing: dict | None,
+) -> ListingPrediction | None:
+    if not listing:
+        return None
+
+    required_fields = (
+        "listed_price",
+        "area_m2",
+        "listed_price_per_m2",
+        "pred_price_per_m2_q10",
+        "pred_price_per_m2_q50",
+        "pred_price_per_m2_q90",
+    )
+    if any(listing.get(field) is None for field in required_fields):
+        return None
+
+    listed_price = float(listing["listed_price"])
+    area_m2 = float(listing["area_m2"])
+    listed_price_per_m2 = float(listing["listed_price_per_m2"])
+    pred_q10 = float(listing["pred_price_per_m2_q10"])
+    pred_q50 = float(listing["pred_price_per_m2_q50"])
+    pred_q90 = float(listing["pred_price_per_m2_q90"])
+    if min(listed_price, area_m2, listed_price_per_m2, pred_q50) <= 0:
+        return None
+
+    def optional_float(name: str) -> float | None:
+        value = listing.get(name)
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    conservative_discount = optional_float(
+        "discount_vs_asking_pct_conservative"
+    )
+    median_discount = optional_float("discount_vs_asking_pct_median")
+    interval_width = optional_float("interval_width_pct")
+
+    return ListingPrediction(
+        url=str(listing["url"]),
+        title=str(listing.get("title") or "Объявление Krisha.kz"),
+        listed_price=listed_price,
+        area_m2=area_m2,
+        listed_price_per_m2=listed_price_per_m2,
+        pred_price_per_m2_q10=pred_q10,
+        pred_price_per_m2_q50=pred_q50,
+        pred_price_per_m2_q90=pred_q90,
+        pred_total_q50=(
+            optional_float("pred_total_q50") or pred_q50 * area_m2
+        ),
+        discount_vs_asking_pct_conservative=(
+            conservative_discount
+            if conservative_discount is not None
+            else (pred_q10 - listed_price_per_m2) / listed_price_per_m2
+        ),
+        discount_vs_asking_pct_median=(
+            median_discount
+            if median_discount is not None
+            else (pred_q50 - listed_price_per_m2) / listed_price_per_m2
+        ),
+        interval_width_pct=(
+            interval_width
+            if interval_width is not None
+            else (pred_q90 - pred_q10) / pred_q50
+        ),
+        city=str(listing.get("city") or "astana"),
+        monthly_rent_q10=optional_float("monthly_rent_q10"),
+        monthly_rent_q50=optional_float("monthly_rent_q50"),
+        monthly_rent_q90=optional_float("monthly_rent_q90"),
+        gross_yield_q10=optional_float("gross_yield_q10"),
+        gross_yield_q50=optional_float("gross_yield_q50"),
+        gross_yield_q90=optional_float("gross_yield_q90"),
+        payback_years_q50=optional_float("payback_years_q50"),
+        rental_model_version=(
+            str(listing["rental_model_version"])
+            if listing.get("rental_model_version")
+            else None
+        ),
+    )
 
 
 def _normalize_prediction_url(url: str) -> str:
@@ -2084,23 +2191,38 @@ def _prediction_context(request: Request, prediction: object) -> dict:
     price_history = []
     complex_stats = None
     comparable_insight = None
-    with connect(DB_PATH) as db_connection:
-        listing = fetch_listing_by_url(db_connection, prediction.url)
-        price_history = fetch_price_history(db_connection, prediction.url)
-        if listing:
-            complex_stats = fetch_complex_stats(
-                db_connection,
-                listing.get("residential_complex"),
-                city=listing.get("city") or prediction.city,
-            )
-            comparable_insight = build_comparable_insight(
-                listing,
-                fetch_comparable_candidates(
-                    db_connection,
-                    city=listing.get("city") or prediction.city,
-                    exclude_url=prediction.url,
-                ),
-            )
+    try:
+        with connect(DB_PATH) as db_connection:
+            listing = fetch_listing_by_url(db_connection, prediction.url)
+            price_history = fetch_price_history(db_connection, prediction.url)
+            if listing:
+                try:
+                    complex_stats = fetch_complex_stats(
+                        db_connection,
+                        listing.get("residential_complex"),
+                        city=listing.get("city") or prediction.city,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Could not build complex stats for %s", prediction.url
+                    )
+                try:
+                    comparable_insight = build_comparable_insight(
+                        listing,
+                        fetch_comparable_candidates(
+                            db_connection,
+                            city=listing.get("city") or prediction.city,
+                            exclude_url=prediction.url,
+                        ),
+                    )
+                except Exception:
+                    logger.exception(
+                        "Could not build comparables for %s", prediction.url
+                    )
+    except Exception:
+        # Core prediction values are enough to render a useful result. Optional
+        # database enrichment must never turn a listing page into a 500 response.
+        logger.exception("Could not enrich prediction page for %s", prediction.url)
     selected_city = city_config(
         (listing or {}).get("city") or getattr(prediction, "city", "astana")
     )
@@ -2118,6 +2240,18 @@ def _prediction_context(request: Request, prediction: object) -> dict:
         "price_chart_points": price_chart_points,
         "mortgage": mortgage,
         "comparable_insight": comparable_insight,
+        "rental_analysis_available": all(
+            getattr(prediction, field, None) is not None
+            for field in (
+                "monthly_rent_q10",
+                "monthly_rent_q50",
+                "monthly_rent_q90",
+                "gross_yield_q10",
+                "gross_yield_q50",
+                "gross_yield_q90",
+                "payback_years_q50",
+            )
+        ),
         "city": selected_city,
     }
 
