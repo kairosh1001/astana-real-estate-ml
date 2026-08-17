@@ -151,7 +151,7 @@
     <article><span>Диапазон предложений за м²</span><strong>{{ "{:,.0f}".format(comparable_insight.min_price_per_m2).replace(',', ' ') }}–{{ "{:,.0f}".format(comparable_insight.max_price_per_m2).replace(',', ' ') }} тг</strong></article>
   </div>
   <div class="comparable-grid">
-    {% for item in comparable_insight.items %}
+    {% for item in comparable_insight["items"] %}
     <article class="comparable-card" data-listing-row data-url="{{ item.url }}">
       <div class="comparable-card-head">
         <span>{{ item.similarity_score }}% сходства</span>

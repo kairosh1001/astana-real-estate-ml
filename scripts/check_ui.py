@@ -929,7 +929,29 @@ def main() -> None:
     assert_not_contains(model_page.text, "Технический список признаков")
     assert_not_contains(model_page.text, "магический")
 
-    details_page = client.get("/listing-details?url=https://krisha.kz/a/show/123")
+    original_fetch_comparable_candidates = main.fetch_comparable_candidates
+    main.fetch_comparable_candidates = lambda *args, **kwargs: [
+        {
+            "url": "https://krisha.kz/a/show/comparable",
+            "city": "astana",
+            "short_title": "3-комнатная квартира · 41 м²",
+            "rooms": 3,
+            "area_m2": 41,
+            "listed_price": 21_000_000,
+            "listed_price_per_m2": 512_195,
+            "residential_complex": "Test ЖК",
+            "district_slug": "yesil",
+            "construction_year": 2021,
+            "lat": 51.131,
+            "lon": 71.431,
+        }
+    ]
+    try:
+        details_page = client.get(
+            "/listing-details?url=https://krisha.kz/a/show/123"
+        )
+    finally:
+        main.fetch_comparable_candidates = original_fetch_comparable_candidates
     if details_page.status_code != 200:
         raise SystemExit(f"Listing details page returned {details_page.status_code}")
     if predict_calls != ["https://krisha.kz/a/show/123"]:
@@ -948,6 +970,8 @@ def main() -> None:
     assert_contains(details_page.text, "/district/yesil")
     assert_contains(details_page.text, "/complex-page?city=astana")
     assert_contains(details_page.text, "Активных объявлений в базе")
+    assert_contains(details_page.text, "Похожие активные объявления")
+    assert_contains(details_page.text, "3-комнатная квартира · 41 м²")
     assert_contains(details_page.text, "2026-06-30 05:00")
     assert_not_contains(details_page.text, "Оценочная аренда и доходность")
 
