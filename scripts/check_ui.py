@@ -462,6 +462,15 @@ def main() -> None:
     assert_contains(home.text, "Как это работает")
     assert_contains(home.text, "Умный список")
     assert_contains(home.text, "Регистрация")
+    assert_contains(home.text, "/language/kk?next=/")
+    assert_contains(home.text, "/language/ru?next=/")
+    assert_contains(home.text, "/language/en?next=/")
+    if not (
+        home.text.index("Қазақша")
+        < home.text.index("Русский")
+        < home.text.index("English")
+    ):
+        raise SystemExit("Language switcher order is not KZ, RU, EN")
     asset_version = main.STATIC_ASSET_VERSION
     assert len(asset_version) == 12
     assert_contains(home.text, f"/static/krisha-ai-mark.png?v={asset_version}")
@@ -1392,11 +1401,38 @@ def main() -> None:
         "Оценок ссылок за 24 часа",
         "Rate limit",
         "Ошибок 5xx за 24 часа",
+        "Зарегистрированных пользователей",
+        "Посетители по дням",
+        "Новый график считает данные с",
+        "Тестовый пользователь",
+        "buyer@example.com",
+        "10/мин, 60/час",
         "Кэш прогноза",
         "Популярные страницы",
         "Последние события",
     ]:
         assert_contains(traffic_page.text, needle)
+
+    locale_client = TestClient(main.app)
+    selected_english = locale_client.get(
+        "/language/en?next=/predict-page?city=almaty",
+        follow_redirects=False,
+    )
+    if selected_english.status_code != 303:
+        raise SystemExit("Language selection did not redirect")
+    if selected_english.headers.get("location") != "/predict-page?city=almaty":
+        raise SystemExit("Language selection lost the current page")
+    if "krisha_locale=en" not in selected_english.headers.get("set-cookie", ""):
+        raise SystemExit("Language selection did not persist the locale cookie")
+    english_home = locale_client.get("/")
+    assert_contains(english_home.text, '<html lang="en">')
+    assert_contains(english_home.text, '"Find an apartment"')
+    unsafe_language_redirect = locale_client.get(
+        "/language/kk?next=//example.com",
+        follow_redirects=False,
+    )
+    if unsafe_language_redirect.headers.get("location") != "/":
+        raise SystemExit("Language selector accepted an unsafe redirect")
 
     monitoring_page = client.get("/model-monitoring-page")
     if monitoring_page.status_code != 200:

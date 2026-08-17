@@ -196,6 +196,12 @@ def init_db(connection: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_request_events_path_created
         ON request_events(path, created_at);
 
+        CREATE TABLE IF NOT EXISTS analytics_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS feedback_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TEXT NOT NULL,
@@ -283,6 +289,16 @@ def init_db(connection: sqlite3.Connection) -> None:
     )
     connection.execute(
         "CREATE INDEX IF NOT EXISTS idx_refresh_runs_city_id ON refresh_runs(city, id DESC)"
+    )
+    chart_start_date = (
+        (datetime.now(timezone.utc) + timedelta(hours=5)).date() + timedelta(days=1)
+    ).isoformat()
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO analytics_settings (key, value, updated_at)
+        VALUES ('daily_visitors_start_date', ?, ?)
+        """,
+        (chart_start_date, utc_now()),
     )
     _quarantine_misclassified_listings(connection)
     connection.commit()
@@ -493,12 +509,74 @@ def fetch_traffic_summary(
         """,
         (cutoff_24h, min(limit, 10)),
     ).fetchall()
+    chart_setting = connection.execute(
+        "SELECT value FROM analytics_settings WHERE key = 'daily_visitors_start_date'"
+    ).fetchone()
+    chart_start_date = str(chart_setting["value"]) if chart_setting else ""
+    chart_rows = connection.execute(
+        """
+        SELECT date(datetime(created_at), '+5 hours') AS day,
+               COUNT(DISTINCT client_hash) AS visitors
+        FROM request_events
+        WHERE date(datetime(created_at), '+5 hours') >= ?
+        GROUP BY day
+        ORDER BY day ASC
+        """,
+        (chart_start_date,),
+    ).fetchall()
+    visitors_by_day = {str(row["day"]): int(row["visitors"]) for row in chart_rows}
+    daily_visitors = []
+    try:
+        start_day = datetime.fromisoformat(chart_start_date).date()
+    except ValueError:
+        start_day = (datetime.now(timezone.utc) + timedelta(hours=5)).date()
+    current_day = (datetime.now(timezone.utc) + timedelta(hours=5)).date()
+    visible_start = max(start_day, current_day - timedelta(days=29))
+    cursor_day = visible_start
+    while cursor_day <= current_day:
+        day_key = cursor_day.isoformat()
+        daily_visitors.append(
+            {"day": day_key, "visitors": visitors_by_day.get(day_key, 0)}
+        )
+        cursor_day += timedelta(days=1)
+    max_daily_visitors = max(
+        (item["visitors"] for item in daily_visitors), default=0
+    )
+    for item in daily_visitors:
+        item["height_pct"] = (
+            max(4.0, item["visitors"] / max_daily_visitors * 100)
+            if item["visitors"] and max_daily_visitors
+            else 0.0
+        )
+    users = connection.execute(
+        """
+        SELECT u.id, u.display_name, u.email, u.created_at, u.last_login_at,
+               u.disabled_at,
+               COUNT(DISTINCT s.listing_url) AS saved_count,
+               COUNT(DISTINCT us.token_hash) AS active_sessions
+        FROM users AS u
+        LEFT JOIN user_saved_listings AS s ON s.user_id = u.id
+        LEFT JOIN user_sessions AS us
+          ON us.user_id = u.id AND us.expires_at > ?
+        GROUP BY u.id
+        ORDER BY u.created_at DESC, u.id DESC
+        LIMIT 200
+        """,
+        (utc_now(),),
+    ).fetchall()
+    registered_users_count = connection.execute(
+        "SELECT COUNT(*) FROM users"
+    ).fetchone()[0]
     return {
         **dict(totals),
         **dict(week),
         "top_pages": [dict(row) for row in top_pages],
         "recent_events": [dict(row) for row in recent],
         "slow_requests": [dict(row) for row in slow],
+        "daily_visitors": daily_visitors,
+        "daily_visitors_start_date": chart_start_date,
+        "registered_users": [dict(row) for row in users],
+        "registered_users_count": int(registered_users_count),
     }
 
 

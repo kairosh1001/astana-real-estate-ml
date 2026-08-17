@@ -99,6 +99,7 @@ from app.home_matcher import (
     format_distance,
     rank_home_candidates,
 )
+from app.i18n import LANGUAGE_OPTIONS, normalize_locale, translations_for
 from app.listing_insights import build_comparable_insight
 from app.model_service import MODEL_FILENAMES
 from app.mortgage import analyze_otbasy_mortgage
@@ -137,6 +138,10 @@ def _city_template_context(request: Request) -> dict:
         if not auth_return_to.startswith("/") or auth_return_to.startswith("//"):
             auth_return_to = "/"
     selected_city = city_config(request.query_params.get("city"))
+    locale = normalize_locale(request.cookies.get("krisha_locale"))
+    current_language = next(
+        option for option in LANGUAGE_OPTIONS if option["code"] == locale
+    )
     city_choices = []
     for option in CITY_OPTIONS:
         if neutral_home:
@@ -160,6 +165,11 @@ def _city_template_context(request: Request) -> dict:
         "neutral_home": neutral_home,
         "current_path_with_query": current_path_with_query,
         "auth_return_to": auth_return_to,
+        "locale": locale,
+        "language_options": LANGUAGE_OPTIONS,
+        "current_language": current_language,
+        "language_return_to": current_path_with_query,
+        "locale_translations": translations_for(locale),
     }
 
 
@@ -202,8 +212,8 @@ UNDERVALUED_PAGE_SIZE = 10
 PREDICTION_CACHE_TTL_SECONDS = int(
     os.getenv("PREDICTION_CACHE_TTL_SECONDS", str(60 * 60 * 6))
 )
-PREDICT_RATE_LIMIT_PER_MINUTE = int(os.getenv("PREDICT_RATE_LIMIT_PER_MINUTE", "12"))
-PREDICT_RATE_LIMIT_PER_HOUR = int(os.getenv("PREDICT_RATE_LIMIT_PER_HOUR", "80"))
+PREDICT_RATE_LIMIT_PER_MINUTE = int(os.getenv("PREDICT_RATE_LIMIT_PER_MINUTE", "10"))
+PREDICT_RATE_LIMIT_PER_HOUR = int(os.getenv("PREDICT_RATE_LIMIT_PER_HOUR", "60"))
 RATE_LIMIT_BUCKETS: dict[str, list[float]] = {}
 
 app = FastAPI(title="Оценка объявлений Krisha")
@@ -220,6 +230,25 @@ def favicon() -> RedirectResponse:
         url=f"/static/krisha-ai-mark.png?v={STATIC_ASSET_VERSION}",
         status_code=status.HTTP_307_TEMPORARY_REDIRECT,
     )
+
+
+@app.get("/language/{locale}", include_in_schema=False)
+def set_language(request: Request, locale: str, next: str = "/") -> RedirectResponse:
+    selected_locale = normalize_locale(locale)
+    response = RedirectResponse(
+        _safe_user_next_url(next, default="/"),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    response.set_cookie(
+        "krisha_locale",
+        selected_locale,
+        max_age=60 * 60 * 24 * 365,
+        httponly=False,
+        secure=_request_is_secure(request),
+        samesite="lax",
+        path="/",
+    )
+    return response
 
 
 @app.middleware("http")
@@ -2318,7 +2347,7 @@ def _build_risk_flags(
         flags.append(
             {
                 "level": "positive",
-                "title": "Критичных предупреждений нет",
+                "title": "Критических предупреждений нет",
                 "text": "По доступным данным явных технических ограничений для оценки не найдено.",
             }
         )

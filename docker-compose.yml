@@ -11,6 +11,8 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-}
+      PREDICT_RATE_LIMIT_PER_MINUTE: ${PREDICT_RATE_LIMIT_PER_MINUTE:-10}
+      PREDICT_RATE_LIMIT_PER_HOUR: ${PREDICT_RATE_LIMIT_PER_HOUR:-60}
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups

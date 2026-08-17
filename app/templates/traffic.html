@@ -44,6 +44,32 @@
     <span>Ошибок 5xx за 24 часа</span>
     <strong>{{ traffic.server_errors_24h or 0 }}</strong>
   </div>
+  <div class="metric">
+    <span>Зарегистрированных пользователей</span>
+    <strong>{{ traffic.registered_users_count or 0 }}</strong>
+  </div>
+</section>
+
+<section class="section panel">
+  <div class="toolbar">
+    <div>
+      <h2>Посетители по дням</h2>
+      <p class="muted">Уникальные анонимные посетители за календарные сутки по времени Астаны. Новый график считает данные с {{ traffic.daily_visitors_start_date }}.</p>
+    </div>
+  </div>
+  {% if traffic.daily_visitors %}
+  <div class="daily-visitor-chart" role="img" aria-label="График уникальных посетителей по дням">
+    {% for point in traffic.daily_visitors %}
+    <div class="daily-visitor-column" title="{{ point.day }}: {{ point.visitors }}">
+      <span class="daily-visitor-value">{{ point.visitors }}</span>
+      <span class="daily-visitor-track"><span class="daily-visitor-bar" style="height: {{ point.height_pct }}%"></span></span>
+      <time datetime="{{ point.day }}">{{ point.day[5:] }}</time>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">Сбор данных для этого графика начнётся {{ traffic.daily_visitors_start_date }}. Первые полные сутки появятся на следующий день.</div>
+  {% endif %}
 </section>
 
 <section class="section panel">
@@ -62,6 +88,47 @@
       <dd>{{ "{:,.0f}".format(traffic.avg_duration_ms_24h or 0) }} мс</dd>
     </div>
   </dl>
+</section>
+
+<section class="section panel">
+  <div class="toolbar">
+    <div>
+      <h2>Зарегистрированные пользователи</h2>
+      <p class="muted">Доступно только администратору. Пароли и хэши сессий здесь никогда не показываются.</p>
+    </div>
+  </div>
+  {% if not traffic.registered_users %}
+  <div class="empty-state">Зарегистрированных пользователей пока нет.</div>
+  {% else %}
+  <div class="table-wrap">
+    <table class="listing-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Имя</th>
+          <th>Email</th>
+          <th>Регистрация</th>
+          <th>Последний вход</th>
+          <th>Сохранено</th>
+          <th>Активные сессии</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in traffic.registered_users %}
+        <tr>
+          <td data-label="ID">{{ user.id }}</td>
+          <td data-label="Имя">{{ user.display_name }}</td>
+          <td data-label="Email">{{ user.email }}</td>
+          <td data-label="Регистрация">{{ user.created_at | astana_time }}</td>
+          <td data-label="Последний вход">{{ user.last_login_at | astana_time }}</td>
+          <td data-label="Сохранено">{{ user.saved_count }}</td>
+          <td data-label="Активные сессии">{{ user.active_sessions }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 </section>
 
 <section class="section panel">

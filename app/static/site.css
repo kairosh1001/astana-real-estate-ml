@@ -2048,6 +2048,52 @@ html[data-theme="light"] .site-footer {
   }
 }
 
+/* Phase 3 admin analytics */
+.daily-visitor-chart {
+  display: flex;
+  align-items: end;
+  gap: clamp(6px, 1vw, 14px);
+  min-height: 260px;
+  padding: 22px 8px 4px;
+  overflow-x: auto;
+  border-top: 1px solid var(--line);
+}
+
+.daily-visitor-column {
+  display: grid;
+  grid-template-rows: 24px 180px 24px;
+  gap: 6px;
+  flex: 1 0 38px;
+  min-width: 38px;
+  text-align: center;
+}
+
+.daily-visitor-value,
+.daily-visitor-column time {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.daily-visitor-track {
+  position: relative;
+  display: flex;
+  align-items: end;
+  width: 100%;
+  min-height: 180px;
+  overflow: hidden;
+  border-radius: 10px 10px 5px 5px;
+  background: color-mix(in srgb, var(--surface-2) 86%, transparent);
+}
+
+.daily-visitor-bar {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+}
+
 .comparable-heading {
   align-items: flex-start;
 }
@@ -3602,6 +3648,74 @@ html[data-theme="light"] .brand-mark {
 
 .header-actions {
   gap: 10px;
+}
+
+.language-switcher {
+  position: relative;
+}
+
+.language-switcher summary {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-strong) 84%, transparent);
+  color: var(--text);
+  font: 800 0.68rem/1 "Manrope", sans-serif;
+  cursor: pointer;
+  list-style: none;
+}
+
+.language-switcher summary::-webkit-details-marker {
+  display: none;
+}
+
+.language-switcher[open] summary,
+.language-switcher summary:hover,
+.language-switcher summary:focus-visible {
+  border-color: var(--teal);
+  color: var(--strong);
+}
+
+.language-menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 220;
+  display: grid;
+  width: 176px;
+  padding: 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+}
+
+.language-menu a {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 10px;
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.language-menu a:hover,
+.language-menu a:focus-visible,
+.language-menu a[aria-current="true"] {
+  background: var(--soft);
+  color: var(--teal-dark);
+}
+
+.language-menu small {
+  color: var(--muted);
+  font-size: 0.64rem;
 }
 
 .desktop-account-actions {

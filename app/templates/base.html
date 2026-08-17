@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="{{ locale }}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -799,6 +799,16 @@
             <a class="header-register-link" href="/register?next={{ auth_return_to | urlencode }}">Регистрация</a>
             {% endif %}
           </div>
+          <details class="language-switcher">
+            <summary aria-label="Выбрать язык">{{ current_language.short }}</summary>
+            <div class="language-menu">
+              {% for language in language_options %}
+              <a href="/language/{{ language.code }}?next={{ language_return_to | urlencode }}" lang="{{ language.code }}" {% if language.code == locale %}aria-current="true"{% endif %}>
+                <span>{{ language.label }}</span><small>{{ language.short }}</small>
+              </a>
+              {% endfor %}
+            </div>
+          </details>
           <button class="theme-toggle" type="button" data-theme-toggle aria-label="Включить светлую тему" aria-pressed="false">
             <span class="theme-icon theme-icon-moon" aria-hidden="true">☾</span>
             <span class="theme-icon theme-icon-sun" aria-hidden="true">☀</span>
@@ -1329,5 +1339,74 @@
       })();
     </script>
     {% block scripts %}{% endblock %}
+    {% if locale != "ru" %}
+    <script id="locale-translations" type="application/json">{{ locale_translations | tojson }}</script>
+    <script>
+      (function () {
+        const source = document.getElementById("locale-translations");
+        if (!source) return;
+        const dictionary = JSON.parse(source.textContent || "{}");
+        const activeLocale = {{ locale | tojson }};
+        const ignored = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "CODE", "PRE"]);
+        const normalize = (value) => String(value || "").replace(/\s+/g, " ").trim();
+
+        function translateValue(value) {
+          const normalized = normalize(value);
+          if (dictionary[normalized]) return dictionary[normalized];
+          if (activeLocale === "en") {
+            if (/^\d+ активных$/.test(normalized)) return normalized.replace(" активных", " active");
+            if (/^\d+-комнатная$/.test(normalized)) return normalized.replace("-комнатная", "-room");
+          }
+          if (activeLocale === "kk") {
+            if (/^\d+ активных$/.test(normalized)) return normalized.replace(" активных", " белсенді");
+            if (/^\d+-комнатная$/.test(normalized)) return normalized.replace("-комнатная", " бөлмелі");
+          }
+          return null;
+        }
+
+        function translateTextNode(node) {
+          if (!node.parentElement || ignored.has(node.parentElement.tagName)) return;
+          const key = normalize(node.nodeValue);
+          const translated = translateValue(key);
+          if (!translated) return;
+          const leading = (node.nodeValue.match(/^\s*/) || [""])[0];
+          const trailing = (node.nodeValue.match(/\s*$/) || [""])[0];
+          node.nodeValue = leading + translated + trailing;
+        }
+
+        function translateElement(root) {
+          if (root.nodeType === Node.TEXT_NODE) {
+            translateTextNode(root);
+            return;
+          }
+          if (!(root instanceof Element) || ignored.has(root.tagName)) return;
+          [root, ...root.querySelectorAll("*")].forEach((element) => {
+            if (ignored.has(element.tagName)) return;
+            ["aria-label", "title", "placeholder"].forEach((attribute) => {
+              if (!element.hasAttribute(attribute)) return;
+              const value = element.getAttribute(attribute);
+              const translated = translateValue(value);
+              if (translated) element.setAttribute(attribute, translated);
+            });
+          });
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          while (walker.nextNode()) translateTextNode(walker.currentNode);
+        }
+
+        const translatedTitle = dictionary[normalize(document.title)];
+        if (translatedTitle) document.title = translatedTitle;
+        translateElement(document.body);
+        new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+            if (mutation.type === "characterData") {
+              translateTextNode(mutation.target);
+            } else {
+              mutation.addedNodes.forEach(translateElement);
+            }
+          });
+        }).observe(document.body, {subtree: true, childList: true, characterData: true});
+      })();
+    </script>
+    {% endif %}
   </body>
 </html>
