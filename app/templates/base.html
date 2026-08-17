@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#030713">
     <meta name="description" content="ИИ-помощник для поиска, оценки и сравнения квартир в Астане и Алматы.">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <link rel="icon" type="image/png" href="/static/krisha-ai-mark.png">
+    <link rel="icon" type="image/png" href="/static/krisha-ai-mark.png?v={{ static_asset_version }}">
     <script>
       (function () {
         document.documentElement.classList.add("js");
@@ -774,14 +774,14 @@
         }
       }
     </style>
-    <link rel="stylesheet" href="/static/site.css?v=20260816-theme-parity">
+    <link rel="stylesheet" href="/static/site.css?v={{ static_asset_version }}">
   </head>
   <body data-authenticated="{{ 'true' if current_user else 'false' }}">
     <div class="scroll-progress" aria-hidden="true"><span data-scroll-progress></span></div>
     <header class="site-header">
       <div class="site-header-inner">
         <a class="brand" href="/" aria-label="Kvartiry-ai.kz — на главную">
-          <span class="brand-mark" aria-hidden="true"><img src="/static/krisha-ai-mark.png" alt=""></span>
+          <span class="brand-mark" aria-hidden="true"><img src="/static/krisha-ai-mark.png?v={{ static_asset_version }}" alt="" width="42" height="42"></span>
           <span class="brand-copy">
             <strong>Kvartiry-ai.kz</strong>
             {% if request.url.path == "/" %}
@@ -795,8 +795,8 @@
             <a class="header-saved-link" href="/saved-listings">Сохранённые <span data-header-saved-count>{{ saved_count }}</span></a>
             <a class="account-chip" href="/account" aria-label="Открыть аккаунт {{ current_user.display_name }}">{{ current_user.display_name[:1] | upper }}</a>
             {% else %}
-            <a class="header-login-link" href="/login?next={{ request.url.path | urlencode }}">Войти</a>
-            <a class="header-register-link" href="/register?next={{ request.url.path | urlencode }}">Регистрация</a>
+            <a class="header-login-link" href="/login?next={{ auth_return_to | urlencode }}">Войти</a>
+            <a class="header-register-link" href="/register?next={{ auth_return_to | urlencode }}">Регистрация</a>
             {% endif %}
           </div>
           <button class="theme-toggle" type="button" data-theme-toggle aria-label="Включить светлую тему" aria-pressed="false">
@@ -838,8 +838,8 @@
               <button type="submit" data-nav-close>Выйти</button>
             </form>
             {% else %}
-            <a href="/login?next={{ request.url.path | urlencode }}">Войти</a>
-            <a href="/register?next={{ request.url.path | urlencode }}">Создать аккаунт</a>
+            <a href="/login?next={{ auth_return_to | urlencode }}">Войти</a>
+            <a href="/register?next={{ auth_return_to | urlencode }}">Создать аккаунт</a>
             {% endif %}
           </div>
         </nav>
@@ -853,7 +853,7 @@
         <div class="footer-grid">
           <div class="footer-brand-column">
             <a class="footer-brand" href="/">
-              <img src="/static/krisha-ai-mark.png" alt="">
+              <img src="/static/krisha-ai-mark.png?v={{ static_asset_version }}" alt="" width="38" height="38">
               <strong>Kvartiry-ai.kz</strong>
             </a>
             <p>ИИ-помощник для поиска, оценки и сравнения квартир в Астане и Алматы.</p>
@@ -1022,10 +1022,7 @@
                 const result = await response.json();
                 updateSavedCount(result.count);
                 showToast(shouldSave ? "Квартира добавлена в ваш список." : "Квартира удалена из списка.");
-                if (!shouldSave && row.hasAttribute("data-watchlist-card")) {
-                  row.remove();
-                  if (!document.querySelector("[data-watchlist-card]")) window.location.reload();
-                }
+                if (!shouldSave && row.hasAttribute("data-watchlist-card")) window.location.reload();
               } catch (_error) {
                 shouldSave ? saved.delete(url) : saved.add(url);
                 applyState();
@@ -1259,14 +1256,30 @@
             if (event.target.closest("a, [data-nav-close]")) {
               navigation.classList.remove("is-open");
               navToggle.setAttribute("aria-expanded", "false");
+              navToggle.setAttribute("aria-label", "Открыть меню");
             }
           });
           document.addEventListener("keydown", function (event) {
             if (event.key === "Escape" && navigation.classList.contains("is-open")) {
               navigation.classList.remove("is-open");
               navToggle.setAttribute("aria-expanded", "false");
+              navToggle.setAttribute("aria-label", "Открыть меню");
               navToggle.focus();
             }
+          });
+          document.addEventListener("click", function (event) {
+            if (!navigation.classList.contains("is-open")) return;
+            if (navigation.contains(event.target) || navToggle.contains(event.target)) return;
+            navigation.classList.remove("is-open");
+            navToggle.setAttribute("aria-expanded", "false");
+            navToggle.setAttribute("aria-label", "Открыть меню");
+          });
+          const desktopNavigation = window.matchMedia("(min-width: 901px)");
+          desktopNavigation.addEventListener("change", function (event) {
+            if (!event.matches) return;
+            navigation.classList.remove("is-open");
+            navToggle.setAttribute("aria-expanded", "false");
+            navToggle.setAttribute("aria-label", "Открыть меню");
           });
         }
 

@@ -462,7 +462,29 @@ def main() -> None:
     assert_contains(home.text, "Как это работает")
     assert_contains(home.text, "Умный список")
     assert_contains(home.text, "Регистрация")
-    assert_contains(home.text, "/static/krisha-ai-mark.png")
+    asset_version = main.STATIC_ASSET_VERSION
+    assert len(asset_version) == 12
+    assert_contains(home.text, f"/static/krisha-ai-mark.png?v={asset_version}")
+    assert_contains(home.text, f"/static/site.css?v={asset_version}")
+    assert_contains(home.text, 'width="42" height="42"')
+    assert home.text.index("Какая квартира вам нужна?") < home.text.index("Новые выгодные квартиры за 24 часа")
+    assert home.text.index("Топ-10 квартир ниже рынка") < home.text.index("Как это работает")
+    site_css = client.get(f"/static/site.css?v={asset_version}")
+    assert site_css.status_code == 200
+    assert_contains(site_css.text, ".brand-mark img")
+    assert_contains(site_css.text, "max-width: 42px")
+    assert_contains(site_css.text, "@media (max-width: 1360px) and (min-width: 761px)")
+    assert_contains(site_css.text, "@media (max-width: 900px)")
+    assert_contains(site_css.text, "@media (max-width: 540px)")
+    assert_not_contains(site_css.text, "width: 100vw")
+    assert_contains(home.text, 'window.matchMedia("(min-width: 901px)")')
+    assert_contains(
+        home.text,
+        'row.hasAttribute("data-watchlist-card")) window.location.reload()',
+    )
+    favicon = client.get("/favicon.ico", follow_redirects=False)
+    assert favicon.status_code == 307
+    assert favicon.headers["location"] == f"/static/krisha-ai-mark.png?v={asset_version}"
     assert_contains(home.text, "© 2026 Kvartiry-ai.kz. Все права защищены.")
     assert_contains(home.text, "Условия использования")
     assert_contains(home.text, "Конфиденциальность")
@@ -534,6 +556,10 @@ def main() -> None:
     assert_contains(almaty_rating.text, "43.238")
     assert_contains(almaty_rating.text, "76.945")
     assert_contains(almaty_rating.text, 'aria-label="Город рейтинга"')
+    assert_contains(
+        almaty_rating.text,
+        "/login?next=/undervalued-page%3Fcity%3Dalmaty",
+    )
 
     legacy_combined_rating = client.get("/undervalued-page?city=both")
     if legacy_combined_rating.status_code != 200:
@@ -646,6 +672,8 @@ def main() -> None:
         raise SystemExit(f"Registration page returned {register_page.status_code}")
     assert_contains(register_page.text, "Сохраните свой поиск")
     assert_contains(register_page.text, "политику конфиденциальности")
+    assert_contains(register_page.text, "/login?next=/saved-listings")
+    assert_not_contains(register_page.text, "/login?next=/register")
     registration_csrf = form_value(register_page.text, "csrf_token")
 
     mismatched_registration = auth_client.post(
@@ -767,6 +795,8 @@ def main() -> None:
         raise SystemExit("Logged-out account request did not redirect")
 
     login_page = auth_client.get("/login?next=//example.com")
+    assert_contains(login_page.text, "/register?next=/")
+    assert_not_contains(login_page.text, "/register?next=/login")
     login_csrf = form_value(login_page.text, "csrf_token")
     old_password_login = auth_client.post(
         "/login",

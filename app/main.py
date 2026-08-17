@@ -112,10 +112,27 @@ from app.refresh_service import run_refresh
 ROOT = Path(os.getenv("APP_ROOT", Path(__file__).resolve().parents[1]))
 POI_CATALOG_PATH = ROOT / "app" / "data" / "kazakhstan_pois.json"
 ASTANA_TZ = timezone(timedelta(hours=5), name="Asia/Astana")
+STATIC_ASSET_VERSION = hashlib.sha256(
+    b"".join(
+        (ROOT / relative_path).read_bytes()
+        for relative_path in (
+            "app/static/site.css",
+            "app/static/krisha-ai-mark.png",
+        )
+    )
+).hexdigest()[:12]
 
 
 def _city_template_context(request: Request) -> dict:
     neutral_home = request.url.path == "/"
+    current_path_with_query = request.url.path
+    if request.url.query:
+        current_path_with_query = f"{current_path_with_query}?{request.url.query}"
+    auth_return_to = current_path_with_query
+    if request.url.path in {"/login", "/register"}:
+        auth_return_to = request.query_params.get("next") or "/"
+        if not auth_return_to.startswith("/") or auth_return_to.startswith("//"):
+            auth_return_to = "/"
     selected_city = city_config(request.query_params.get("city"))
     city_choices = []
     for option in CITY_OPTIONS:
@@ -138,6 +155,8 @@ def _city_template_context(request: Request) -> dict:
         "city": selected_city,
         "city_options": city_choices,
         "neutral_home": neutral_home,
+        "current_path_with_query": current_path_with_query,
+        "auth_return_to": auth_return_to,
     }
 
 
@@ -165,6 +184,7 @@ TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@
 templates.env.globals["telegram_bot_url"] = (
     f"https://t.me/{TELEGRAM_BOT_USERNAME}" if TELEGRAM_BOT_USERNAME else ""
 )
+templates.env.globals["static_asset_version"] = STATIC_ASSET_VERSION
 ADMIN_SESSION_COOKIE = "krisha_admin_session"
 ADMIN_SESSION_TTL_SECONDS = 60 * 60 * 12
 USER_SESSION_COOKIE = "krisha_user_session"
@@ -189,6 +209,14 @@ prediction_service = PredictionService(ROOT)
 DB_PATH = Path(os.getenv("DB_PATH", ROOT / "data" / "krisha.sqlite3"))
 with connect(DB_PATH) as db_connection:
     init_db(db_connection)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> RedirectResponse:
+    return RedirectResponse(
+        url=f"/static/krisha-ai-mark.png?v={STATIC_ASSET_VERSION}",
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    )
 
 
 @app.middleware("http")

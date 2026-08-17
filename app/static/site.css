@@ -436,16 +436,6 @@ main {
   isolation: isolate;
 }
 
-body:has(main > .hero) main > .hero {
-  width: 100vw;
-  margin-left: 50%;
-  border-right: 0;
-  border-left: 0;
-  border-radius: 0;
-  box-shadow: none;
-  translate: -50% 0;
-}
-
 body:has(main > .hero) main {
   padding-top: 0;
 }
@@ -3572,7 +3562,7 @@ html[data-theme="light"] .mortgage-card {
 
 /* Phase 3: account, watchlist, brand, and public-site components. */
 .brand-mark {
-  overflow: visible;
+  overflow: hidden;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -3580,9 +3570,13 @@ html[data-theme="light"] .mortgage-card {
 
 .brand-mark img {
   display: block;
-  width: 42px;
-  height: 42px;
+  width: 100%;
+  max-width: 42px;
+  height: 100%;
+  max-height: 42px;
+  flex: 0 0 42px;
   object-fit: contain;
+  pointer-events: none;
 }
 
 html[data-theme="light"] .brand-mark {
@@ -3690,9 +3684,14 @@ html[data-theme="light"] .brand-mark {
 }
 
 .footer-brand img {
+  display: block;
+  flex: 0 0 38px;
   width: 38px;
+  max-width: 38px;
   height: 38px;
+  max-height: 38px;
   object-fit: contain;
+  pointer-events: none;
 }
 
 .footer-disclaimer {
@@ -4293,24 +4292,162 @@ html[data-theme="light"] .brand-mark {
 }
 
 @media (max-width: 1180px) {
-  .desktop-account-actions .header-register-link,
-  .desktop-account-actions .header-login-link {
-    display: none;
-  }
-
   .footer-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
+@media (max-width: 1360px) and (min-width: 761px) {
+  .site-header-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .header-actions {
+    justify-content: flex-end;
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .site-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+}
+
+@media (max-width: 1360px) and (min-width: 901px) {
+  .city-market-section,
+  .home-explainer,
+  .home-features,
+  .finder-panel,
+  .finder-results {
+    scroll-margin-top: 150px;
+  }
+}
+
 @media (max-width: 900px) {
-  .account-grid,
-  .auth-shell {
+  .site-header-inner {
+    display: flex;
+    width: min(100% - 24px, 1500px);
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+  }
+
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+  }
+
+  .brand-mark img {
+    max-width: 38px;
+    max-height: 38px;
+    flex-basis: 38px;
+  }
+
+  .desktop-account-actions {
+    display: none;
+  }
+
+  .theme-toggle [data-theme-label] {
+    display: none;
+  }
+
+  .theme-toggle {
+    width: 38px;
+    height: 38px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .nav-toggle {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    margin-left: 7px;
+    padding: 10px;
+    place-content: center;
+    gap: 4px;
+    border-radius: 11px;
+    cursor: pointer;
+  }
+
+  .nav-toggle span {
+    display: block;
+    width: 17px;
+    height: 1.5px;
+    background: currentColor;
+    transition: 180ms ease;
+  }
+
+  .site-nav {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 12px;
+    left: 12px;
+    display: none;
+    max-height: calc(100vh - 100px);
+    padding: 10px;
+    overflow-y: auto;
+    border: 1px solid var(--line-strong);
+    border-radius: 17px;
+    background: var(--surface-strong);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(24px);
+  }
+
+  .site-nav.is-open {
+    display: grid;
+  }
+
+  .site-nav a {
+    padding: 12px 13px;
+  }
+
+  .mobile-account-nav {
+    display: grid;
+    gap: 4px;
+    margin-top: 7px;
+    padding-top: 9px;
+    border-top: 1px solid var(--line);
+  }
+
+  .mobile-account-nav form,
+  .mobile-account-nav button {
+    width: 100%;
+  }
+
+  .mobile-account-nav button {
+    min-height: 44px;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--muted);
+    font: 700 0.82rem/1 "Manrope", sans-serif;
+    text-align: left;
+  }
+
+  .account-grid {
     grid-template-columns: 1fr;
   }
 
+  .auth-shell,
+  .auth-shell-login {
+    grid-template-columns: minmax(0, 540px);
+    justify-content: center;
+  }
+
   .auth-benefits {
-    order: -1;
+    display: none;
   }
 
   .watchlist-grid {
@@ -4318,10 +4455,17 @@ html[data-theme="light"] .brand-mark {
   }
 }
 
+@media (max-width: 540px) {
+  .footer-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 760px) {
   .brand-mark img {
-    width: 38px;
-    height: 38px;
+    max-width: 38px;
+    max-height: 38px;
+    flex-basis: 38px;
   }
 
   .desktop-account-actions {
@@ -4356,7 +4500,6 @@ html[data-theme="light"] .brand-mark {
     width: min(100% - 24px, 1500px);
   }
 
-  .footer-grid,
   .process-grid,
   .feature-card-grid,
   .watchlist-summary,
