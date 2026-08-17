@@ -437,7 +437,22 @@ main {
 }
 
 body:has(main > .hero) main {
+  width: 100%;
+  max-width: none;
   padding-top: 0;
+}
+
+body:has(main > .hero) main > .hero {
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+body:has(main > .hero) main > :not(.hero) {
+  width: min(1500px, calc(100% - 40px));
+  margin-right: auto;
+  margin-left: auto;
 }
 
 .hero::before {
@@ -4462,6 +4477,10 @@ html[data-theme="light"] .brand-mark {
 }
 
 @media (max-width: 760px) {
+  body:has(main > .hero) main > :not(.hero) {
+    width: min(100% - 24px, 1500px);
+  }
+
   .brand-mark img {
     max-width: 38px;
     max-height: 38px;

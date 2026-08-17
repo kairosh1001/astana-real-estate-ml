@@ -477,6 +477,8 @@ def main() -> None:
     assert_contains(site_css.text, "@media (max-width: 900px)")
     assert_contains(site_css.text, "@media (max-width: 540px)")
     assert_not_contains(site_css.text, "width: 100vw")
+    assert_contains(site_css.text, "body:has(main > .hero) main > :not(.hero)")
+    assert_contains(site_css.text, "body:has(main > .hero) main > .hero")
     assert_contains(home.text, 'window.matchMedia("(min-width: 901px)")')
     assert_contains(
         home.text,
