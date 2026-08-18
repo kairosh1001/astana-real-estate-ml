@@ -4,6 +4,7 @@ import argparse
 import html
 import os
 import re
+import secrets
 import sys
 import time
 from dataclasses import asdict
@@ -20,14 +21,21 @@ if str(ROOT) not in sys.path:
 
 from app.database import (
     connect,
+    delete_telegram_admin_chat,
     fetch_cached_prediction,
+    fetch_telegram_admin_chats_for_report,
+    fetch_telegram_admin_report,
     fetch_telegram_subscribers_for_digest,
     fetch_undervalued,
     init_db,
+    is_telegram_admin_chat,
+    mark_telegram_admin_report_sent,
     mark_telegram_digest_sent,
+    set_telegram_admin_reports,
     set_telegram_notification_city,
     set_telegram_notifications,
     store_cached_prediction,
+    upsert_telegram_admin_chat,
     upsert_telegram_subscriber,
 )
 from app.prediction_service import (
@@ -56,6 +64,8 @@ class TelegramBot:
         db_path: Path,
         public_url: str,
         digest_hour: int,
+        admin_password: str,
+        admin_report_hour: int,
         prediction_cache_ttl_seconds: int,
     ) -> None:
         self.token = token
@@ -64,6 +74,9 @@ class TelegramBot:
         self.db_path = db_path
         self.public_url = public_url.rstrip("/")
         self.digest_hour = digest_hour
+        self.admin_password = admin_password
+        self.admin_report_hour = admin_report_hour
+        self.admin_auth_attempts: dict[int, list[float]] = {}
         self.prediction_cache_ttl_seconds = prediction_cache_ttl_seconds
         self.prediction_service = PredictionService(root)
 
@@ -78,6 +91,7 @@ class TelegramBot:
                     offset = max(offset, int(update["update_id"]) + 1)
                     self.handle_update(update)
                 self.send_due_digests()
+                self.send_due_admin_reports()
             except Exception as exc:
                 print(f"[WARN] Telegram bot loop error: {exc}", flush=True)
                 time.sleep(5)
@@ -110,7 +124,13 @@ class TelegramBot:
         if not text:
             return
 
-        command = text.split(maxsplit=1)[0].lower()
+        command = text.split(maxsplit=1)[0].lower().split("@", 1)[0]
+        if command == "/admin":
+            self.handle_admin_login(message, chat, chat_id=int(chat_id), text=text)
+            return
+        if command in {"/admin_status", "/admin_on", "/admin_off", "/admin_logout"}:
+            self.handle_admin_command(chat_id=int(chat_id), command=command)
+            return
         if command in {"/start", "/help"}:
             self.subscribe(chat_id)
             self.send_message(
@@ -178,6 +198,99 @@ class TelegramBot:
             return
 
         self.send_message(chat_id, format_prediction(prediction, self.public_url))
+
+    def handle_admin_login(
+        self,
+        message: dict,
+        chat: dict,
+        *,
+        chat_id: int,
+        text: str,
+    ) -> None:
+        message_id = message.get("message_id")
+        if message_id is not None:
+            self.delete_message(chat_id, int(message_id))
+        if str(chat.get("type") or "") != "private":
+            self.send_message(
+                chat_id,
+                "Админ-доступ можно подключить только в личном чате с ботом.",
+            )
+            return
+        command_parts = text.split(maxsplit=1)
+        supplied_password = command_parts[1].strip() if len(command_parts) > 1 else ""
+        if not supplied_password:
+            self.send_message(
+                chat_id,
+                "Формат: <code>/admin ВАШ_ПАРОЛЬ</code>. Сообщение с паролем будет удалено.",
+            )
+            return
+        if not self.admin_login_attempt_allowed(chat_id):
+            self.send_message(
+                chat_id,
+                "Слишком много попыток. Повторите через 10 минут.",
+            )
+            return
+        if not self.admin_password or not secrets.compare_digest(
+            supplied_password,
+            self.admin_password,
+        ):
+            self.record_admin_login_failure(chat_id)
+            self.send_message(chat_id, "Неверный пароль или админ-доступ не настроен.")
+            return
+        self.admin_auth_attempts.pop(chat_id, None)
+        with connect(self.db_path) as connection:
+            upsert_telegram_admin_chat(connection, chat_id=chat_id)
+        self.send_message(
+            chat_id,
+            "✅ Админ-отчёты подключены. Ежедневная отправка включена.\n\n"
+            "Команды:\n"
+            "• /admin_status — отчёт сейчас\n"
+            "• /admin_off — приостановить ежедневные отчёты\n"
+            "• /admin_on — возобновить\n"
+            "• /admin_logout — отвязать этот чат",
+        )
+
+    def handle_admin_command(self, *, chat_id: int, command: str) -> None:
+        with connect(self.db_path) as connection:
+            is_admin = is_telegram_admin_chat(connection, chat_id=chat_id)
+        if not is_admin:
+            self.send_message(
+                chat_id,
+                "Админ-чат не подключён. Используйте <code>/admin ВАШ_ПАРОЛЬ</code> в личном чате.",
+            )
+            return
+        if command == "/admin_status":
+            self.send_admin_report(chat_id)
+            return
+        if command == "/admin_on":
+            with connect(self.db_path) as connection:
+                set_telegram_admin_reports(connection, chat_id=chat_id, enabled=True)
+            self.send_message(chat_id, "✅ Ежедневные админ-отчёты включены.")
+            return
+        if command == "/admin_off":
+            with connect(self.db_path) as connection:
+                set_telegram_admin_reports(connection, chat_id=chat_id, enabled=False)
+            self.send_message(
+                chat_id,
+                "Ежедневные админ-отчёты приостановлены. /admin_status остаётся доступной.",
+            )
+            return
+        with connect(self.db_path) as connection:
+            delete_telegram_admin_chat(connection, chat_id=chat_id)
+        self.send_message(chat_id, "Админ-доступ этого чата удалён.")
+
+    def admin_login_attempt_allowed(self, chat_id: int) -> bool:
+        cutoff = time.monotonic() - 600
+        attempts = [
+            attempt
+            for attempt in self.admin_auth_attempts.get(chat_id, [])
+            if attempt >= cutoff
+        ]
+        self.admin_auth_attempts[chat_id] = attempts
+        return len(attempts) < 5
+
+    def record_admin_login_failure(self, chat_id: int) -> None:
+        self.admin_auth_attempts.setdefault(chat_id, []).append(time.monotonic())
 
     def subscribe(self, chat_id: int) -> None:
         with connect(self.db_path) as connection:
@@ -282,6 +395,73 @@ class TelegramBot:
                     )
             except Exception as exc:
                 print(f"[WARN] Failed to send digest to {chat_id}: {exc}", flush=True)
+
+    def send_due_admin_reports(self) -> None:
+        now = datetime.now(ASTANA_TZ)
+        if now.hour < self.admin_report_hour:
+            return
+        report_date = now.date().isoformat()
+        with connect(self.db_path) as connection:
+            chats = fetch_telegram_admin_chats_for_report(
+                connection,
+                report_date=report_date,
+            )
+        if not chats:
+            return
+        report_text = self.build_admin_report()
+        for admin_chat in chats:
+            chat_id = int(admin_chat["chat_id"])
+            try:
+                self.send_message(
+                    chat_id,
+                    report_text,
+                    disable_web_page_preview=True,
+                )
+                with connect(self.db_path) as connection:
+                    mark_telegram_admin_report_sent(
+                        connection,
+                        chat_id=chat_id,
+                        report_date=report_date,
+                    )
+            except Exception as exc:
+                print(
+                    f"[WARN] Failed to send admin report to {chat_id}: {exc}",
+                    flush=True,
+                )
+
+    def send_admin_report(self, chat_id: int) -> None:
+        try:
+            self.send_message(
+                chat_id,
+                self.build_admin_report(),
+                disable_web_page_preview=True,
+            )
+        except Exception as exc:
+            print(f"[WARN] Failed to build/send admin report: {exc}", flush=True)
+            self.send_message(
+                chat_id,
+                "Не удалось сформировать отчёт. Проверьте логи контейнера telegram_bot.",
+            )
+
+    def build_admin_report(self) -> str:
+        with connect(self.db_path) as connection:
+            report = fetch_telegram_admin_report(connection)
+        health = check_public_site(self.public_url)
+        return format_admin_report(report, health, public_url=self.public_url)
+
+    def delete_message(self, chat_id: int, message_id: int) -> None:
+        try:
+            response = requests.post(
+                f"{self.api_url}/deleteMessage",
+                json={"chat_id": chat_id, "message_id": message_id},
+                timeout=10,
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            print(
+                f"[WARN] Could not delete admin login message in {chat_id}: {exc}",
+                flush=True,
+            )
 
     def send_message(
         self,
@@ -429,6 +609,135 @@ def format_digest(
     return "\n".join(lines)
 
 
+def check_public_site(public_url: str) -> dict:
+    if not public_url:
+        return {
+            "available": False,
+            "status_code": None,
+            "latency_ms": None,
+            "error": "URL не задан",
+        }
+    started = time.perf_counter()
+    try:
+        response = requests.get(f"{public_url.rstrip('/')}/health", timeout=10)
+        latency_ms = (time.perf_counter() - started) * 1000
+        return {
+            "available": response.status_code == 200,
+            "status_code": response.status_code,
+            "latency_ms": latency_ms,
+            "error": None,
+        }
+    except requests.RequestException as exc:
+        return {
+            "available": False,
+            "status_code": None,
+            "latency_ms": (time.perf_counter() - started) * 1000,
+            "error": str(exc)[:160],
+        }
+
+
+def format_admin_report(report: dict, health: dict, *, public_url: str) -> str:
+    traffic = report.get("traffic") or {}
+    accounts = report.get("accounts") or {}
+    cities = report.get("cities") or {}
+    now = datetime.now(ASTANA_TZ)
+    health_icon = "✅" if health.get("available") else "🔴"
+    if health.get("status_code") is not None:
+        health_detail = f"HTTP {int(health['status_code'])}"
+    else:
+        health_detail = html.escape(str(health.get("error") or "нет ответа"))
+    if health.get("latency_ms") is not None:
+        health_detail += f" · {float(health['latency_ms']):,.0f} мс"
+
+    requests_24h = int(traffic.get("requests_24h") or 0)
+    visitors_24h = int(traffic.get("visitors_24h") or 0)
+    predictions_24h = int(traffic.get("predictions_24h") or 0)
+    server_errors = int(traffic.get("server_errors_24h") or 0)
+    rate_limited = int(traffic.get("rate_limited_24h") or 0)
+    avg_duration = float(traffic.get("avg_duration_ms_24h") or 0)
+
+    lines = [
+        "<b>Ежедневный статус Kvartiry-ai.kz</b>",
+        f"{now.strftime('%d.%m.%Y')} · {now.strftime('%H:%M')} (Астана)",
+        "",
+        f"<b>Сайт</b>: {health_icon} {health_detail}",
+        "",
+        "<b>Трафик за 24 часа</b>",
+        f"• Посетители: <b>{visitors_24h:,}</b>",
+        f"• Запросы: {requests_24h:,}",
+        f"• Оценки ссылок: {predictions_24h:,}",
+        f"• Ошибки 5xx: <b>{server_errors:,}</b>",
+        f"• Ограничено (429): {rate_limited:,}",
+        f"• Среднее время ответа: {avg_duration:,.0f} мс",
+        "",
+        "<b>Аккаунты</b>",
+        f"• Зарегистрировано: <b>{int(accounts.get('registered_users') or 0):,}</b>",
+        f"• Активные сессии: {int(accounts.get('active_sessions') or 0):,}",
+        f"• Сохранено объявлений: {int(accounts.get('saved_listings') or 0):,}",
+        "",
+        "<b>Объявления</b>",
+    ]
+    for city_slug, city_label in (("astana", "Астана"), ("almaty", "Алматы")):
+        city = cities.get(city_slug) or {}
+        lines.append(
+            f"• <b>{city_label}</b>: {int(city.get('active_listings') or 0):,} активных · "
+            f"{int(city.get('below_market_active') or 0):,} ниже рынка · "
+            f"{int(city.get('new_listings_24h') or 0):,} новых · "
+            f"{int(city.get('stale_listings') or 0):,} скрыто/устарело"
+        )
+
+    lines.extend(["", "<b>Последние обновления</b>"])
+    for city_slug, city_label in (("astana", "Астана"), ("almaty", "Алматы")):
+        refresh = (cities.get(city_slug) or {}).get("latest_refresh")
+        lines.append(f"• <b>{city_label}</b>: {format_refresh_status(refresh)}")
+
+    top_pages = traffic.get("top_pages") or []
+    if top_pages:
+        lines.extend(["", "<b>Популярные страницы</b>"])
+        for page in top_pages[:3]:
+            lines.append(
+                f"• <code>{html.escape(str(page.get('path') or '/'))}</code>: "
+                f"{int(page.get('requests') or 0):,} запросов · "
+                f"{int(page.get('visitors') or 0):,} посетителей"
+            )
+    if public_url:
+        lines.extend(
+            [
+                "",
+                f'<a href="{html.escape(public_url.rstrip("/") + "/traffic-page")}">Открыть полную статистику</a>',
+            ]
+        )
+    return "\n".join(lines)
+
+
+def format_refresh_status(refresh: dict | None) -> str:
+    if not refresh:
+        return "ещё не запускалось"
+    status = str(refresh.get("status") or "unknown")
+    status_label = {
+        "completed": "✅ завершено",
+        "running": "⏳ выполняется",
+        "failed": "🔴 ошибка",
+    }.get(status, html.escape(status))
+    processed = int(refresh.get("listings_processed") or 0)
+    failed = int(refresh.get("listings_failed") or 0)
+    finished_at = refresh.get("finished_at") or refresh.get("started_at")
+    time_label = format_astana_datetime(finished_at)
+    return f"{status_label} · {processed:,} обработано · {failed:,} ошибок · {time_label}"
+
+
+def format_astana_datetime(value: object) -> str:
+    if not value:
+        return "время неизвестно"
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(ASTANA_TZ).strftime("%d.%m %H:%M")
+    except ValueError:
+        return html.escape(str(value))
+
+
 def short_title(title: str) -> str:
     cleaned = " ".join(str(title or "Объявление").split())
     return cleaned[:90] + "..." if len(cleaned) > 90 else cleaned
@@ -445,6 +754,9 @@ def main() -> None:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
         raise SystemExit("TELEGRAM_BOT_TOKEN is required.")
+    admin_password = os.getenv("TELEGRAM_ADMIN_PASSWORD", "").strip()
+    if admin_password and len(admin_password) < 16:
+        raise SystemExit("TELEGRAM_ADMIN_PASSWORD must contain at least 16 characters.")
 
     bot = TelegramBot(
         token=token,
@@ -452,6 +764,8 @@ def main() -> None:
         db_path=Path(os.getenv("DB_PATH", ROOT / "data" / "krisha.sqlite3")),
         public_url=os.getenv("APP_PUBLIC_URL", "https://kvartiry-ai.kz"),
         digest_hour=int(os.getenv("TELEGRAM_DIGEST_HOUR_ASTANA", "9")),
+        admin_password=admin_password,
+        admin_report_hour=int(os.getenv("TELEGRAM_ADMIN_REPORT_HOUR_ASTANA", "8")),
         prediction_cache_ttl_seconds=int(
             os.getenv("PREDICTION_CACHE_TTL_SECONDS", str(60 * 60 * 6))
         ),

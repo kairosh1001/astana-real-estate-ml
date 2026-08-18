@@ -324,6 +324,8 @@ APP_PUBLIC_URL=https://your-domain.kz
 TELEGRAM_BOT_TOKEN=123456:bot-token-from-botfather
 TELEGRAM_BOT_USERNAME=your_bot_username
 TELEGRAM_DIGEST_HOUR_ASTANA=9
+TELEGRAM_ADMIN_PASSWORD=use-a-separate-long-random-password
+TELEGRAM_ADMIN_REPORT_HOUR_ASTANA=8
 ```
 
 Start the website, HTTPS proxy, and bot:
@@ -334,6 +336,26 @@ docker compose --profile https --profile bot up -d --build
 
 In the bot, subscribers choose `Астана`, `Алматы`, or `Оба города`. The same
 choices are available as `/astana`, `/almaty`, and `/both`.
+
+To connect a private admin report, open a direct chat with the bot and send:
+
+```text
+/admin use-a-separate-long-random-password
+```
+
+Do not send this command in a group. The bot tries to delete the password message
+immediately and stores only the approved Telegram chat ID. Admin commands:
+
+- `/admin_status` sends a report immediately;
+- `/admin_off` pauses daily reports without revoking access;
+- `/admin_on` resumes daily reports;
+- `/admin_logout` removes the approved chat.
+
+At `TELEGRAM_ADMIN_REPORT_HOUR_ASTANA`, the bot reports the public health check,
+24-hour traffic, 5xx/429 counts, aggregate registrations and saves, listing totals
+for Astana and Almaty, and the most recent refresh result. Personal user data is
+not sent to Telegram. Use at least 16 characters and keep
+`TELEGRAM_ADMIN_PASSWORD` different from `ADMIN_TOKEN`.
 
 Check logs:
 

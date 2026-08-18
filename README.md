@@ -216,6 +216,8 @@ TELEGRAM_BOT_TOKEN=123456:bot-token-from-botfather
 TELEGRAM_BOT_USERNAME=your_bot_username
 APP_PUBLIC_URL=https://kvartiry-ai.kz
 TELEGRAM_DIGEST_HOUR_ASTANA=9
+TELEGRAM_ADMIN_PASSWORD=use-a-separate-long-random-password
+TELEGRAM_ADMIN_REPORT_HOUR_ASTANA=8
 ```
 
 Start it on the VPS:
@@ -230,6 +232,15 @@ The bot supports:
 - `/on` to enable daily "Новые выгодные за 24 часа";
 - `/off` to disable daily notifications;
 - `/help` for a short command list.
+
+Private admin reports are paired with `/admin YOUR_PASSWORD` in a direct chat.
+The bot deletes that command on a best-effort basis and never stores the password.
+The separate password must contain at least 16 characters.
+After pairing, `/admin_status` sends the operational report immediately,
+`/admin_off` and `/admin_on` control the daily report, and `/admin_logout`
+revokes the chat. The report contains public-site health, 24-hour traffic and
+errors, aggregate account counts, per-city listing totals, and refresh status;
+it does not include names, email addresses, or other user details.
 
 ## Retraining
 

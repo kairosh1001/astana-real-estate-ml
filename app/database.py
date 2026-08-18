@@ -222,6 +222,14 @@ def init_db(connection: sqlite3.Connection) -> None:
             last_digest_date TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS telegram_admin_chats (
+            chat_id INTEGER PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            reports_enabled INTEGER NOT NULL DEFAULT 1,
+            last_report_date TEXT
+        );
+
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT NOT NULL,
@@ -1063,6 +1071,176 @@ def mark_telegram_digest_sent(
         (utc_now(), digest_date, chat_id),
     )
     connection.commit()
+
+
+def upsert_telegram_admin_chat(
+    connection: sqlite3.Connection,
+    *,
+    chat_id: int,
+    reports_enabled: bool = True,
+) -> None:
+    now = utc_now()
+    connection.execute(
+        """
+        INSERT INTO telegram_admin_chats (
+            chat_id, created_at, updated_at, reports_enabled
+        )
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(chat_id) DO UPDATE SET
+            updated_at = excluded.updated_at,
+            reports_enabled = excluded.reports_enabled
+        """,
+        (chat_id, now, now, int(reports_enabled)),
+    )
+    connection.commit()
+
+
+def is_telegram_admin_chat(
+    connection: sqlite3.Connection,
+    *,
+    chat_id: int,
+) -> bool:
+    row = connection.execute(
+        "SELECT 1 FROM telegram_admin_chats WHERE chat_id = ?",
+        (chat_id,),
+    ).fetchone()
+    return row is not None
+
+
+def set_telegram_admin_reports(
+    connection: sqlite3.Connection,
+    *,
+    chat_id: int,
+    enabled: bool,
+) -> bool:
+    cursor = connection.execute(
+        """
+        UPDATE telegram_admin_chats
+        SET updated_at = ?, reports_enabled = ?
+        WHERE chat_id = ?
+        """,
+        (utc_now(), int(enabled), chat_id),
+    )
+    connection.commit()
+    return cursor.rowcount > 0
+
+
+def delete_telegram_admin_chat(
+    connection: sqlite3.Connection,
+    *,
+    chat_id: int,
+) -> bool:
+    cursor = connection.execute(
+        "DELETE FROM telegram_admin_chats WHERE chat_id = ?",
+        (chat_id,),
+    )
+    connection.commit()
+    return cursor.rowcount > 0
+
+
+def fetch_telegram_admin_chats_for_report(
+    connection: sqlite3.Connection,
+    *,
+    report_date: str,
+) -> list[dict]:
+    rows = connection.execute(
+        """
+        SELECT chat_id, last_report_date
+        FROM telegram_admin_chats
+        WHERE reports_enabled = 1
+          AND (last_report_date IS NULL OR last_report_date != ?)
+        ORDER BY created_at ASC
+        """,
+        (report_date,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def mark_telegram_admin_report_sent(
+    connection: sqlite3.Connection,
+    *,
+    chat_id: int,
+    report_date: str,
+) -> None:
+    connection.execute(
+        """
+        UPDATE telegram_admin_chats
+        SET updated_at = ?, last_report_date = ?
+        WHERE chat_id = ?
+        """,
+        (utc_now(), report_date, chat_id),
+    )
+    connection.commit()
+
+
+def fetch_telegram_admin_report(connection: sqlite3.Connection) -> dict:
+    """Return the compact operational metrics used by the private bot report."""
+    cutoff_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat(
+        timespec="seconds"
+    )
+    traffic_totals = connection.execute(
+        """
+        SELECT
+            COUNT(*) AS requests_24h,
+            COUNT(DISTINCT client_hash) AS visitors_24h,
+            SUM(
+                CASE
+                    WHEN path IN ('/predict', '/predict-by-link', '/listing-details')
+                    THEN 1 ELSE 0
+                END
+            ) AS predictions_24h,
+            SUM(CASE WHEN status_code = 429 THEN 1 ELSE 0 END) AS rate_limited_24h,
+            SUM(CASE WHEN status_code >= 500 THEN 1 ELSE 0 END) AS server_errors_24h,
+            AVG(duration_ms) AS avg_duration_ms_24h
+        FROM request_events
+        WHERE created_at >= ?
+        """,
+        (cutoff_24h,),
+    ).fetchone()
+    top_pages = connection.execute(
+        """
+        SELECT path, COUNT(*) AS requests,
+               COUNT(DISTINCT client_hash) AS visitors
+        FROM request_events
+        WHERE created_at >= ?
+        GROUP BY path
+        ORDER BY requests DESC
+        LIMIT 5
+        """,
+        (cutoff_24h,),
+    ).fetchall()
+    traffic = {**dict(traffic_totals), "top_pages": [dict(row) for row in top_pages]}
+    account_counts = connection.execute(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM users) AS registered_users,
+            (SELECT COUNT(*) FROM user_saved_listings) AS saved_listings,
+            (
+                SELECT COUNT(*) FROM user_sessions
+                WHERE expires_at > ?
+            ) AS active_sessions
+        """,
+        (utc_now(),),
+    ).fetchone()
+    cities: dict[str, dict] = {}
+    for city in ("astana", "almaty"):
+        city_summary = fetch_status_summary(connection, city=city)
+        new_row = connection.execute(
+            """
+            SELECT COUNT(*) AS new_listings_24h
+            FROM listings
+            WHERE city = ? AND first_seen_at >= ?
+            """,
+            (city, cutoff_24h),
+        ).fetchone()
+        city_summary["new_listings_24h"] = int(new_row["new_listings_24h"] or 0)
+        cities[city] = city_summary
+    return {
+        "generated_at": utc_now(),
+        "traffic": traffic,
+        "accounts": dict(account_counts),
+        "cities": cities,
+    }
 
 
 def start_refresh_run(
