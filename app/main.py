@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 import sqlite3
+from threading import Lock
 from urllib.parse import quote, urlencode, urlparse, urlunparse
 
 from fastapi import (
@@ -29,6 +30,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from starlette.background import BackgroundTask, BackgroundTasks as StarletteBackgroundTasks
 
 from app.auth import (
     AuthValidationError,
@@ -63,6 +65,7 @@ from app.database import (
     fetch_cached_prediction,
     fetch_feedback_messages,
     fetch_home_match_candidates,
+    fetch_inventory_version,
     fetch_listing_by_url,
     fetch_listings_by_urls,
     fetch_market_brief,
@@ -101,6 +104,7 @@ from app.home_matcher import (
 )
 from app.i18n import LANGUAGE_OPTIONS, normalize_locale, translations_for
 from app.listing_insights import build_comparable_insight
+from app.manual_prediction import ManualApartment, build_manual_raw_listing
 from app.model_service import MODEL_FILENAMES
 from app.mortgage import analyze_otbasy_mortgage
 from app.prediction_service import (
@@ -215,6 +219,11 @@ PREDICTION_CACHE_TTL_SECONDS = int(
 PREDICT_RATE_LIMIT_PER_MINUTE = int(os.getenv("PREDICT_RATE_LIMIT_PER_MINUTE", "10"))
 PREDICT_RATE_LIMIT_PER_HOUR = int(os.getenv("PREDICT_RATE_LIMIT_PER_HOUR", "60"))
 RATE_LIMIT_BUCKETS: dict[str, list[float]] = {}
+PAGE_DATA_CACHE_LOCK = Lock()
+MARKET_DASHBOARD_CACHE: dict[tuple[str, str], dict] = {}
+MARKET_BRIEF_CACHE: dict[tuple[str, str], dict] = {}
+HOME_MATCH_CACHE: dict[tuple, tuple[dict, int]] = {}
+HOME_CANDIDATE_CACHE: dict[tuple[str, str], list[dict]] = {}
 
 app = FastAPI(title="Оценка объявлений Krisha")
 app.mount("/static", StaticFiles(directory=str(ROOT / "app" / "static")), name="static")
@@ -254,29 +263,33 @@ def set_language(request: Request, locale: str, next: str = "/") -> RedirectResp
 @app.middleware("http")
 async def traffic_middleware(request: Request, call_next):
     started = time.perf_counter()
-    status_code = 500
     request.state.user_session = _resolve_user_session(request)
     try:
         response = await call_next(request)
-        status_code = response.status_code
-        return response
-    finally:
+    except Exception:
         duration_ms = (time.perf_counter() - started) * 1000
         if _should_track_request(request):
-            try:
-                with connect(DB_PATH) as db_connection:
-                    record_request_event(
-                        db_connection,
-                        method=request.method,
-                        path=request.url.path,
-                        status_code=status_code,
-                        duration_ms=duration_ms,
-                        client_hash=_client_hash(request),
-                        user_agent=request.headers.get("user-agent"),
-                        referer=request.headers.get("referer"),
-                    )
-            except Exception:
-                pass
+            _record_request_safely(request, status_code=500, duration_ms=duration_ms)
+        raise
+    duration_ms = (time.perf_counter() - started) * 1000
+    if _should_track_request(request):
+        analytics_task = BackgroundTask(
+            _record_request_values_safely,
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+            client_hash=_client_hash(request),
+            user_agent=request.headers.get("user-agent"),
+            referer=request.headers.get("referer"),
+        )
+        if response.background is None:
+            response.background = analytics_task
+        else:
+            response.background = StarletteBackgroundTasks(
+                [response.background, analytics_task]
+            )
+    return response
 
 
 class PredictByLinkRequest(BaseModel):
@@ -348,7 +361,7 @@ PUBLIC_PAGES = {
         "sections": [
             {"title": "Квартиры ниже рынка", "paragraphs": ["Городской рейтинг с фильтрами, картой, сортировкой по выгоде и признаками качества данных."]},
             {"title": "Персональный подбор", "paragraphs": ["Жёсткие условия и приоритеты по району, бюджету, площади, возрасту дома и близости к важным местам."]},
-            {"title": "Проверка по ссылке", "paragraphs": ["q10/q50/q90, история цены, технические предупреждения, аренда, валовая доходность и предварительный расчёт Отбасы банка."]},
+            {"title": "Оценка квартиры", "paragraphs": ["Введите ссылку Krisha или параметры квартиры вручную и получите q10/q50/q90, технические предупреждения, аренду, доходность и предварительный расчёт Отбасы банка."]},
             {"title": "Рынок, районы и ЖК", "paragraphs": ["Медианы, диапазоны и динамика по городам, районам и жилым комплексам на основе активных объявлений."]},
             {"title": "Сравнение и умный список", "paragraphs": ["Сравнивайте до пяти вариантов, сохраняйте их в аккаунте, отмечайте свои наблюдения и замечайте снижение цены."]},
             {"title": "Два города, единая логика", "paragraphs": ["Отдельный городской контекст для Астаны и Алматы без смешивания похожих, но разных рынков."]},
@@ -371,12 +384,11 @@ PUBLIC_PAGES = {
         "title": "Расскажите, что стоит улучшить",
         "intro": "Сообщения об ошибках, идеи новых функций и предложения о сотрудничестве помогают проекту становиться полезнее.",
         "sections": [
-            {"title": "Обратная связь", "paragraphs": ["Используйте форму — так сообщение сохранится и не потеряется. Для прямого контакта: kairosh1001@gmail.com."]},
+            {"title": "Обратная связь", "paragraphs": ["Используйте форму — так сообщение сохранится и не потеряется. Контактная почта: kairat.zharkynbay@nu.edu.kz."]},
             {"title": "Что указать", "paragraphs": ["Если проблема связана с объявлением, приложите ссылку и город. Не отправляйте ИИН, банковские данные, пароли и документы на квартиру."]},
         ],
         "actions": [
             {"label": "Открыть форму", "url": "/feedback-page"},
-            {"label": "Написать email", "url": "mailto:kairosh1001@gmail.com", "secondary": True},
         ],
     },
     "terms": {
@@ -811,7 +823,7 @@ def home(request: Request) -> HTMLResponse:
                 db_connection, city=city_slug, include_stale=False
             )
             status_summary = fetch_status_summary(db_connection, city=city_slug)
-            market_brief = fetch_market_brief(db_connection, city=city_slug)
+            market_brief = _cached_market_brief(db_connection, city_slug)
             city_active = status_summary.get("active_listings") or 0
             latest_refresh = status_summary.get("latest_refresh")
             total_undervalued += city_total
@@ -858,7 +870,7 @@ def predict_entry_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "predict_form.html",
-        {"request": request, "error": None, "url": ""},
+        _predict_form_context(request),
     )
 
 
@@ -942,7 +954,7 @@ def predict_page(request: Request, url: str = "") -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             "predict_form.html",
-            {"request": request, "error": None, "url": ""},
+            _predict_form_context(request),
         )
 
     try:
@@ -955,14 +967,14 @@ def predict_page(request: Request, url: str = "") -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             "predict_form.html",
-            {"request": request, "error": str(exc.detail), "url": url},
+            _predict_form_context(request, error=str(exc.detail), url=url),
             status_code=exc.status_code,
         )
     except Exception as exc:
         return templates.TemplateResponse(
             request,
             "predict_form.html",
-            {"request": request, "error": str(exc), "url": url},
+            _predict_form_context(request, error=str(exc), url=url),
             status_code=400,
         )
 
@@ -981,14 +993,107 @@ def predict_form(request: Request, url: str = Form(...)) -> HTMLResponse:
         return templates.TemplateResponse(
             request,
             "predict_form.html",
-            {"request": request, "error": str(exc.detail), "url": url},
+            _predict_form_context(request, error=str(exc.detail), url=url),
             status_code=exc.status_code,
         )
     except Exception as exc:
         return templates.TemplateResponse(
             request,
             "predict_form.html",
-            {"request": request, "error": str(exc), "url": url},
+            _predict_form_context(request, error=str(exc), url=url),
+            status_code=400,
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "result.html",
+        _prediction_context(request, prediction),
+    )
+
+
+@app.post("/predict-manual", response_class=HTMLResponse)
+def predict_manual_form(
+    request: Request,
+    city: str = Form(...),
+    listed_price: str = Form(...),
+    area_m2: str = Form(...),
+    rooms: str = Form(...),
+    current_floor: str = Form(...),
+    total_floors: str = Form(...),
+    construction_year: str = Form(...),
+    district: str = Form(""),
+    residential_complex: str = Form(""),
+    ceiling_height: str = Form(""),
+    furnished: str = Form("missing"),
+    apartment_condition: str = Form("missing"),
+    building_type: str = Form("missing"),
+    is_new_build: str | None = Form(None),
+    middle_floor_only: str | None = Form(None),
+    lat: str = Form(""),
+    lon: str = Form(""),
+) -> HTMLResponse:
+    manual_form = {
+        "city": city,
+        "listed_price": listed_price,
+        "area_m2": area_m2,
+        "rooms": rooms,
+        "current_floor": current_floor,
+        "total_floors": total_floors,
+        "construction_year": construction_year,
+        "district": district,
+        "residential_complex": residential_complex,
+        "ceiling_height": ceiling_height,
+        "furnished": furnished,
+        "apartment_condition": apartment_condition,
+        "building_type": building_type,
+        "is_new_build": bool(is_new_build),
+        "middle_floor_only": bool(middle_floor_only),
+        "lat": lat,
+        "lon": lon,
+    }
+    try:
+        apartment = ManualApartment(
+            city=city,
+            listed_price=_manual_number(listed_price, "цену"),
+            area_m2=_manual_number(area_m2, "площадь"),
+            rooms=_manual_integer(rooms, "количество комнат"),
+            current_floor=_manual_integer(current_floor, "этаж квартиры"),
+            total_floors=_manual_integer(total_floors, "этажность дома"),
+            construction_year=_manual_integer(construction_year, "год постройки"),
+            district=district,
+            residential_complex=residential_complex,
+            ceiling_height=_manual_optional_number(ceiling_height, "высоту потолков"),
+            furnished=furnished,
+            apartment_condition=apartment_condition,
+            building_type=building_type,
+            is_new_build=bool(is_new_build),
+            middle_floor_only=bool(middle_floor_only),
+            lat=_manual_optional_number(lat, "широту"),
+            lon=_manual_optional_number(lon, "долготу"),
+        )
+        raw_listing = build_manual_raw_listing(apartment)
+        _enforce_predict_rate_limit(request)
+        prediction = prediction_service.predict_raw_listing(raw_listing)
+    except HTTPException as exc:
+        return templates.TemplateResponse(
+            request,
+            "predict_form.html",
+            _predict_form_context(
+                request,
+                manual_error=str(exc.detail),
+                manual_form=manual_form,
+            ),
+            status_code=exc.status_code,
+        )
+    except (TypeError, ValueError) as exc:
+        return templates.TemplateResponse(
+            request,
+            "predict_form.html",
+            _predict_form_context(
+                request,
+                manual_error=str(exc),
+                manual_form=manual_form,
+            ),
             status_code=400,
         )
 
@@ -1027,7 +1132,7 @@ def compare_page(
 def market_page(request: Request, city: str = "astana") -> HTMLResponse:
     city_slug = normalize_city_slug(city)
     with connect(DB_PATH) as db_connection:
-        dashboard = fetch_market_dashboard(db_connection, city=city_slug)
+        dashboard = _cached_market_dashboard(db_connection, city_slug)
         status_summary = fetch_status_summary(db_connection, city=city_slug)
 
     return templates.TemplateResponse(
@@ -1398,6 +1503,7 @@ def find_home_page(
     housing_type: str = "any",
     condition: list[str] | None = Query(default=None),
     furnished_only: str | None = None,
+    middle_floor_only: str | None = None,
     priority_park: str | None = None,
     priority_education: str | None = None,
     priority_transit: str | None = None,
@@ -1446,16 +1552,15 @@ def find_home_page(
         housing_type=selected_housing_type,
         conditions=selected_conditions,
         furnished_only=_parse_checkbox_bool(furnished_only),
+        middle_floor_only=_parse_checkbox_bool(middle_floor_only),
         priorities=selected_priorities,
     )
     with connect(DB_PATH) as db_connection:
-        candidates = fetch_home_match_candidates(db_connection, city=city_slug)
-    result = rank_home_candidates(
-        candidates,
-        preferences,
-        catalog_path=POI_CATALOG_PATH,
-        city=city_slug,
-    )
+        result, candidate_count = _cached_home_match(
+            db_connection,
+            city_slug,
+            preferences,
+        )
     preserved_filters: dict[str, object] = {"city": city_slug}
     if preferences.districts:
         preserved_filters["district"] = preferences.districts
@@ -1476,6 +1581,8 @@ def find_home_page(
         preserved_filters["condition"] = preferences.conditions
     if preferences.furnished_only:
         preserved_filters["furnished_only"] = 1
+    if preferences.middle_floor_only:
+        preserved_filters["middle_floor_only"] = 1
     home_presets = []
     for preset in HOME_PRESETS:
         preset_copy = dict(preset)
@@ -1509,7 +1616,7 @@ def find_home_page(
             "request": request,
             "items": result["items"],
             "total": result["total"],
-            "candidate_count": len(candidates),
+            "candidate_count": candidate_count,
             "catalog": result["catalog"],
             "district_options": district_options(city_slug),
             "condition_options": APARTMENT_CONDITION_OPTIONS,
@@ -1526,6 +1633,7 @@ def find_home_page(
             "selected_housing_type": selected_housing_type,
             "selected_conditions": selected_conditions,
             "selected_furnished_only": preferences.furnished_only,
+            "selected_middle_floor_only": preferences.middle_floor_only,
             "selected_priorities": result["priorities"],
         },
     )
@@ -2282,7 +2390,133 @@ def _prediction_context(request: Request, prediction: object) -> dict:
             )
         ),
         "city": selected_city,
+        "is_manual_prediction": not bool(getattr(prediction, "url", "")),
     }
+
+
+def _record_request_safely(
+    request: Request,
+    *,
+    status_code: int,
+    duration_ms: float,
+) -> None:
+    _record_request_values_safely(
+        method=request.method,
+        path=request.url.path,
+        status_code=status_code,
+        duration_ms=duration_ms,
+        client_hash=_client_hash(request),
+        user_agent=request.headers.get("user-agent"),
+        referer=request.headers.get("referer"),
+    )
+
+
+def _record_request_values_safely(
+    *,
+    method: str,
+    path: str,
+    status_code: int,
+    duration_ms: float,
+    client_hash: str,
+    user_agent: str | None,
+    referer: str | None,
+) -> None:
+    try:
+        with connect(DB_PATH) as db_connection:
+            record_request_event(
+                db_connection,
+                method=method,
+                path=path,
+                status_code=status_code,
+                duration_ms=duration_ms,
+                client_hash=client_hash,
+                user_agent=user_agent,
+                referer=referer,
+            )
+    except Exception:
+        logger.exception("Could not record request analytics for %s", path)
+
+
+def _cached_market_dashboard(connection: sqlite3.Connection, city: str) -> dict:
+    version = fetch_inventory_version(connection, city=city)
+    key = (city, version)
+    with PAGE_DATA_CACHE_LOCK:
+        cached = MARKET_DASHBOARD_CACHE.get(key)
+    if cached is not None:
+        return cached
+    dashboard = fetch_market_dashboard(connection, city=city)
+    with PAGE_DATA_CACHE_LOCK:
+        for old_key in list(MARKET_DASHBOARD_CACHE):
+            if old_key[0] == city:
+                MARKET_DASHBOARD_CACHE.pop(old_key, None)
+        MARKET_DASHBOARD_CACHE[key] = dashboard
+    return dashboard
+
+
+def _cached_market_brief(connection: sqlite3.Connection, city: str) -> dict:
+    version = fetch_inventory_version(connection, city=city)
+    key = (city, version)
+    with PAGE_DATA_CACHE_LOCK:
+        cached = MARKET_BRIEF_CACHE.get(key)
+    if cached is not None:
+        return cached
+    brief = fetch_market_brief(connection, city=city)
+    with PAGE_DATA_CACHE_LOCK:
+        for old_key in list(MARKET_BRIEF_CACHE):
+            if old_key[0] == city:
+                MARKET_BRIEF_CACHE.pop(old_key, None)
+        MARKET_BRIEF_CACHE[key] = brief
+    return brief
+
+
+def _cached_home_match(
+    connection: sqlite3.Connection,
+    city: str,
+    preferences: HomeSearchPreferences,
+) -> tuple[dict, int]:
+    version = fetch_inventory_version(connection, city=city)
+    preference_key = (
+        preferences.districts,
+        preferences.rooms,
+        preferences.min_price,
+        preferences.max_price,
+        preferences.min_area,
+        preferences.max_area,
+        preferences.min_year,
+        preferences.housing_type,
+        preferences.conditions,
+        preferences.furnished_only,
+        preferences.middle_floor_only,
+        tuple(sorted(preferences.priorities.items())),
+    )
+    key = (city, version, preference_key)
+    with PAGE_DATA_CACHE_LOCK:
+        cached = HOME_MATCH_CACHE.get(key)
+        candidates = HOME_CANDIDATE_CACHE.get((city, version))
+    if cached is not None:
+        return cached
+    if candidates is None:
+        candidates = fetch_home_match_candidates(connection, city=city)
+        with PAGE_DATA_CACHE_LOCK:
+            for old_key in list(HOME_CANDIDATE_CACHE):
+                if old_key[0] == city:
+                    HOME_CANDIDATE_CACHE.pop(old_key, None)
+            HOME_CANDIDATE_CACHE[(city, version)] = candidates
+    result = rank_home_candidates(
+        candidates,
+        preferences,
+        catalog_path=POI_CATALOG_PATH,
+        city=city,
+    )
+    value = (result, len(candidates))
+    with PAGE_DATA_CACHE_LOCK:
+        for old_key in list(HOME_MATCH_CACHE):
+            if old_key[0] == city and old_key[1] != version:
+                HOME_MATCH_CACHE.pop(old_key, None)
+        if len(HOME_MATCH_CACHE) >= 64:
+            HOME_MATCH_CACHE.clear()
+        HOME_MATCH_CACHE[key] = value
+    return value
 
 
 def _build_risk_flags(
@@ -2385,6 +2619,74 @@ def _parse_optional_positive_float(value: str | None) -> float | None:
     except ValueError:
         return None
     return parsed if parsed > 0 else None
+
+
+def _predict_form_context(
+    request: Request,
+    *,
+    error: str | None = None,
+    url: str = "",
+    manual_error: str | None = None,
+    manual_form: dict | None = None,
+) -> dict:
+    selected_city = normalize_city_slug(
+        (manual_form or {}).get("city") or request.query_params.get("city")
+    )
+    defaults = {
+        "city": selected_city,
+        "listed_price": "",
+        "area_m2": "",
+        "rooms": "",
+        "current_floor": "",
+        "total_floors": "",
+        "construction_year": "",
+        "district": "",
+        "residential_complex": "",
+        "ceiling_height": "",
+        "furnished": "missing",
+        "apartment_condition": "missing",
+        "building_type": "missing",
+        "is_new_build": False,
+        "middle_floor_only": False,
+        "lat": "",
+        "lon": "",
+    }
+    defaults.update(manual_form or {})
+    all_districts = [
+        {**district, "city": city_slug}
+        for city_slug in ("astana", "almaty")
+        for district in district_options(city_slug)
+    ]
+    return {
+        "request": request,
+        "error": error,
+        "url": url,
+        "manual_error": manual_error,
+        "manual_form": defaults,
+        "manual_district_options": all_districts,
+        "condition_options": APARTMENT_CONDITION_OPTIONS,
+    }
+
+
+def _manual_number(value: str, label: str) -> float:
+    cleaned = re.sub(r"[\s\u00a0]+", "", str(value or "")).replace(",", ".")
+    try:
+        return float(cleaned)
+    except ValueError as exc:
+        raise ValueError(f"Проверьте {label}: требуется число.") from exc
+
+
+def _manual_optional_number(value: str, label: str) -> float | None:
+    if not str(value or "").strip():
+        return None
+    return _manual_number(value, label)
+
+
+def _manual_integer(value: str, label: str) -> int:
+    parsed = _manual_number(value, label)
+    if not parsed.is_integer():
+        raise ValueError(f"Проверьте {label}: требуется целое число.")
+    return int(parsed)
 
 
 def _pagination_window(current_page: int, total_pages: int) -> list[int | None]:

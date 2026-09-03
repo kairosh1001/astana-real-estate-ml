@@ -8,8 +8,8 @@ All three models are evaluated on the same deterministic Astana test groups. The
 
 | Model | Log RMSE | Median APE | MAE, KZT/m² | q10-q90 coverage |
 |---|---:|---:|---:|---:|
-| astana_v2 | 0.129988 | 7.31% | 63,605 | 80.46% |
-| astana_v1_retrained | 0.131885 | 7.72% | 64,831 | 79.96% |
+| astana_v2 | 0.128471 | 7.35% | 62,954 | 79.58% |
+| astana_v1_retrained | 0.130245 | 7.61% | 64,040 | 79.37% |
 | universal_v2 | 0.135244 | 7.83% | 66,918 | 79.25% |
 
 Winner by held-out log RMSE: **astana_v2**.
@@ -20,8 +20,8 @@ The existing production artifact scores 0.110219 log RMSE on these rows, but it 
 
 ## Paired property-group bootstrap
 
-- `astana_v1_retrained_minus_astana_v2`: mean 0.001928; 95% CI [0.000080, 0.003778]; P(winner better)=98.0%.
-- `universal_v2_minus_astana_v2`: mean 0.005236; 95% CI [0.002851, 0.007565]; P(winner better)=100.0%.
+- `astana_v1_retrained_minus_astana_v2`: mean 0.001806; 95% CI [-0.000075, 0.003731]; P(winner better)=96.9%.
+- `universal_v2_minus_astana_v2`: mean 0.006749; 95% CI [0.004254, 0.009140]; P(winner better)=100.0%.
 
 ## Caveats
 

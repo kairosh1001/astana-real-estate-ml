@@ -99,6 +99,7 @@ class HomeSearchPreferences:
     housing_type: str = "any"
     conditions: tuple[str, ...] = ()
     furnished_only: bool = False
+    middle_floor_only: bool = False
     priorities: dict[str, int] = field(
         default_factory=lambda: dict(DEFAULT_PRIORITIES)
     )
@@ -219,6 +220,8 @@ def _passes_hard_filters(item: dict, preferences: HomeSearchPreferences) -> bool
     if preferences.conditions and item.get("apartment_condition_slug") not in preferences.conditions:
         return False
     if preferences.furnished_only and item.get("is_furnished") is not True:
+        return False
+    if preferences.middle_floor_only and item.get("is_middle_floor") is not True:
         return False
     return True
 

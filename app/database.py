@@ -7,6 +7,7 @@ import sqlite3
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Iterable
 
 from app.cities import (
@@ -20,6 +21,10 @@ from app.prediction_service import ListingPrediction
 
 
 DEFAULT_DB_PATH = Path("data") / "krisha.sqlite3"
+_DATABASE_CONFIG_LOCK = Lock()
+_CONFIGURED_DATABASES: set[str] = set()
+_REQUEST_CLEANUP_LOCK = Lock()
+_LAST_REQUEST_CLEANUP_DAY: str | None = None
 DISTRICT_OPTIONS = district_options("astana")
 APARTMENT_CONDITION_OPTIONS = [
     {"slug": "fresh_repair", "label": "Свежий ремонт", "value": "свежий ремонт"},
@@ -43,8 +48,16 @@ def connect(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     connection = sqlite3.connect(path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA busy_timeout=5000")
-    journal_mode = os.getenv("SQLITE_JOURNAL_MODE", "WAL").upper()
-    connection.execute(f"PRAGMA journal_mode={journal_mode}")
+    database_key = ":memory:" if str(path) == ":memory:" else str(path.resolve())
+    if database_key not in _CONFIGURED_DATABASES:
+        with _DATABASE_CONFIG_LOCK:
+            if database_key not in _CONFIGURED_DATABASES:
+                journal_mode = os.getenv("SQLITE_JOURNAL_MODE", "WAL").upper()
+                if journal_mode not in {"DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"}:
+                    journal_mode = "WAL"
+                connection.execute(f"PRAGMA journal_mode={journal_mode}")
+                _CONFIGURED_DATABASES.add(database_key)
+    connection.execute("PRAGMA synchronous=NORMAL")
     connection.execute("PRAGMA foreign_keys=ON")
     return connection
 
@@ -436,10 +449,19 @@ def record_request_event(
             (referer or "")[:220],
         ),
     )
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat(
-        timespec="seconds"
-    )
-    connection.execute("DELETE FROM request_events WHERE created_at < ?", (cutoff,))
+    global _LAST_REQUEST_CLEANUP_DAY
+    cleanup_day = datetime.now(timezone.utc).date().isoformat()
+    if _LAST_REQUEST_CLEANUP_DAY != cleanup_day:
+        with _REQUEST_CLEANUP_LOCK:
+            if _LAST_REQUEST_CLEANUP_DAY != cleanup_day:
+                cutoff = (datetime.now(timezone.utc) - timedelta(days=45)).isoformat(
+                    timespec="seconds"
+                )
+                connection.execute(
+                    "DELETE FROM request_events WHERE created_at < ?",
+                    (cutoff,),
+                )
+                _LAST_REQUEST_CLEANUP_DAY = cleanup_day
     connection.commit()
 
 
@@ -461,7 +483,7 @@ def fetch_traffic_summary(
             COUNT(DISTINCT client_hash) AS visitors_24h,
             SUM(
                 CASE
-                    WHEN path IN ('/predict', '/predict-by-link', '/listing-details')
+                    WHEN path IN ('/predict', '/predict-manual', '/predict-by-link', '/listing-details')
                     THEN 1 ELSE 0
                 END
             ) AS predictions_24h,
@@ -1185,7 +1207,7 @@ def fetch_telegram_admin_report(connection: sqlite3.Connection) -> dict:
             COUNT(DISTINCT client_hash) AS visitors_24h,
             SUM(
                 CASE
-                    WHEN path IN ('/predict', '/predict-by-link', '/listing-details')
+                    WHEN path IN ('/predict', '/predict-manual', '/predict-by-link', '/listing-details')
                     THEN 1 ELSE 0
                 END
             ) AS predictions_24h,
@@ -1606,6 +1628,62 @@ def fetch_undervalued(
 ) -> list[dict]:
     status_clause = "" if include_stale else "AND status = 'active'"
     city_slug = normalize_city_slug(city)
+    raw_field_filters = any(
+        (
+            districts,
+            rooms,
+            max_price,
+            min_year,
+            max_year,
+            residential_complex,
+            developer,
+            apartment_condition,
+            new_build,
+            min_area,
+            max_area,
+            polygon,
+            min_discount_pct,
+        )
+    )
+    sql_sort_columns = {
+        "q10_discount": "discount_vs_asking_pct_conservative DESC",
+        "median_discount": "discount_vs_asking_pct_median DESC",
+        "listed_price": "listed_price ASC",
+        "listed_price_asc": "listed_price ASC",
+        "listed_price_desc": "listed_price DESC",
+        "price_per_m2": "listed_price_per_m2 ASC",
+        "price_per_m2_asc": "listed_price_per_m2 ASC",
+        "price_per_m2_desc": "listed_price_per_m2 DESC",
+        "newest": "first_seen_at DESC",
+        "area_asc": "area_m2 ASC",
+        "area_desc": "area_m2 DESC",
+    }
+    if not raw_field_filters and sort in sql_sort_columns:
+        new_since_clause = "AND first_seen_at >= ?" if new_since else ""
+        params: list[object] = [city_slug]
+        if new_since:
+            params.append(new_since)
+        params.extend((max(1, limit), max(0, offset)))
+        rows = connection.execute(
+            f"""
+            SELECT
+                url, city, title, raw_json, status, first_seen_at, last_seen_at,
+                listed_price, area_m2, listed_price_per_m2,
+                pred_price_per_m2_q10, pred_price_per_m2_q50,
+                pred_price_per_m2_q90, pred_total_q50,
+                discount_vs_asking_pct_conservative,
+                discount_vs_asking_pct_median, interval_width_pct
+            FROM listings
+            WHERE city = ?
+              AND discount_vs_asking_pct_conservative > 0
+              {status_clause}
+              {new_since_clause}
+            ORDER BY {sql_sort_columns[sort]}, url ASC
+            LIMIT ? OFFSET ?
+            """,
+            params,
+        ).fetchall()
+        return [_prepare_undervalued_item(dict(row)) for row in rows]
     rows = connection.execute(
         f"""
         SELECT
@@ -1776,6 +1854,36 @@ def count_undervalued(
     sort: str = "q10_discount",
     include_stale: bool = False,
 ) -> int:
+    if not any(
+        (
+            districts,
+            rooms,
+            max_price,
+            min_year,
+            max_year,
+            residential_complex,
+            developer,
+            apartment_condition,
+            new_build,
+            min_area,
+            max_area,
+            polygon,
+            new_since,
+            min_discount_pct,
+        )
+    ):
+        status_clause = "" if include_stale else "AND status = 'active'"
+        row = connection.execute(
+            f"""
+            SELECT COUNT(*) AS total
+            FROM listings
+            WHERE city = ?
+              AND discount_vs_asking_pct_conservative > 0
+              {status_clause}
+            """,
+            (normalize_city_slug(city),),
+        ).fetchone()
+        return int(row["total"] or 0)
     return len(
         fetch_undervalued(
             connection,
@@ -2799,6 +2907,17 @@ def _prepare_undervalued_item(row: dict) -> dict:
     row["district_slug"] = district_slug
     row["district_label"] = district_label
     row["rooms"] = _extract_rooms(row.get("title"))
+    current_floor, total_floors = _extract_floor_pair(
+        raw_listing.get("Этаж"),
+        row.get("title"),
+    )
+    row["current_floor"] = current_floor
+    row["total_floors"] = total_floors
+    row["is_middle_floor"] = bool(
+        current_floor is not None
+        and total_floors is not None
+        and 1 < current_floor < total_floors
+    )
     row["construction_year"] = _extract_int(raw_listing.get("Год постройки"))
     row["residential_complex"] = _clean_text(raw_listing.get("Жилой комплекс"))
     row["developer"] = _extract_developer(raw_listing)
@@ -2829,6 +2948,21 @@ def _prepare_undervalued_item(row: dict) -> dict:
     )
     row.pop("raw_json", None)
     return row
+
+
+def _extract_floor_pair(
+    floor_value: object,
+    title_value: object = "",
+) -> tuple[int | None, int | None]:
+    for value in (floor_value, title_value):
+        match = re.search(r"(\d+)\s*(?:/|из)\s*(\d+)", str(value or ""), re.IGNORECASE)
+        if not match:
+            continue
+        current_floor = int(match.group(1))
+        total_floors = int(match.group(2))
+        if 1 <= current_floor <= total_floors <= 200:
+            return current_floor, total_floors
+    return None, None
 
 
 def _extract_address(raw_listing: dict) -> str:
@@ -3240,6 +3374,25 @@ def fetch_status_summary(
     summary = dict(listing_counts)
     summary["latest_refresh"] = dict(latest_refresh) if latest_refresh else None
     return summary
+
+
+def fetch_inventory_version(
+    connection: sqlite3.Connection,
+    *,
+    city: str,
+) -> str:
+    """Return a cheap cache key that changes when a city's inventory changes."""
+    row = connection.execute(
+        """
+        SELECT COALESCE(MAX(last_checked_at), '') AS latest_check,
+               COUNT(*) AS total,
+               SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active
+        FROM listings
+        WHERE city = ?
+        """,
+        (normalize_city_slug(city),),
+    ).fetchone()
+    return f"{row['latest_check']}:{int(row['total'] or 0)}:{int(row['active'] or 0)}"
 
 
 def iter_unique_urls(urls: Iterable[str]) -> list[str]:

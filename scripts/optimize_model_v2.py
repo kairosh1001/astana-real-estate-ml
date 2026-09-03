@@ -32,7 +32,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Compare CatBoost objectives and v2 feature subsets on validation data."
     )
-    parser.add_argument("--scope", choices=("universal", "almaty"), required=True)
+    parser.add_argument(
+        "--scope",
+        choices=("universal", "astana", "almaty"),
+        required=True,
+    )
     parser.add_argument("--iterations", type=int, default=800)
     parser.add_argument(
         "--quick",
@@ -246,6 +250,40 @@ def candidate_definitions(iterations: int) -> list[dict[str, Any]]:
             **common,
         },
         {
+            "name": "rmse_derived_compact_d6",
+            "feature_set": "derived_compact",
+            "loss_function": "RMSE",
+            "depth": 6,
+            **common,
+        },
+        {
+            "name": "rmse_derived_compact_d8",
+            "feature_set": "derived_compact",
+            "loss_function": "RMSE",
+            "depth": 8,
+            **common,
+        },
+        {
+            "name": "rmse_derived_compact_slow",
+            "feature_set": "derived_compact",
+            "loss_function": "RMSE",
+            "depth": 7,
+            "iterations": max(iterations, 1200),
+            "learning_rate": 0.03,
+            "l2_leaf_reg": 9,
+            "random_strength": 0.35,
+        },
+        {
+            "name": "rmse_derived_compact_regularized",
+            "feature_set": "derived_compact",
+            "loss_function": "RMSE",
+            "depth": 7,
+            "iterations": iterations,
+            "learning_rate": 0.04,
+            "l2_leaf_reg": 12,
+            "random_strength": 0.35,
+        },
+        {
             "name": "rmse_derived_weighted",
             "feature_set": "derived",
             "loss_function": "RMSE",
@@ -296,8 +334,8 @@ def main() -> None:
     frame = frame.loc[
         price_per_m2.between(PRICE_PER_M2_MIN, PRICE_PER_M2_MAX)
     ].copy()
-    if args.scope == "almaty":
-        frame = frame.loc[frame["city"].eq("almaty")].copy()
+    if args.scope in {"astana", "almaty"}:
+        frame = frame.loc[frame["city"].eq(args.scope)].copy()
     frame = add_derived_features(frame)
     frame["split"] = assign_split(frame)
 

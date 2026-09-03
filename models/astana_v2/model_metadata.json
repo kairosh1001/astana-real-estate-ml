@@ -1,0 +1,273 @@
+{
+  "schema_version": 2,
+  "feature_profile": "optimized_compact_v2",
+  "feature_reference_year": 2026,
+  "feature_columns": [
+    "city",
+    "city_district",
+    "city_residential_complex",
+    "ceiling_height",
+    "year_of_construction",
+    "furnished",
+    "apartment_condition",
+    "building_type",
+    "is_new_build",
+    "rooms",
+    "current_floor",
+    "total_floors",
+    "area_m2",
+    "floor_ratio",
+    "h3_res_7",
+    "h3_res_8",
+    "h3_res_9",
+    "dist_to_city_center_km",
+    "dist_to_nearest_park_km",
+    "count_park_within_2km",
+    "dist_to_nearest_school_km",
+    "count_school_within_2km",
+    "dist_to_nearest_kindergarten_km",
+    "count_kindergarten_within_2km",
+    "dist_to_nearest_grocery_km",
+    "count_grocery_within_2km",
+    "dist_to_nearest_mall_km",
+    "count_mall_within_2km",
+    "dist_to_nearest_healthcare_km",
+    "count_healthcare_within_2km",
+    "dist_to_nearest_transit_km",
+    "count_transit_within_2km",
+    "dist_to_nearest_university_km",
+    "count_university_within_2km",
+    "rooms_segment",
+    "area_per_room",
+    "log_area_m2",
+    "building_age",
+    "is_first_floor",
+    "is_top_floor",
+    "floor_from_top"
+  ],
+  "categorical_features": [
+    "city",
+    "city_district",
+    "city_residential_complex",
+    "furnished",
+    "apartment_condition",
+    "building_type",
+    "h3_res_7",
+    "h3_res_8",
+    "h3_res_9",
+    "rooms_segment"
+  ],
+  "dataset_feature_columns": [
+    "city",
+    "city_district",
+    "city_residential_complex",
+    "ceiling_height",
+    "year_of_construction",
+    "furnished",
+    "apartment_condition",
+    "building_type",
+    "is_new_build",
+    "rooms",
+    "current_floor",
+    "total_floors",
+    "area_m2",
+    "floor_ratio",
+    "year_missing",
+    "ceiling_height_missing",
+    "district_missing",
+    "residential_complex_missing",
+    "h3_res_7",
+    "h3_res_8",
+    "h3_res_9",
+    "dist_to_city_center_km",
+    "dist_to_city_center_normalized",
+    "dist_to_nearest_park_km",
+    "count_park_within_500m",
+    "count_park_within_1km",
+    "count_park_within_2km",
+    "dist_to_nearest_school_km",
+    "count_school_within_500m",
+    "count_school_within_1km",
+    "count_school_within_2km",
+    "dist_to_nearest_kindergarten_km",
+    "count_kindergarten_within_500m",
+    "count_kindergarten_within_1km",
+    "count_kindergarten_within_2km",
+    "dist_to_nearest_grocery_km",
+    "count_grocery_within_500m",
+    "count_grocery_within_1km",
+    "count_grocery_within_2km",
+    "dist_to_nearest_mall_km",
+    "count_mall_within_500m",
+    "count_mall_within_1km",
+    "count_mall_within_2km",
+    "dist_to_nearest_healthcare_km",
+    "count_healthcare_within_500m",
+    "count_healthcare_within_1km",
+    "count_healthcare_within_2km",
+    "dist_to_nearest_transit_km",
+    "count_transit_within_500m",
+    "count_transit_within_1km",
+    "count_transit_within_2km",
+    "dist_to_nearest_university_km",
+    "count_university_within_500m",
+    "count_university_within_1km",
+    "count_university_within_2km",
+    "rooms_segment",
+    "area_per_room",
+    "log_area_m2",
+    "building_age",
+    "is_first_floor",
+    "is_top_floor",
+    "floor_from_top"
+  ],
+  "target": "price_per_m2_log",
+  "target_definition": "ln(listing_price_kzt / area_m2)",
+  "poi_distance_metric": "haversine_km_to_osm_representative_point",
+  "poi_count_radii_km": [
+    0.5,
+    1.0,
+    2.0
+  ],
+  "poi_catalog": {
+    "schema_version": 2,
+    "generated_at": "2026-08-10T14:12:37+00:00",
+    "source": "OpenStreetMap contributors",
+    "sha256": "5475993723bca0d9d3de5c3b3e5bd03074aea36a7268d11eeb1236e88813a86b",
+    "cities": {
+      "astana": {
+        "counts": {
+          "park": 181,
+          "school": 174,
+          "kindergarten": 146,
+          "grocery": 629,
+          "mall": 58,
+          "healthcare": 161,
+          "transit": 1022,
+          "university": 44
+        },
+        "missing_categories": []
+      },
+      "almaty": {
+        "counts": {
+          "park": 289,
+          "school": 299,
+          "kindergarten": 203,
+          "grocery": 1103,
+          "mall": 76,
+          "healthcare": 351,
+          "transit": 2079,
+          "university": 70
+        },
+        "missing_categories": []
+      }
+    }
+  },
+  "model_version": "astana_v2_2026-09-03",
+  "training_scope": "astana",
+  "serving_policy": {
+    "default_routing": "city_auto",
+    "astana": "astana_v2",
+    "almaty": "almaty_v2",
+    "reason": "Use independently validated city-specific v2 models for both cities, with the universal bundle retained as a fallback."
+  },
+  "model_objectives": {
+    "q10": "Quantile:alpha=0.10",
+    "q50": "RMSE",
+    "q90": "Quantile:alpha=0.90"
+  },
+  "quantile_calibration": {
+    "method": "validation_residual_tail_offsets",
+    "offsets_log": {
+      "q10": -0.017964969076745694,
+      "q90": 0.027499504786381038
+    }
+  },
+  "held_out_metrics": {
+    "overall": {
+      "rows": 2390,
+      "log_rmse": 0.12847138944943115,
+      "approx_multiplicative_error_pct": 13.708888808668721,
+      "log_mae": 0.09522989682138518,
+      "log_r2": 0.81307798305903,
+      "mae_kzt_per_m2": 62954.01918396647,
+      "rmse_kzt_per_m2": 92460.00820715983,
+      "median_absolute_percentage_error_pct": 7.348448321803593,
+      "q10_q90_coverage_pct": 79.581589958159
+    },
+    "segments": {
+      "1": {
+        "rows": 601,
+        "log_rmse": 0.11269187075642592,
+        "approx_multiplicative_error_pct": 11.928699475350687,
+        "log_mae": 0.08362104614180897,
+        "log_r2": 0.7696557669900672,
+        "mae_kzt_per_m2": 49884.12047659891,
+        "rmse_kzt_per_m2": 68739.50757337466,
+        "median_absolute_percentage_error_pct": 6.399662448163666,
+        "q10_q90_coverage_pct": 78.53577371048253
+      },
+      "2": {
+        "rows": 896,
+        "log_rmse": 0.11577187321551698,
+        "approx_multiplicative_error_pct": 12.273971591511538,
+        "log_mae": 0.08793321857561817,
+        "log_r2": 0.8281777056989243,
+        "mae_kzt_per_m2": 56068.65018863259,
+        "rmse_kzt_per_m2": 76079.20373836861,
+        "median_absolute_percentage_error_pct": 7.070747940071687,
+        "q10_q90_coverage_pct": 81.69642857142857
+      },
+      "3": {
+        "rows": 621,
+        "log_rmse": 0.13445985537589633,
+        "approx_multiplicative_error_pct": 14.391873589296095,
+        "log_mae": 0.10045551328110686,
+        "log_r2": 0.8268981444585184,
+        "mae_kzt_per_m2": 68697.61536580703,
+        "rmse_kzt_per_m2": 105553.46389236451,
+        "median_absolute_percentage_error_pct": 8.056776022678095,
+        "q10_q90_coverage_pct": 80.99838969404188
+      },
+      "4": {
+        "rows": 230,
+        "log_rmse": 0.172562796029218,
+        "approx_multiplicative_error_pct": 18.834644170988433,
+        "log_mae": 0.12912658369032315,
+        "log_r2": 0.7603285523958725,
+        "mae_kzt_per_m2": 96957.86920370917,
+        "rmse_kzt_per_m2": 136085.32809469308,
+        "median_absolute_percentage_error_pct": 9.014845816866716,
+        "q10_q90_coverage_pct": 73.47826086956522
+      },
+      "5+": {
+        "rows": 42,
+        "log_rmse": 0.20288801963611525,
+        "approx_multiplicative_error_pct": 22.493529186739345,
+        "log_mae": 0.15412030551875772,
+        "log_r2": 0.7631842342087671,
+        "mae_kzt_per_m2": 125731.18607642443,
+        "rmse_kzt_per_m2": 170960.94663825343,
+        "median_absolute_percentage_error_pct": 11.974046929322796,
+        "q10_q90_coverage_pct": 61.904761904761905
+      }
+    }
+  },
+  "model_artifacts": {
+    "q10": {
+      "filename": "catboost_q10_price_per_m2_log.cbm",
+      "sha256": "12a536a1ff7c42800173719875014a0c0cc111281fafd0115fb323cf62ca7f61",
+      "size_bytes": 2300964
+    },
+    "q50": {
+      "filename": "catboost_q50_price_per_m2_log.cbm",
+      "sha256": "b405e862fe50d63b99c921108aaab7f52285dbd7e81fb73c43d2eeaaa7bfba60",
+      "size_bytes": 4647356
+    },
+    "q90": {
+      "filename": "catboost_q90_price_per_m2_log.cbm",
+      "sha256": "6a01a69d7efec9fb4bb1430c3e7ac601818817bb20ea4c8a137ee5edc03696fc",
+      "size_bytes": 1690792
+    }
+  }
+}

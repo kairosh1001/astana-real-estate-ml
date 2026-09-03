@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
-
 :root,
 html[data-theme="dark"] {
   color-scheme: dark;
@@ -25,6 +23,208 @@ html[data-theme="dark"] {
   background: var(--bg);
   color: var(--text);
   font-family: "Manrope", Inter, Arial, sans-serif;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Manual apartment valuation */
+.predict-page-head {
+  max-width: 860px;
+}
+
+.predict-method-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 18px;
+}
+
+.predict-link-panel,
+.predict-method-summary {
+  position: relative;
+  overflow: hidden;
+}
+
+.predict-link-panel h2,
+.predict-method-summary h2 {
+  padding-right: 58px;
+}
+
+.predict-method-number {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  color: color-mix(in srgb, var(--accent) 32%, transparent);
+  font: 800 2.3rem/1 "Manrope", sans-serif;
+}
+
+.compact-feature-list {
+  margin-bottom: 0;
+}
+
+.manual-predict-panel {
+  padding: clamp(22px, 4vw, 38px);
+}
+
+.manual-predict-heading {
+  align-items: flex-start;
+  margin-bottom: 26px;
+}
+
+.model-input-badge {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--teal-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.manual-predict-form {
+  display: grid;
+  gap: 24px;
+}
+
+.manual-predict-form fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface-strong) 90%, transparent);
+}
+
+.manual-predict-form legend {
+  padding: 0 8px;
+  color: var(--text);
+  font: 800 1rem/1.2 "Manrope", sans-serif;
+}
+
+.manual-field-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.manual-field-grid label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.manual-field-grid .wide {
+  grid-column: span 2;
+}
+
+.manual-field-grid input,
+.manual-field-grid select {
+  width: 100%;
+  min-height: 46px;
+}
+
+.manual-checkbox-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: fit-content;
+  margin-top: 18px;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.manual-checkbox-row input {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  accent-color: var(--accent);
+}
+
+.manual-checkbox-row span {
+  display: grid;
+  gap: 3px;
+}
+
+.manual-checkbox-row small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.manual-location-details {
+  padding: 18px 22px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 16px;
+}
+
+.manual-location-details summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.manual-location-details .manual-field-grid {
+  grid-template-columns: repeat(2, minmax(0, 260px));
+  margin-top: 16px;
+}
+
+.manual-submit-row {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+.manual-submit-row p {
+  margin: 0;
+}
+
+@media (max-width: 980px) {
+  .predict-method-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .manual-field-grid,
+  .manual-location-details .manual-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-field-grid .wide {
+    grid-column: auto;
+  }
+
+  .manual-predict-form fieldset,
+  .manual-location-details {
+    padding: 17px;
+  }
+
+  .manual-submit-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .manual-submit-row button {
+    width: 100%;
+  }
 }
 
 html[data-theme="light"] {

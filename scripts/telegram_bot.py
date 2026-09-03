@@ -665,7 +665,7 @@ def format_admin_report(report: dict, health: dict, *, public_url: str) -> str:
         "<b>Трафик за 24 часа</b>",
         f"• Посетители: <b>{visitors_24h:,}</b>",
         f"• Запросы: {requests_24h:,}",
-        f"• Оценки ссылок: {predictions_24h:,}",
+        f"• Оценки квартир: {predictions_24h:,}",
         f"• Ошибки 5xx: <b>{server_errors:,}</b>",
         f"• Ограничено (429): {rate_limited:,}",
         f"• Среднее время ответа: {avg_duration:,.0f} мс",

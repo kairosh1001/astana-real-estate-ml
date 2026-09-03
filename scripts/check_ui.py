@@ -455,8 +455,7 @@ def main() -> None:
     assert_contains(home.text, "Скрыть")
     assert_contains(home.text, "Сравнить")
     assert_contains(home.text, "Telegram")
-    assert_contains(home.text, "Оценить по ссылке")
-    assert_contains(home.text, "Оценить квартиру по ссылке")
+    assert_contains(home.text, "Оценить квартиру")
     assert_contains(home.text, "Смотреть рейтинги квартир")
     assert_contains(home.text, "Подобрать квартиру")
     assert_contains(home.text, "Как это работает")
@@ -526,7 +525,7 @@ def main() -> None:
     home_nav = home.text[nav_start:nav_end]
     nav_links = [
         'href="/find-home-page?city=astana">Подобрать квартиру</a>',
-        'href="/predict-page">Оценить по ссылке</a>',
+        'href="/predict-page">Оценить квартиру</a>',
         'href="/undervalued-page?city=astana">Квартиры ниже рынка</a>',
         'href="/market-page?city=astana">Анализ рынка</a>',
     ]
@@ -634,7 +633,7 @@ def main() -> None:
     filtered_home_finder = client.get(
         "/find-home-page?district=yesil&room=3&min_price=19000000&max_price=21000000"
         "&housing_type=new&condition=fresh_repair&furnished_only=1"
-        "&priority_park=2&priority_value=2"
+        "&middle_floor_only=1&priority_park=2&priority_value=2"
     )
     if filtered_home_finder.status_code != 200:
         raise SystemExit(
@@ -644,6 +643,7 @@ def main() -> None:
     assert_contains(filtered_home_finder.text, 'name="room" value="3" checked')
     assert_contains(filtered_home_finder.text, 'name="min_price" type="text" inputmode="numeric" data-price-input value="19 000 000"')
     assert_contains(filtered_home_finder.text, 'name="furnished_only" value="1" checked')
+    assert_contains(filtered_home_finder.text, 'name="middle_floor_only" value="1" checked')
     assert_contains(
         filtered_home_finder.text,
         'data-url="/find-home-page?district=yesil&amp;room=3',
@@ -676,6 +676,9 @@ def main() -> None:
         if page.status_code != 200:
             raise SystemExit(f"Public page {path} returned {page.status_code}")
         assert_contains(page.text, needle)
+        if path == "/contact":
+            assert_contains(page.text, "kairat.zharkynbay@nu.edu.kz")
+            assert_not_contains(page.text, "mailto:")
 
     auth_client = TestClient(main.app)
     register_page = auth_client.get("/register?next=/saved-listings")
@@ -837,7 +840,14 @@ def main() -> None:
     predict_entry = client.get("/predict-page")
     if predict_entry.status_code != 200:
         raise SystemExit(f"Predict entry page returned {predict_entry.status_code}")
-    assert_contains(predict_entry.text, "Оценить ссылку Krisha")
+    assert_contains(predict_entry.text, "Оценить квартиру")
+    assert_contains(predict_entry.text, "По ссылке Krisha")
+    assert_contains(predict_entry.text, "По параметрам квартиры")
+    assert_contains(predict_entry.text, 'action="/predict-manual"')
+    assert_contains(predict_entry.text, 'name="middle_floor_only"')
+    assert_contains(predict_entry.text, 'name="building_type"')
+    assert_contains(predict_entry.text, 'name="apartment_condition"')
+    assert_contains(predict_entry.text, 'name="lat"')
     assert_contains(predict_entry.text, "Вернуться на главную")
 
     invalid_url = client.post("/predict", data={"url": "https://example.com/a/show/123"})
@@ -906,6 +916,69 @@ def main() -> None:
         "8.4% в год",
     ]:
         assert_contains(result_page.text, needle)
+
+    manual_calls = []
+
+    def fake_predict_raw_listing(raw_listing: dict) -> ListingPrediction:
+        manual_calls.append(raw_listing)
+        return ListingPrediction(
+            url="",
+            title=str(raw_listing["title"]),
+            listed_price=float(raw_listing["price"]),
+            area_m2=62.5,
+            listed_price_per_m2=560000,
+            pred_price_per_m2_q10=540000,
+            pred_price_per_m2_q50=600000,
+            pred_price_per_m2_q90=680000,
+            pred_total_q50=37500000,
+            discount_vs_asking_pct_conservative=-0.036,
+            discount_vs_asking_pct_median=0.071,
+            interval_width_pct=0.233,
+            city="astana",
+        )
+
+    main.prediction_service.predict_raw_listing = fake_predict_raw_listing
+    manual_result = client.post(
+        "/predict-manual",
+        data={
+            "city": "astana",
+            "listed_price": "35 000 000",
+            "area_m2": "62.5",
+            "rooms": "2",
+            "current_floor": "5",
+            "total_floors": "12",
+            "construction_year": "2021",
+            "district": "yesil",
+            "building_type": "monolith",
+            "apartment_condition": "fresh_repair",
+            "furnished": "full",
+            "middle_floor_only": "1",
+        },
+    )
+    if manual_result.status_code != 200:
+        raise SystemExit(f"Manual prediction returned {manual_result.status_code}")
+    if len(manual_calls) != 1 or manual_calls[0].get("Этаж") != "5 из 12":
+        raise SystemExit("Manual prediction did not pass normalized fields to the model")
+    assert_contains(manual_result.text, "Введённые параметры")
+    assert_contains(manual_result.text, "Оценить другую квартиру")
+    assert_not_contains(manual_result.text, "Открыть на Krisha")
+
+    invalid_middle_floor = client.post(
+        "/predict-manual",
+        data={
+            "city": "astana",
+            "listed_price": "35 000 000",
+            "area_m2": "62.5",
+            "rooms": "2",
+            "current_floor": "1",
+            "total_floors": "12",
+            "construction_year": "2021",
+            "middle_floor_only": "1",
+        },
+    )
+    if invalid_middle_floor.status_code != 400:
+        raise SystemExit("Middle-floor validation accepted the first floor")
+    assert_contains(invalid_middle_floor.text, "укажите промежуточный этаж")
 
     model_page = client.get("/model-page")
     if model_page.status_code != 200:

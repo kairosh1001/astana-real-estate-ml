@@ -10,17 +10,19 @@
       медианную оценку q50.
     </p>
   </div>
-  <a class="button secondary" href="/">Проверить другую ссылку</a>
+  <a class="button secondary" href="/predict-page?city={{ city.slug }}">Оценить другую квартиру</a>
 </div>
 
 <section class="result-grid" data-listing-row data-url="{{ prediction.url }}" data-title="{{ prediction.title }}" data-price="{{ prediction.listed_price }}" data-city="{{ prediction.city }}">
   <div class="panel">
-    <h2>Объявление</h2>
+    <h2>{% if is_manual_prediction %}Введённые параметры{% else %}Объявление{% endif %}</h2>
     <h3>{{ prediction.title }}</h3>
+    {% if not is_manual_prediction %}
     <div class="detail-primary-actions">
       <a class="button secondary" href="{{ prediction.url }}" target="_blank" rel="noreferrer">Открыть на Krisha</a>
       <button class="button secondary" type="button" data-save-listing>Сохранить</button>
     </div>
+    {% endif %}
     <dl class="detail-list">
       <div class="detail-row">
         <dt>Цена</dt>

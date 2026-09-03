@@ -55,6 +55,7 @@ def main() -> None:
     service = PredictionService(ROOT)
     if service.available_model_bundles != [
         "astana_v1",
+        "astana_v2",
         "almaty_v2",
         "universal_v2",
     ]:
@@ -62,17 +63,17 @@ def main() -> None:
 
     astana = _sample("astana")
     almaty = _sample("almaty")
-    if service._select_model_key(astana) != "astana_v1":
-        raise AssertionError("Astana did not route to the legacy Astana model.")
+    if service._select_model_key(astana) != "astana_v2":
+        raise AssertionError("Astana did not route to the Astana v2 model.")
     if service._select_model_key(almaty) != "almaty_v2":
         raise AssertionError("Almaty did not route to the Almaty v2 model.")
 
-    _validate_prediction("Astana / astana_v1", service.predict_raw_listing(astana))
-    if service._v2_bundles:
-        raise AssertionError("A v2 model was loaded before an Almaty request.")
+    _validate_prediction("Astana / astana_v2", service.predict_raw_listing(astana))
+    if set(service._v2_bundles) != {"astana_v2"}:
+        raise AssertionError("Only Astana v2 should be loaded after the Astana request.")
     _validate_prediction("Almaty / almaty_v2", service.predict_raw_listing(almaty))
-    if set(service._v2_bundles) != {"almaty_v2"}:
-        raise AssertionError("Only Almaty v2 should be loaded lazily.")
+    if set(service._v2_bundles) != {"astana_v2", "almaty_v2"}:
+        raise AssertionError("City-specific v2 models were not loaded lazily.")
     print("[OK] City routing and lazy model loading validated.")
 
 

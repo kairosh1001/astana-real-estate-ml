@@ -1,44 +1,184 @@
 {% extends "base.html" %}
-{% block title %}Оценить ссылку Krisha{% endblock %}
+{% block title %}Оценить квартиру{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="page-head predict-page-head">
   <div>
-    <h1>Оценить ссылку Krisha</h1>
+    <span class="eyebrow">Оценка q10 · q50 · q90</span>
+    <h1>Оценить квартиру</h1>
     <p>
-      Вставьте ссылку на объявление Krisha.kz. Сервис загрузит параметры квартиры,
-      рассчитает цену за м² по модели и покажет, выглядит ли цена ниже рынка.
+      Вставьте ссылку Krisha.kz или укажите характеристики квартиры самостоятельно.
+      Оба способа используют одну и ту же модель выбранного города.
     </p>
   </div>
 </div>
 
-<section class="grid-2">
-  <section class="panel">
-    <h2>Ссылка на объявление</h2>
-    <form class="search-form" method="post" action="/predict?city={{ city.slug }}">
-      <input
-        name="url"
-        type="url"
-        value="{{ url }}"
-        placeholder="https://krisha.kz/a/show/..."
-        required
-      >
+<section class="predict-method-grid">
+  <section class="panel predict-link-panel">
+    <span class="predict-method-number">01</span>
+    <h2>По ссылке Krisha</h2>
+    <p class="muted">Быстрый вариант: сервис сам загрузит доступные параметры объявления.</p>
+    <form class="search-form" method="post" action="/predict">
+      <label class="sr-only" for="prediction-url">Ссылка на объявление</label>
+      <input id="prediction-url" name="url" type="url" value="{{ url }}" placeholder="https://krisha.kz/a/show/..." required>
       <button type="submit">Оценить</button>
     </form>
-    {% if error %}
-    <p class="error">{{ error }}</p>
-    {% endif %}
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
   </section>
 
-  <section class="panel info-panel">
-    <h2>Что вы получите</h2>
-    <p>
-      Страница результата отделяет данные объявления от оценки модели: цену,
-      площадь, q10, q50, q90, выгоду в процентах и абсолютную выгоду в тенге за м².
-    </p>
-    <p class="muted">
-      q50 в интерфейсе называется медианной оценкой, потому что это центральная
-      точка прогноза модели.
-    </p>
+  <section class="panel predict-method-summary">
+    <span class="predict-method-number">02</span>
+    <h2>По параметрам квартиры</h2>
+    <p>Подходит для ещё не опубликованной квартиры или собственного сценария.</p>
+    <ul class="feature-list compact-feature-list">
+      <li>Диапазон оценки цены за м²</li>
+      <li>Сравнение с указанной стоимостью</li>
+      <li>Арендный и ипотечный ориентир</li>
+    </ul>
   </section>
 </section>
+
+<section class="section panel manual-predict-panel" id="manual-prediction">
+  <div class="toolbar manual-predict-heading">
+    <div>
+      <span class="eyebrow">Ручной ввод</span>
+      <h2>Характеристики квартиры</h2>
+      <p class="muted">Обязательные поля отмечены звёздочкой. Чем полнее данные, тем полезнее ориентир.</p>
+    </div>
+    <span class="model-input-badge">Без ссылки Krisha</span>
+  </div>
+
+  {% if manual_error %}<p class="error" role="alert">{{ manual_error }}</p>{% endif %}
+
+  <form class="manual-predict-form" method="post" action="/predict-manual">
+    <fieldset>
+      <legend>Основные параметры</legend>
+      <div class="manual-field-grid">
+        <label>
+          Город *
+          <select name="city" required data-manual-city>
+            <option value="astana" {% if manual_form.city == 'astana' %}selected{% endif %}>Астана</option>
+            <option value="almaty" {% if manual_form.city == 'almaty' %}selected{% endif %}>Алматы</option>
+          </select>
+        </label>
+        <label>
+          Цена квартиры, тг *
+          <input name="listed_price" type="text" inputmode="numeric" value="{{ manual_form.listed_price }}" placeholder="35 000 000" required autocomplete="off">
+        </label>
+        <label>
+          Площадь, м² *
+          <input name="area_m2" type="number" min="10" max="1000" step="0.1" value="{{ manual_form.area_m2 }}" placeholder="62.5" required>
+        </label>
+        <label>
+          Комнат *
+          <input name="rooms" type="number" min="1" max="20" step="1" value="{{ manual_form.rooms }}" placeholder="2" required>
+        </label>
+        <label>
+          Этаж квартиры *
+          <input name="current_floor" type="number" min="1" max="200" step="1" value="{{ manual_form.current_floor }}" placeholder="5" required>
+        </label>
+        <label>
+          Этажей в доме *
+          <input name="total_floors" type="number" min="1" max="200" step="1" value="{{ manual_form.total_floors }}" placeholder="12" required>
+        </label>
+        <label>
+          Год постройки *
+          <input name="construction_year" type="number" min="1800" max="2035" step="1" value="{{ manual_form.construction_year }}" placeholder="2020" required>
+        </label>
+        <label>
+          Район
+          <select name="district" data-manual-district>
+            <option value="">Не указан</option>
+            {% for option in manual_district_options %}
+            <option value="{{ option.slug }}" data-city="{{ option.city }}" {% if manual_form.district == option.slug and manual_form.city == option.city %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <label class="manual-checkbox-row">
+        <input type="checkbox" name="middle_floor_only" value="1" {% if manual_form.middle_floor_only %}checked{% endif %}>
+        <span><strong>Не первый и не последний этаж</strong><small>Дополнительная проверка введённого этажа перед оценкой.</small></span>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Характеристики дома и квартиры</legend>
+      <div class="manual-field-grid">
+        <label>
+          Тип дома
+          <select name="building_type">
+            <option value="missing" {% if manual_form.building_type == 'missing' %}selected{% endif %}>Не указан</option>
+            <option value="monolith" {% if manual_form.building_type == 'monolith' %}selected{% endif %}>Монолитный</option>
+            <option value="brick" {% if manual_form.building_type == 'brick' %}selected{% endif %}>Кирпичный</option>
+            <option value="panel" {% if manual_form.building_type == 'panel' %}selected{% endif %}>Панельный</option>
+            <option value="other" {% if manual_form.building_type == 'other' %}selected{% endif %}>Иной</option>
+          </select>
+        </label>
+        <label>
+          Состояние квартиры
+          <select name="apartment_condition">
+            <option value="missing" {% if manual_form.apartment_condition == 'missing' %}selected{% endif %}>Не указано</option>
+            {% for option in condition_options %}
+            <option value="{{ option.slug }}" {% if manual_form.apartment_condition == option.slug %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Меблировка
+          <select name="furnished">
+            <option value="missing" {% if manual_form.furnished == 'missing' %}selected{% endif %}>Не указана</option>
+            <option value="full" {% if manual_form.furnished == 'full' %}selected{% endif %}>Полностью</option>
+            <option value="partial" {% if manual_form.furnished == 'partial' %}selected{% endif %}>Частично</option>
+            <option value="none" {% if manual_form.furnished == 'none' %}selected{% endif %}>Без мебели</option>
+          </select>
+        </label>
+        <label>
+          Высота потолков, м
+          <input name="ceiling_height" type="number" min="2" max="10" step="0.05" value="{{ manual_form.ceiling_height }}" placeholder="2.8">
+        </label>
+        <label class="wide">
+          Жилой комплекс
+          <input name="residential_complex" type="text" maxlength="160" value="{{ manual_form.residential_complex }}" placeholder="Название ЖК, если известно">
+        </label>
+      </div>
+      <label class="manual-checkbox-row">
+        <input type="checkbox" name="is_new_build" value="1" {% if manual_form.is_new_build %}checked{% endif %}>
+        <span><strong>Новостройка</strong><small>Отметьте, если квартира продаётся от застройщика или в новом первичном объекте.</small></span>
+      </label>
+    </fieldset>
+
+    <details class="manual-location-details">
+      <summary>Указать точные координаты — необязательно</summary>
+      <p class="muted">Координаты помогают модели учесть микрорайон и объекты рядом. Их можно скопировать из точки на карте.</p>
+      <div class="manual-field-grid">
+        <label>Широта<input name="lat" type="number" step="0.000001" value="{{ manual_form.lat }}" placeholder="51.128000"></label>
+        <label>Долгота<input name="lon" type="number" step="0.000001" value="{{ manual_form.lon }}" placeholder="71.431000"></label>
+      </div>
+    </details>
+
+    <div class="manual-submit-row">
+      <button type="submit">Рассчитать оценку</button>
+      <p class="muted">Результат — ориентир по ценам предложения, а не официальная оценка объекта.</p>
+    </div>
+  </form>
+</section>
+
+<script>
+  (() => {
+    const city = document.querySelector("[data-manual-city]");
+    const district = document.querySelector("[data-manual-district]");
+    if (!city || !district) return;
+    const syncDistricts = () => {
+      let selectedVisible = district.value === "";
+      Array.from(district.options).forEach((option) => {
+        if (!option.dataset.city) return;
+        option.hidden = option.dataset.city !== city.value;
+        option.disabled = option.hidden;
+        if (option.value === district.value && !option.hidden) selectedVisible = true;
+      });
+      if (!selectedVisible) district.value = "";
+    };
+    city.addEventListener("change", syncDistricts);
+    syncDistricts();
+  })();
+</script>
 {% endblock %}

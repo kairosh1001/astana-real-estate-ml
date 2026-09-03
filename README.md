@@ -58,11 +58,10 @@ flowchart LR
 The service predicts apartment price per square meter on a log scale and uses a
 city-aware model router:
 
-- Astana keeps the established 23-feature model used by the public ranking;
-- Almaty uses the stronger 41-feature Almaty v2 model with frozen OpenStreetMap
-  proximity features;
-- the universal bundle loads lazily on the first Almaty request, avoiding its
-  memory cost during Astana-only traffic.
+- Astana uses its validated 41-feature Astana v2 model;
+- Almaty uses the 41-feature Almaty v2 model;
+- city bundles load lazily on their first request, while the universal bundle
+  remains available as a controlled fallback.
 
 Both bundles expose `q10`, a central point estimate, and `q90`. The interval
 models are calibrated in log space and serving guarantees ordered outputs.
@@ -71,8 +70,7 @@ Main feature groups:
 
 - apartment parameters: area, rooms, floor, total floors, construction year, ceiling height;
 - categorical fields: district, residential complex, building type, condition, furnishing;
-- geospatial fields: H3 indexes, Astana landmarks in v1, and reusable OSM
-  proximity/density features in v2;
+- geospatial fields: H3 indexes and reusable OSM proximity/density features;
 - engineered fields: floor position, area per room, building age, and normalized
   listing attributes.
 
@@ -86,6 +84,7 @@ The current feature contract is stored in [`model_metadata.json`](model_metadata
 - Multi-district filtering.
 - Map polygon search with Leaflet.
 - Listing details page with q10/q50/q90 estimates and price history.
+- Apartment valuation either from a Krisha link or manually entered model inputs.
 - Comparison page for multiple listings.
 - Registration, secure login, account-synced saved listings, price-change tracking, and personal notes. Guest saves migrate into the account after login; hidden listings remain browser-local.
 - Explainable same-city active-listing comparables with visible similarity reasons; these are asking-price references, not completed sales.
@@ -112,6 +111,7 @@ dataset.ipynb        Notebook used for data cleaning, feature engineering, and m
 df_check.csv         Model-ready dataset snapshot used for validation and retraining
 model_metadata.json  Astana v1 feature contract
 models/universal_v2  Universal v2 models, metadata, calibration, and config
+models/astana_v2     Astana v2 models, metadata, calibration, and config
 models/almaty_v2     Almaty v2 models, metadata, calibration, and config
 ```
 
@@ -262,13 +262,15 @@ The validated universal v2 candidate can be promoted reproducibly with:
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\promote_v2_bundle.py --scope universal
+.\.venv\Scripts\python.exe scripts\promote_v2_bundle.py --scope astana
 .\.venv\Scripts\python.exe scripts\promote_v2_bundle.py --scope almaty
 .\.venv\Scripts\python.exe scripts\validate_model_routing.py
 ```
 
 `PRICE_MODEL_ROUTING=city_auto` is the production default. It routes Astana to
-`astana_v1` and Almaty to `almaty_v2`. The explicit values `astana_v1`,
-`almaty_v2`, and `universal_v2` are available for controlled QA only.
+`astana_v2` and Almaty to `almaty_v2`, with `universal_v2` as the v2 fallback.
+The explicit values `astana_v1`, `astana_v2`, `almaty_v2`, and `universal_v2`
+are available for controlled QA only.
 
 ## Account Security and Data
 

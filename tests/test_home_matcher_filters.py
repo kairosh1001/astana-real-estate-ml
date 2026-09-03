@@ -34,6 +34,16 @@ class HomeMatcherPriceFilterTest(unittest.TestCase):
             )
         )
 
+    def test_middle_floor_filter_requires_known_non_edge_floor(self) -> None:
+        preferences = HomeSearchPreferences(middle_floor_only=True)
+        self.assertTrue(
+            _passes_hard_filters({"is_middle_floor": True}, preferences)
+        )
+        self.assertFalse(
+            _passes_hard_filters({"is_middle_floor": False}, preferences)
+        )
+        self.assertFalse(_passes_hard_filters({}, preferences))
+
 
 if __name__ == "__main__":
     unittest.main()

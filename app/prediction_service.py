@@ -22,9 +22,15 @@ from app.rental_model_service import RentalModelService, rental_bundle_complete
 from scrape import ApartmentScraper
 
 
-MODEL_ROUTING_MODES = {"city_auto", "astana_v1", "almaty_v2", "universal_v2"}
-V2_BUNDLE_NAMES = ("almaty_v2", "universal_v2")
-CACHE_SCHEMA_VERSION = "city-ui-v1"
+MODEL_ROUTING_MODES = {
+    "city_auto",
+    "astana_v1",
+    "astana_v2",
+    "almaty_v2",
+    "universal_v2",
+}
+V2_BUNDLE_NAMES = ("astana_v2", "almaty_v2", "universal_v2")
+CACHE_SCHEMA_VERSION = "city-ui-v2"
 
 
 @dataclass(frozen=True)
@@ -183,12 +189,18 @@ class PredictionService:
                 self.routing_mode in V2_BUNDLE_NAMES
                 and not self._v2_bundle_complete(self.routing_mode)
             ):
-                raise RuntimeError("Universal v2 model bundle is incomplete.")
+                raise RuntimeError(f"{self.routing_mode} model bundle is incomplete.")
             return self.routing_mode
 
-        if infer_listing_city(raw_listing) == "almaty":
+        city = infer_listing_city(raw_listing)
+        if city == "almaty":
             if self._v2_bundle_complete("almaty_v2"):
                 return "almaty_v2"
+            if self._v2_bundle_complete("universal_v2"):
+                return "universal_v2"
+        if city == "astana":
+            if self._v2_bundle_complete("astana_v2"):
+                return "astana_v2"
             if self._v2_bundle_complete("universal_v2"):
                 return "universal_v2"
         return "astana_v1"
