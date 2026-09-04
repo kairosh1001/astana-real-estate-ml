@@ -76,6 +76,15 @@ def request_once(session: requests.Session, city: str, url: str) -> dict:
     try:
         with session.get(url, timeout=15, allow_redirects=False) as response:
             row.update(inspect_response(response))
+            # Report only this known safe destination, not arbitrary Location
+            # values that may contain authentication or challenge tokens.
+            category_path = f"/prodazha/kvartiry/{city}/"
+            row["redirect_to_city_category"] = (
+                response.status_code == 301
+                and response.headers.get("Location") in {
+                    category_path, f"https://krisha.kz{category_path}",
+                }
+            )
     except requests.RequestException as exc:
         row["network_error"] = type(exc).__name__
     row["elapsed_seconds"] = round(time.monotonic() - started, 3)
@@ -83,7 +92,7 @@ def request_once(session: requests.Session, city: str, url: str) -> dict:
 
 
 def compare_category_sequence(session: requests.Session, city: str, url: str) -> list[dict]:
-    """Check the exact same URL before/after a category visit; at most 3 requests."""
+    """Compare the same listing; at most 4 requests including one known redirect."""
     if city not in {"astana", "almaty"}:
         raise ValueError("Unsupported city")
     validate_targets({"astana": url, "almaty": url})
@@ -99,6 +108,13 @@ def compare_category_sequence(session: requests.Session, city: str, url: str) ->
         row = request_once(session, city, target)
         row["stage"] = stage
         results.append(row)
+        if stage == "category" and row.get("redirect_to_city_category"):
+            # Match the normal scraper's category redirect, in the same session.
+            # No arbitrary destination, redirect loop, or second hop is followed.
+            canonical_url = f"https://krisha.kz/prodazha/kvartiry/{city}/"
+            row = request_once(session, city, canonical_url)
+            row["stage"] = "category_canonical"
+            results.append(row)
         # No session reset or attempts to bypass any refusal/challenge.
         if row.get("http_status") != 200:
             break

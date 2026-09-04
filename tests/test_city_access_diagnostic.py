@@ -6,10 +6,49 @@ from unittest.mock import Mock, patch
 
 import requests
 
-from scripts.diagnose_city_access import compare_category_sequence, probe, select_targets
+from scripts.diagnose_city_access import compare_category_sequence, probe, request_once, select_targets
 
 
 class CityAccessDiagnosticTests(unittest.TestCase):
+    def test_known_category_redirect_completes_comparison_in_four_requests(self):
+        session = Mock()
+        url = "https://krisha.kz/a/show/1013552697"
+        ok = {"http_status": 200, "has_listing_title": True, "has_listing_price": True}
+        responses = [ok.copy(), {"http_status": 301, "redirect_to_city_category": True},
+                     {"http_status": 200}, ok.copy()]
+        with patch("scripts.diagnose_city_access.request_once", side_effect=responses) as request, patch("scripts.diagnose_city_access.time.sleep"):
+            rows = compare_category_sequence(session, "astana", url)
+        self.assertEqual([row["http_status"] for row in rows], [200, 301, 200, 200])
+        self.assertEqual(request.call_args_list[2].args,
+                         (session, "astana", "https://krisha.kz/prodazha/kvartiry/astana/"))
+        self.assertEqual(request.call_args_list[3].args, (session, "astana", url))
+
+    def test_canonical_rejection_or_redirect_loop_stops_comparison(self):
+        for status in (468, 301):
+            ok = {"http_status": 200, "has_listing_title": True, "has_listing_price": True}
+            responses = [ok, {"http_status": 301, "redirect_to_city_category": True},
+                         {"http_status": status, "redirect_to_city_category": True}]
+            with self.subTest(status=status), patch("scripts.diagnose_city_access.request_once", side_effect=responses) as request, patch("scripts.diagnose_city_access.time.sleep"):
+                rows = compare_category_sequence(Mock(), "astana", "https://krisha.kz/a/show/1")
+            self.assertEqual(len(rows), 3)
+            self.assertEqual(request.call_count, 3)
+
+    def test_redirect_destination_is_strictly_allowlisted_and_not_exposed(self):
+        for location, allowed in (("/prodazha/kvartiry/astana/", True),
+                                  ("https://krisha.kz/prodazha/kvartiry/astana/", True),
+                                  ("https://example.com/?token=SECRET", False),
+                                  ("/prodazha/kvartiry/astana/?token=SECRET", False)):
+            response = requests.Response()
+            response.status_code = 301
+            response._content = b""
+            response.headers["Location"] = location
+            response.close = Mock()
+            with self.subTest(location=location):
+                row = request_once(Mock(get=Mock(return_value=response)), "astana",
+                                   "https://krisha.kz/prodazha/kvartiry/astana/?page=1")
+                self.assertEqual(row["redirect_to_city_category"], allowed)
+                self.assertNotIn("SECRET", str(row))
+
     def test_sequence_uses_same_url_and_session_without_database(self):
         session = Mock()
         url = "https://krisha.kz/a/show/1013552697"

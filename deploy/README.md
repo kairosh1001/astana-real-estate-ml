@@ -229,8 +229,11 @@ docker compose --profile tools run --rm refresh python scripts/diagnose_city_acc
 
 Replace the example URL with the failed URL. This mode does not open the database.
 It requests that listing, the city category, then the same listing in one unchanged
-session/User-Agent. It stops on the first non-200 response or missing listing
-markup, with at most three requests. The report includes the selected User-Agent
+session/User-Agent. It follows only the observed category HTTP 301 to the exact
+same city's canonical HTTPS category URL (without `?page=1`), logging that hop.
+All other non-200 responses, a second redirect, or missing listing markup stop
+the test. There are at most four requests including this single redirect.
+The report includes the selected User-Agent
 because the existing scraper chooses one randomly at startup; separate diagnostic
 and refresh processes can therefore differ. A changed response after visiting the
 category suggests sequence/session dependence, but does not prove a cookie-specific
