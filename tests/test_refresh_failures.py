@@ -114,6 +114,34 @@ class RefreshFailureTests(unittest.TestCase):
         self.assertEqual(result.status, "failed")
         self.assertIn("predict: ValueError: feature mismatch", result.error)
 
+    def test_http_468_listing_stops_immediately_without_model_or_write(self) -> None:
+        self.seed_unseen_listing()
+        self.scraper.parse_apartment_page.side_effect = None
+        self.scraper.parse_apartment_page.return_value = None
+        self.scraper.last_fetch_status = 468
+        self.scraper.last_parse_error = "HTTP 468"
+        result = self.run_refresh(kind="weekly", pages=100)
+        self.assertEqual((result.status, result.listings_processed, result.listings_failed),
+                         ("failed", 0, 1))
+        self.assertIn("Krisha отклонила запрос: HTTP 468", result.error)
+        self.assertEqual(self.scraper.parse_apartment_page.call_count, 1)
+        self.assertEqual(self.scraper.get_listing_urls.call_count, 1)
+        self.scraper.reset_session.assert_not_called()
+        self.model.predict_raw_listing.assert_not_called()
+        self.assertEqual(self.query("SELECT status, missed_refreshes FROM listings"),
+                         [("active", 2)])
+
+    def test_http_468_category_stops_without_retries_or_session_rotation(self) -> None:
+        self.scraper.get_listing_urls.return_value = []
+        self.scraper.last_fetch_status = 468
+        self.scraper.last_fetch_error = "HTTP 468"
+        result = self.run_refresh(pages=100, empty_page_retries=3)
+        self.assertEqual(result.status, "failed")
+        self.assertIn("HTTP 468", result.error)
+        self.assertEqual(self.scraper.get_listing_urls.call_count, 1)
+        self.scraper.reset_session.assert_not_called()
+        self.scraper.parse_apartment_page.assert_not_called()
+
     def test_partial_weekly_scan_does_not_age_existing_inventory(self) -> None:
         self.seed_unseen_listing()
         self.scraper.parse_apartment_page.side_effect = [raw_listing(self.urls[0]), None, None, None]

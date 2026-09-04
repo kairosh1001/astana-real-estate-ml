@@ -191,9 +191,18 @@ Refresh logs and the stored run error now distinguish `parse`, `predict`, and
 `store` failures. A run with no processed listings is failed, not completed;
 partial/failed runs return exit code 1. The worker stops after 10 consecutive
 listing failures (configurable with `--max-consecutive-listing-failures`) or an
-HTTP 401/403/429 denial, and preserves request pacing on failures. Do not repeatedly
+HTTP 401/403/429/468 denial, and preserves request pacing on failures. Do not repeatedly
 rerun an access-denied job. Failed/partial weekly scans do not age unseen listings.
 `--max-listings` limits attempts, including failed ones, so a smoke test stays small.
+
+HTTP 468 was observed on listing pages from the VPS while category pages still
+returned URLs. It is a nonstandard upstream rejection, not a model exception.
+The status alone does not identify the security vendor, whether the server IP
+is blocked, or how long the restriction lasts. Keep full scans paused while
+access is rejected and contact Krisha about permitted automated access (include
+the VPS public IP, time, example URL, and response status). Changing this site's
+Cloudflare settings does not change outgoing requests from the worker to Krisha.
+Stopping safely does not itself restore upstream access.
 
 After the first deployment that includes the rental model, backfill estimates for
 sale listings already stored in the database:

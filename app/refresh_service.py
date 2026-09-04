@@ -24,6 +24,11 @@ from app.cities import city_config, infer_listing_city, normalize_city_slug
 from scrape import ApartmentScraper
 
 
+# 468 is a nonstandard rejection observed on Krisha listing requests from the VPS.
+# Stop this run instead of retrying other listings or rotating sessions.
+UPSTREAM_STOP_STATUSES = frozenset({401, 403, 429, 468})
+
+
 @dataclass(frozen=True)
 class RefreshResult:
     run_id: int
@@ -105,7 +110,7 @@ def run_refresh(
                 if urls:
                     break
                 if attempt < max(empty_page_retries, 1):
-                    if scraper.last_fetch_status in {401, 403, 429}:
+                    if scraper.last_fetch_status in UPSTREAM_STOP_STATUSES:
                         break
                     retry_delay = min(10 * attempt, 30)
                     print(
@@ -126,7 +131,7 @@ def run_refresh(
                 )
                 if (
                     consecutive_empty_pages >= max(max_consecutive_empty_pages, 1)
-                    or scraper.last_fetch_status in {401, 403, 429}
+                    or scraper.last_fetch_status in UPSTREAM_STOP_STATUSES
                 ):
                     print("[WARN] Too many consecutive empty pages; stopping refresh.")
                     status = "partial"
@@ -186,13 +191,20 @@ def run_refresh(
                     if len(failure_examples) < 3:
                         failure_examples.append(f"{url}: {detail}")
                     print(f"[WARN] Failed listing {url}: {detail}")
-                    blocked = stage == "parse" and scraper.last_fetch_status in {401, 403, 429}
+                    blocked = stage == "parse" and scraper.last_fetch_status in UPSTREAM_STOP_STATUSES
                     if blocked or consecutive_listing_failures >= max(1, max_consecutive_listing_failures):
                         status = "partial" if processed else "failed"
                         error = (
                             f"Refresh остановлен: {consecutive_listing_failures} ошибок подряд. "
                             f"Последняя ошибка: {detail}"
                         )
+                        if blocked:
+                            error = (
+                                f"Krisha отклонила запрос: HTTP {scraper.last_fetch_status}. "
+                                "Обновление остановлено; проверьте доступ с сервера "
+                                "и согласуйте автоматическую загрузку с источником. "
+                                f"Последняя ошибка: {detail}"
+                            )
                         stop_requested = True
                         break
                 finally:
