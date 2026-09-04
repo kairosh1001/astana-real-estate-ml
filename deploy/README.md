@@ -219,6 +219,24 @@ the VPS: results from a development machine do not establish VPS access.
 One successful/rejected pair is evidence about those requests, not proof of a
 city-wide restriction.
 
+If a saved listing returns 200 but a fresh refresh returns 468, compare the exact
+failed URL, not another saved listing:
+
+```bash
+docker compose --profile tools run --rm refresh python scripts/diagnose_city_access.py \
+  --city astana --compare-url https://krisha.kz/a/show/1013552697
+```
+
+Replace the example URL with the failed URL. This mode does not open the database.
+It requests that listing, the city category, then the same listing in one unchanged
+session/User-Agent. It stops on the first non-200 response or missing listing
+markup, with at most three requests. The report includes the selected User-Agent
+because the existing scraper chooses one randomly at startup; separate diagnostic
+and refresh processes can therefore differ. A changed response after visiting the
+category suggests sequence/session dependence, but does not prove a cookie-specific
+cause or rule out time-dependent protection. Do not use repeated runs or identity
+rotation to try to obtain an accepted response.
+
 After the first deployment that includes the rental model, backfill estimates for
 sale listings already stored in the database:
 

@@ -69,38 +69,76 @@ def inspect_response(response: requests.Response) -> dict:
     }
 
 
+def request_once(session: requests.Session, city: str, url: str) -> dict:
+    row = {"city": city, "url": url,
+           "checked_at_utc": datetime.now(timezone.utc).isoformat()}
+    started = time.monotonic()
+    try:
+        with session.get(url, timeout=15, allow_redirects=False) as response:
+            row.update(inspect_response(response))
+    except requests.RequestException as exc:
+        row["network_error"] = type(exc).__name__
+    row["elapsed_seconds"] = round(time.monotonic() - started, 3)
+    return row
+
+
+def compare_category_sequence(session: requests.Session, city: str, url: str) -> list[dict]:
+    """Check the exact same URL before/after a category visit; at most 3 requests."""
+    if city not in {"astana", "almaty"}:
+        raise ValueError("Unsupported city")
+    validate_targets({"astana": url, "almaty": url})
+    steps = (
+        ("listing_before_category", url),
+        ("category", f"https://krisha.kz/prodazha/kvartiry/{city}/?page=1"),
+        ("same_listing_after_category", url),
+    )
+    results = []
+    for stage, target in steps:
+        if results:
+            time.sleep(2)
+        row = request_once(session, city, target)
+        row["stage"] = stage
+        results.append(row)
+        # No session reset or attempts to bypass any refusal/challenge.
+        if row.get("http_status") != 200:
+            break
+        if stage != "category" and not (
+            row["has_listing_title"] and row["has_listing_price"]
+        ):
+            break
+    return results
+
+
 def probe(session: requests.Session, targets: dict[str, str]) -> list[dict]:
     validate_targets(targets)
     results = []
     for index, (city, url) in enumerate(targets.items()):
         if index:
             time.sleep(2)
-        row = {"city": city, "url": url,
-               "checked_at_utc": datetime.now(timezone.utc).isoformat()}
-        started = time.monotonic()
-        try:
-            # Deliberately inspect the other city once even if the first is rejected.
-            # No retries, redirect following, session rotation or challenge solving.
-            with session.get(url, timeout=15, allow_redirects=False) as response:
-                row.update(inspect_response(response))
-        except requests.RequestException as exc:
-            row["network_error"] = type(exc).__name__
-        row["elapsed_seconds"] = round(time.monotonic() - started, 3)
-        results.append(row)
+        # One comparison request to the other city, without changing the session.
+        results.append(request_once(session, city, url))
     return results
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", default=os.getenv("DB_PATH", str(ROOT / "data/krisha.sqlite3")))
+    parser.add_argument("--compare-url", help="Compare this exact listing before/after visiting its city category")
+    parser.add_argument("--city", choices=("astana", "almaty"), default="astana")
     args = parser.parse_args()
-    targets = select_targets(args.db)
+    targets = None if args.compare_url else select_targets(args.db)
     scraper = ApartmentScraper(retry_total=0)
     try:
-        results = probe(scraper.session, targets)
+        if args.compare_url:
+            results = compare_category_sequence(scraper.session, args.city, args.compare_url)
+        else:
+            results = probe(scraper.session, targets)
     finally:
         scraper.session.close()
-    print(json.dumps({"same_session": True, "retries": 0, "results": results},
+    print(json.dumps({"same_session": True, "retries": 0,
+                      "mode": "category_sequence" if args.compare_url else "two_cities",
+                      "user_agent": scraper.session.headers.get("User-Agent"),
+                      "results": results},
                      ensure_ascii=True, indent=2))
 
 
