@@ -194,6 +194,17 @@ listing failures (configurable with `--max-consecutive-listing-failures`) or an
 HTTP 401/403/429/468 denial, and preserves request pacing on failures. Do not repeatedly
 rerun an access-denied job. Failed/partial weekly scans do not age unseen listings.
 `--max-listings` limits attempts, including failed ones, so a smoke test stays small.
+The configured `--min-delay`/`--max-delay` also applies between each category page
+and its first listing; previously this gap was unpaced. Startup logs include the
+session User-Agent and delays for comparing runs. This pacing correction is not
+proof that rate limiting caused any particular HTTP 468 response. For a bounded
+end-to-end check with the same two-second gap as the diagnostic, use:
+
+```bash
+flock -w 60 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh \
+  python scripts/refresh_listings.py --city astana --kind manual --pages 1 \
+  --max-listings 3 --min-delay 2 --max-delay 2 --db /app/data/refresh-smoke.sqlite3
+```
 
 HTTP 468 was observed on listing pages from the VPS while category pages still
 returned URLs. It is a nonstandard upstream rejection, not a model exception.

@@ -96,6 +96,10 @@ def run_refresh(
     try:
         # Initialization failures must close the run as failed, not leave it running.
         scraper = ApartmentScraper()
+        print(
+            f"[INFO] HTTP User-Agent: {scraper.session.headers.get('User-Agent')}; "
+            f"listing delay: {min_delay}-{max_delay}s"
+        )
         prediction_service = PredictionService(root_path)
         for page in range(start_page, end_page + 1):
             stop_requested = False
@@ -154,6 +158,11 @@ def run_refresh(
                     print("[INFO] Max listing limit reached.")
                     stop_requested = True
                     break
+
+                # The category request (including its redirects) just completed.
+                # Existing end-of-listing pacing does not cover this first gap.
+                if index == 1 and max_delay > 0:
+                    time.sleep(random.uniform(min_delay, max_delay))
 
                 print(f"[INFO] Fetching {index}/{len(urls)}: {url}")
                 attempted += 1

@@ -94,7 +94,7 @@ class RefreshFailureTests(unittest.TestCase):
         self.assertEqual((result.status, result.listings_processed, result.listings_failed),
                          ("failed", 0, 3))
         self.assertIn("ReadTimeout", result.error)
-        self.assertEqual(sleep.call_count, 3)
+        self.assertEqual(sleep.call_count, 4)  # category gap plus all three failures
         self.assertEqual(self.scraper.parse_apartment_page.call_count, 3)
         self.assertEqual(self.query("SELECT status FROM refresh_runs"), [("failed",)])
         self.assertIn("parse:", self.query("SELECT error FROM refresh_runs")[0][0])
@@ -107,6 +107,29 @@ class RefreshFailureTests(unittest.TestCase):
         result = self.run_refresh()
         self.assertEqual(result.listings_failed, 1)
         self.assertIn("HTTP 403", result.error)
+
+    def test_first_listing_on_each_page_is_paced_after_category(self) -> None:
+        events = []
+
+        def category(url):
+            events.append("category")
+            return [self.urls[events.count("category") - 1]]
+
+        def listing(url):
+            events.append("listing")
+            return raw_listing(url)
+
+        self.scraper.get_listing_urls.side_effect = category
+        self.scraper.parse_apartment_page.side_effect = listing
+        with patch("app.refresh_service.time.sleep", side_effect=lambda delay: events.append(f"sleep:{delay}")):
+            result = self.run_refresh(pages=2, min_delay=2, max_delay=2)
+        self.assertEqual(result.listings_processed, 2)
+        self.assertEqual(events, ["category", "sleep:2.0", "listing", "sleep:2.0"] * 2)
+
+    def test_zero_delay_remains_available_for_offline_tests(self) -> None:
+        with patch("app.refresh_service.time.sleep") as sleep:
+            self.run_refresh(max_listings=1, min_delay=0, max_delay=0)
+        sleep.assert_not_called()
 
     def test_prediction_errors_are_not_reported_as_success(self) -> None:
         self.model.predict_raw_listing.side_effect = ValueError("feature mismatch")
