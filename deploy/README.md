@@ -161,6 +161,48 @@ through a direct `http://SERVER_IP:8000` URL.
 
 ## Refresh Commands
 
+### Catalog-only collection when detail pages are unavailable
+
+`scripts/refresh_catalog.py` collects only the visible summaries on public catalog
+pages. It never requests apartment detail pages, developer pages, hidden APIs or
+challenge endpoints. This is a separate, reduced-data collection mode, not a fix
+for denied detail-page access and not a replacement for valuation refreshes.
+
+```bash
+git pull --ff-only origin main
+docker compose --profile tools build refresh
+flock -w 60 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh \
+  python scripts/refresh_catalog.py --city astana --pages 100
+```
+
+Default storage is `/app/data/catalog.sqlite3` (host `data/catalog.sqlite3`). It
+does **not** use `DB_PATH` or update `krisha.sqlite3`, website predictions, or the
+existing daily refresh counters. Override storage with `--db` or
+`CATALOG_DB_PATH` when running outside Compose. The three tables are:
+
+- `catalog_listings`: latest visible price, title, rooms, area, floor (when
+  available), address summary and description summary in `raw_json`.
+- `catalog_price_history`: initial observed price and subsequent price changes.
+- `catalog_runs`: catalog-only status, saved/skipped counts and errors.
+
+`source=catalog`, `data_completeness=summary_only`, and `model_eligible=false`
+explicitly distinguish these rows from full valuation inputs. Missing coordinates,
+condition, furnishings or total floors are not fabricated. `first_seen_at` and
+`last_seen_at` are collection timestamps, not publication dates. No listing is
+marked stale or removed based on absence from the catalog scan.
+
+Cross-city promotions, duplicate URLs, incomplete cards, and ambiguous "from" or
+range prices are excluded. `skipped` counts excluded cards (duplicates are simply
+deduplicated); `completed` means all requested catalog pages were scanned, not
+that every card was saved or that full details were obtained. Earlier saved pages
+remain available if a later page fails; the result is then `partial` (exit code 1).
+
+There is a five-second pause between pages, no automatic HTTP retries, redirects,
+identity rotation on refusal, or requests to rejected detail pages. Any non-200
+catalog response stops the run. `--pages` supports 1-100; `--delay` cannot be below
+two seconds. Catalog access must still be permitted by the source; this mode does
+not guarantee that future catalog requests will be accepted.
+
 ### Diagnosing a failed daily refresh
 
 For a run reporting zero processed listings, inspect the actual failure before
