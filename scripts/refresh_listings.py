@@ -26,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-delay", type=float, default=2.0)
     parser.add_argument("--stale-after-missed", type=int, default=3)
     parser.add_argument("--max-listings", type=int, default=0)
+    parser.add_argument("--max-consecutive-listing-failures", type=int, default=10)
     return parser.parse_args()
 
 
@@ -45,8 +46,11 @@ def main() -> None:
         max_delay=args.max_delay,
         stale_after_missed=args.stale_after_missed,
         max_listings=args.max_listings,
+        max_consecutive_listing_failures=args.max_consecutive_listing_failures,
     )
     print(result)
+    if result.status != "completed":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

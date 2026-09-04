@@ -128,10 +128,13 @@ APP_DOMAIN=kvartiry-ai.kz
 COOKIE_SECURE=true
 ```
 
-Rebuild and recreate the application behind Caddy:
+Rebuild both the application and the scheduled refresh worker, then recreate the
+application behind Caddy. They have separate images; rebuilding only `app` does
+not update the `refresh` image used by cron:
 
 ```bash
-docker compose --profile https up -d --build app caddy
+docker compose --profile tools build app refresh
+docker compose --profile https up -d app caddy
 docker compose ps
 docker compose logs --tail=100 app
 ```
@@ -157,6 +160,40 @@ path. `COOKIE_SECURE=true` means account login must be tested through HTTPS, not
 through a direct `http://SERVER_IP:8000` URL.
 
 ## Refresh Commands
+
+### Diagnosing a failed daily refresh
+
+For a run reporting zero processed listings, inspect the actual failure before
+starting another full scan:
+
+```bash
+tail -n 80 logs/daily-astana-refresh.log
+```
+
+After pulling an update, rebuild the worker explicitly and run a bounded smoke
+test in a separate diagnostic database:
+
+```bash
+git pull --ff-only origin main
+docker compose --profile tools build app refresh
+docker compose up -d app
+flock -w 60 /tmp/krisha-refresh.lock docker compose --profile tools run --rm refresh \
+  python scripts/refresh_listings.py --city astana --kind manual \
+  --pages 1 --max-listings 3 --db /app/data/refresh-smoke.sqlite3
+```
+
+Proceed with the normal daily command only after the smoke test reports
+`status='completed'`, three processed listings, and zero errors. If the Telegram
+bot is enabled, rebuild/recreate it separately with
+`docker compose --profile bot up -d --build telegram_bot`.
+
+Refresh logs and the stored run error now distinguish `parse`, `predict`, and
+`store` failures. A run with no processed listings is failed, not completed;
+partial/failed runs return exit code 1. The worker stops after 10 consecutive
+listing failures (configurable with `--max-consecutive-listing-failures`) or an
+HTTP 401/403/429 denial, and preserves request pacing on failures. Do not repeatedly
+rerun an access-denied job. Failed/partial weekly scans do not age unseen listings.
+`--max-listings` limits attempts, including failed ones, so a smoke test stays small.
 
 After the first deployment that includes the rental model, backfill estimates for
 sale listings already stored in the database:

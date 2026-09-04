@@ -1348,14 +1348,20 @@ def mark_refresh_started(
     connection: sqlite3.Connection,
     *,
     city: str = "astana",
+    seen_since: str | None = None,
 ) -> None:
+    unseen_clause = "AND last_checked_at < ?" if seen_since else ""
+    params = [normalize_city_slug(city)]
+    if seen_since:
+        params.append(seen_since)
     connection.execute(
-        """
+        f"""
         UPDATE listings
         SET missed_refreshes = missed_refreshes + 1
         WHERE status = 'active' AND city = ?
+          {unseen_clause}
         """,
-        (normalize_city_slug(city),),
+        params,
     )
     connection.commit()
 

@@ -30,6 +30,9 @@ class ApartmentScraper:
         self.retry_total = retry_total
         self.session = self._create_session()
         self.complex_developer_cache: Dict[str, str] = {}
+        self.last_fetch_error: Optional[str] = None
+        self.last_fetch_status: Optional[int] = None
+        self.last_parse_error: Optional[str] = None
     
     def _create_session(self) -> requests.Session:
         session = requests.Session()
@@ -45,6 +48,8 @@ class ApartmentScraper:
             status_forcelist=(429, 500, 502, 503, 504),
             allowed_methods=frozenset({"GET"}),
             respect_retry_after_header=True,
+            # Return the final HTTP response so refresh diagnostics retain its status.
+            raise_on_status=False,
         )
         adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=4)
         session.mount("https://", adapter)
@@ -52,11 +57,18 @@ class ApartmentScraper:
         return session
     
     def fetch_page(self, url: str) -> Optional[str]:
+        self.last_fetch_error = None
+        self.last_fetch_status = None
         try:
             response = self.session.get(url, timeout=self.timeout)
+            self.last_fetch_status = response.status_code
             response.raise_for_status()
             return response.text
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as exc:
+            if self.last_fetch_status is not None:
+                self.last_fetch_error = f"HTTP {self.last_fetch_status}"
+            else:
+                self.last_fetch_error = type(exc).__name__
             return None
 
     def reset_session(self) -> None:
@@ -72,13 +84,16 @@ class ApartmentScraper:
             return default
     
     def parse_apartment_page(self, url: str) -> Optional[Dict]:
+        self.last_parse_error = None
         html = self.fetch_page(url)
         if not html:
+            self.last_parse_error = self.last_fetch_error or "Empty HTTP response"
             return None
 
         return self.parse_apartment_html(url, html)
 
     def parse_apartment_html(self, url: str, html: str) -> Optional[Dict]:
+        self.last_parse_error = None
         try:
             soup = BeautifulSoup(html, 'html.parser')
             row_data = {'url': url}
@@ -99,11 +114,20 @@ class ApartmentScraper:
             data = self.extract_page_data(soup)
             advert_value = data.get('advert') if isinstance(data, dict) else None
             advert = advert_value if isinstance(advert_value, dict) else {}
-            advert_map = advert.get('map', {}) if isinstance(advert, dict) else {}
+            advert_map = advert.get('map')
+            advert_map = advert_map if isinstance(advert_map, dict) else {}
             row_data['lat'] = advert_map.get('lat')
             row_data['lon'] = advert_map.get('lon')
             if isinstance(advert.get('price'), (int, float)):
                 row_data['price'] = advert['price']
+            if row_data['title'] == 'N/A' and isinstance(advert.get('title'), str):
+                row_data['title'] = advert['title']
+            if row_data['title'] == 'N/A' or row_data['price'] == 'N/A':
+                self.last_parse_error = (
+                    "Missing listing title or price: removed listing, access page, "
+                    "or changed page markup"
+                )
+                return None
             row_data['listing_id'] = advert.get('id')
             row_data['section_alias'] = advert.get('sectionAlias')
             row_data['category_alias'] = advert.get('categoryAlias')
@@ -169,7 +193,8 @@ class ApartmentScraper:
                         row_data['\u0417\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a'] = developer
             
             return row_data
-        except Exception:
+        except Exception as exc:
+            self.last_parse_error = f"{type(exc).__name__}: {exc}"
             return None
 
     @staticmethod
