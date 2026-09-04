@@ -204,6 +204,21 @@ the VPS public IP, time, example URL, and response status). Changing this site's
 Cloudflare settings does not change outgoing requests from the worker to Krisha.
 Stopping safely does not itself restore upstream access.
 
+To compare one recently checked active listing per city from the VPS, run:
+
+```bash
+docker compose --profile tools run --rm refresh python scripts/diagnose_city_access.py
+```
+
+This opens the listing database read-only, uses one scraper session with retries
+disabled, and sends only two listing requests spaced two seconds apart. It does
+not follow redirects or fetch developers, run models, or write listing data.
+The JSON includes UTC timestamps, HTTP status, selected response headers and
+fixed page-protection markers, never cookies or raw response bodies. Run it on
+the VPS: results from a development machine do not establish VPS access.
+One successful/rejected pair is evidence about those requests, not proof of a
+city-wide restriction.
+
 After the first deployment that includes the rental model, backfill estimates for
 sale listings already stored in the database:
 
